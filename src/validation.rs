@@ -58,11 +58,11 @@ impl std::fmt::Display for ValidationError {
     }
 }
 
-impl Validator for YamlSchema {
+impl Validator for Schema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[YamlSchema] self: {}", self);
-        debug!("[YamlSchema] Validating value: {:?}", value);
-        match &self.schema {
+        debug!("[Schema] self: {}", self);
+        debug!("[Schema] Validating value: {:?}", value);
+        match self {
             Schema::Empty => Ok(()),
             Schema::TypeNull => {
                 if !value.data.is_null() {
@@ -88,6 +88,19 @@ impl Validator for YamlSchema {
             Schema::OneOf(one_of_schema) => one_of_schema.validate(context, value),
             Schema::Not(not_schema) => not_schema.validate(context, value),
         }
+    }
+}
+
+impl Validator for YamlSchema {
+    fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
+        debug!("[YamlSchema] self: {}", self);
+        debug!("[YamlSchema] Validating value: {:?}", value);
+        if let Some(reference) = &self.r#ref {
+            unimplemented!("Validation of references is not supported yet")
+        } else if let Some(schema) = &self.schema {
+            schema.validate(context, value)?;
+        }
+        Ok(())
     }
 }
 

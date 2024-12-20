@@ -1,0 +1,14 @@
+$schema: https://yaml-schema.net/draft/2020-12/schema
+$id: https://yaml-schema.net/draft/2020-12/meta-schema
+title: YAML Schema meta-schema
+description: Meta-schema for YAML Schema, based on JSON Schema meta-schema
+$defs:
+  object:
+    description: |
+      A meta schema for a YAML object schema.
+    type: object
+    properties:
+      type:
+        description: The type of the schema
+        enum:
+          - object

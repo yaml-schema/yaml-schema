@@ -84,6 +84,9 @@ impl Validator for ArraySchema {
                         BoolOrTypedSchema::TypedSchema(typed_schema) => {
                             typed_schema.validate(context, item)?;
                         }
+                        BoolOrTypedSchema::Reference(r) => {
+                            unimplemented!("References not implemented yet");
+                        }
                     }
                 } else {
                     break;
@@ -106,6 +109,9 @@ impl Validator for ArraySchema {
                         for item in array {
                             typed_schema.validate(context, item)?;
                         }
+                    }
+                    BoolOrTypedSchema::Reference(r) => {
+                        unimplemented!("References not implemented yet");
                     }
                 }
             }

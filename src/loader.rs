@@ -17,6 +17,7 @@ use crate::Number;
 use crate::NumberSchema;
 use crate::ObjectSchema;
 use crate::OneOfSchema;
+use crate::Reference;
 use crate::Result;
 use crate::RootSchema;
 use crate::Schema;
@@ -129,7 +130,6 @@ impl RootLoader {
     }
 }
 
-
 /// Convert a Loader to a RootSchema
 /// Just sets the schema to a YamlSchema::Empty if the loader schema is None
 impl From<RootLoader> for RootSchema {
@@ -214,7 +214,8 @@ impl Constructor<YamlSchema> for YamlSchema {
             } else {
                 Some(metadata)
             },
-            schema,
+            schema: Some(schema),
+            r#ref: None,
         })
     }
 }
@@ -526,8 +527,13 @@ fn load_properties(hash: &saphyr::Hash) -> Result<HashMap<String, YamlSchema>> {
     let mut properties = HashMap::new();
     for (key, value) in hash.iter() {
         if let saphyr::Yaml::String(key) = key {
-            let schema = YamlSchema::construct(value.as_hash().unwrap())?;
-            properties.insert(key.clone(), schema);
+            if key.as_str() == "$ref" {
+                let reference = Reference::construct(hash)?;
+                properties.insert(key.clone(), YamlSchema::reference(reference));
+            } else {
+                let schema = YamlSchema::construct(value.as_hash().unwrap())?;
+                properties.insert(key.clone(), schema);
+            }
         } else {
             return Err(unsupported_type!(
                 "Expected a string key, but got: {:?}",
@@ -705,9 +711,20 @@ impl Constructor<StringSchema> for StringSchema {
 fn load_array_items(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
     match value {
         saphyr::Yaml::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
-        saphyr::Yaml::Hash(hash) => Ok(BoolOrTypedSchema::TypedSchema(Box::new(
-            TypedSchema::construct(hash)?,
-        ))),
+        saphyr::Yaml::Hash(hash) => {
+            if hash.contains_key(&sys("$ref")) {
+                let reference = Reference::construct(hash);
+                return Ok(BoolOrTypedSchema::Reference(reference?));
+            } else if hash.contains_key(&sys("type")) {
+                let typed_schema = TypedSchema::construct(hash)?;
+                return Ok(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema)));
+            } else {
+                return Err(generic_error!(
+                    "Expected type: boolean or hash with type or $ref, but got: {:?}",
+                    value
+                ));
+            }
+        }
         _ => unimplemented!(),
     }
 }
@@ -764,8 +781,8 @@ mod tests {
             r#const: ConstValue::string("string value"),
         };
         assert_eq!(
-            root_schema.schema.as_ref().schema,
-            Schema::Const(const_schema)
+            root_schema.schema.as_ref().schema.as_ref().unwrap(),
+            &Schema::Const(const_schema)
         );
     }
 
@@ -777,8 +794,8 @@ mod tests {
             r#const: ConstValue::integer(42),
         };
         assert_eq!(
-            root_schema.schema.as_ref().schema,
-            Schema::Const(const_schema)
+            root_schema.schema.as_ref().schema.as_ref().unwrap(),
+            &Schema::Const(const_schema)
         );
     }
 
@@ -799,8 +816,8 @@ mod tests {
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let string_schema = StringSchema::default();
         assert_eq!(
-            root_schema.schema.as_ref().schema,
-            Schema::String(string_schema)
+            root_schema.schema.as_ref().schema.as_ref().unwrap(),
+            &Schema::String(string_schema)
         );
     }
 
@@ -817,7 +834,7 @@ mod tests {
         )
         .unwrap();
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
-        let root_schema_schema = &root_schema.schema.as_ref().schema;
+        let root_schema_schema = &root_schema.schema.as_ref().schema.as_ref().unwrap();
         let expected = StringSchema::default();
         if let Schema::Object(object_schema) = root_schema_schema {
             let name_property = object_schema
@@ -833,7 +850,7 @@ mod tests {
                 .get("description")
                 .expect("Expected description");
             assert_eq!(description, "This is a description");
-            if let Schema::String(actual) = &name_property.schema {
+            if let Schema::String(actual) = &name_property.schema.as_ref().unwrap() {
                 assert_eq!(&expected, actual);
             } else {
                 panic!(
@@ -860,7 +877,7 @@ mod tests {
             pattern: Some(Regex::new("^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$").unwrap()),
             ..Default::default()
         };
-        let root_schema_schema = &root_schema.schema.as_ref().schema;
+        let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
         assert_eq!(root_schema_schema, &Schema::String(expected));
     }
 
@@ -886,8 +903,8 @@ mod tests {
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let integer_schema = IntegerSchema::default();
         assert_eq!(
-            root_schema.schema.as_ref().schema,
-            Schema::Integer(integer_schema)
+            root_schema.schema.as_ref().schema.as_ref().unwrap(),
+            &Schema::Integer(integer_schema)
         );
     }
 
@@ -911,8 +928,8 @@ mod tests {
             r#enum: enum_values,
         };
         assert_eq!(
-            root_schema.schema.as_ref().schema,
-            Schema::Enum(enum_schema)
+            root_schema.schema.as_ref().schema.as_ref().unwrap(),
+            &Schema::Enum(enum_schema)
         );
     }
 
@@ -941,8 +958,8 @@ mod tests {
             r#enum: enum_values,
         };
         assert_eq!(
-            root_schema.schema.as_ref().schema,
-            Schema::Enum(enum_schema)
+            root_schema.schema.as_ref().schema.as_ref().unwrap(),
+            &Schema::Enum(enum_schema)
         );
     }
 }

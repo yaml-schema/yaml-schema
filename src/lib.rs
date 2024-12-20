@@ -1,15 +1,19 @@
+use std::fmt::Pointer;
 use std::rc::Rc;
+
+use hashlink::LinkedHashMap;
 
 pub mod engine;
 #[macro_use]
 pub mod error;
 pub mod loader;
+pub mod reference;
 pub mod schemas;
 pub mod validation;
 
 pub use engine::Engine;
 pub use error::Error;
-use hashlink::LinkedHashMap;
+pub use reference::Reference;
 pub use schemas::AnyOfSchema;
 pub use schemas::ArraySchema;
 pub use schemas::BoolOrTypedSchema;
@@ -199,14 +203,15 @@ impl std::fmt::Display for ConstValue {
 #[derive(Debug, Default, PartialEq)]
 pub struct YamlSchema {
     pub metadata: Option<LinkedHashMap<String, String>>,
-    pub schema: Schema,
+    pub r#ref: Option<Reference>,
+    pub schema: Option<Schema>,
 }
 
 impl From<Schema> for YamlSchema {
     fn from(schema: Schema) -> Self {
         YamlSchema {
-            metadata: None,
-            schema,
+            schema: Some(schema),
+            ..Default::default()
         }
     }
 }
@@ -214,22 +219,29 @@ impl From<Schema> for YamlSchema {
 impl YamlSchema {
     pub fn empty() -> YamlSchema {
         YamlSchema {
-            metadata: None,
-            schema: Schema::Empty,
+            schema: Some(Schema::Empty),
+            ..Default::default()
         }
     }
 
     pub fn null() -> YamlSchema {
         YamlSchema {
-            metadata: None,
-            schema: Schema::TypeNull,
+            schema: Some(Schema::TypeNull),
+            ..Default::default()
         }
     }
 
     pub fn boolean_literal(value: bool) -> YamlSchema {
         YamlSchema {
-            metadata: None,
-            schema: Schema::BooleanLiteral(value),
+            schema: Some(Schema::BooleanLiteral(value)),
+            ..Default::default()
+        }
+    }
+
+    pub fn reference(reference: Reference) -> YamlSchema {
+        YamlSchema {
+            r#ref: Some(reference),
+            ..Default::default()
         }
     }
 }
@@ -253,9 +265,9 @@ pub enum Schema {
     Not(NotSchema),         // `not`
 }
 
-impl std::fmt::Display for YamlSchema {
+impl std::fmt::Display for Schema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.schema {
+        match &self {
             Schema::Empty => write!(f, "<empty schema>"),
             Schema::TypeNull => write!(f, "type: null"),
             Schema::BooleanLiteral(b) => write!(f, "{}", b),
@@ -277,6 +289,22 @@ impl std::fmt::Display for YamlSchema {
             Schema::Object(o) => write!(f, "{}", o),
             Schema::Array(a) => write!(f, "{}", a),
         }
+    }
+}
+
+impl std::fmt::Display for YamlSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{");
+        if let Some(metadata) = &self.metadata {
+            write!(f, "metadata: {:?}, ", metadata)?;
+        }
+        if let Some(r#ref) = &self.r#ref {
+            r#ref.fmt(f)?;
+        }
+        if let Some(schema) = &self.schema {
+            write!(f, "schema: {}", schema)?;
+        }
+        write!(f, "}}")
     }
 }
 

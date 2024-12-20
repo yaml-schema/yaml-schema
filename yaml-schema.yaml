@@ -4,15 +4,38 @@ title: YAML Schema meta-schema
 description: Meta-schema for YAML Schema, based on JSON Schema meta-schema
 type: object
 $defs:
-  object:
+  schema_type:
+    description: |
+      The type of the schema
+    type: string
+    enum:
+      - object
+      - string
+      - number
+      - integer
+      - boolean
+      - enum
+      - array
+      - oneOf
+      - anyOf
+      - not
+  schema:
     description: |
       A meta schema for a YAML object schema.
     type: object
     properties:
       type:
-        description: The type of the schema
-        enum:
-          - object
+        $ref: "#/$defs/schema_type"
+      properties:
+        description: The properties that are defined in the schema
+        type: array
+        items:
+          $ref: "#/$defs/schema"
+  array_of_schemas:
+    description: An array of schemas
+    type: array
+    items:
+      $ref: "#/$defs/schema"
 properties:
   $schema:
     description: Specifies which draft of the JSON Schema standard the schema adheres to.
@@ -27,9 +50,10 @@ properties:
     type: object
     patternProperties:
       "^[a-zA-Z0-9_-]+$":
-        type: object
+        $ref: "#/$defs/schema"
   title:
-    description: The title of the schema
+    description: |
+      The title of the schema
     type: string
   description:
     description: A description of the schema
@@ -41,29 +65,16 @@ properties:
       - object
       - string
   properties:
-    description: The properties that are defined in the schema
+    description: |
+      The properties that are defined in the schema
     type: object
     properties:
-      $schema:
-        type: object
-        properties:
-          description:
-            type: string
-          type:
-            enum:
-              - boolean
-              - object
-              - string
+      $ref: "#/$defs/array_of_schemas"
     patternProperties:
       "^[a-zA-Z0-9_-]+$":
-        type: object
-        properties:
-          description:
-            type: string
+        $ref: "#/$defs/array_of_schemas"
   additionalProperties:
     oneOf:
       - type: boolean
-      - type: array
-        items:
-          type: string
+      - $ref: "#/$defs/array_of_schemas"
 additionalProperties: false
