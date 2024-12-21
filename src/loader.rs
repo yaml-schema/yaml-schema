@@ -174,6 +174,7 @@ impl Constructor<Schema> for Schema {
 impl Constructor<YamlSchema> for YamlSchema {
     fn construct(hash: &saphyr::Hash) -> Result<YamlSchema> {
         let mut metadata = LinkedHashMap::new();
+        let mut r#ref: Option<Reference> = None;
         let mut data = LinkedHashMap::new();
 
         for (key, value) in hash.iter() {
@@ -187,6 +188,9 @@ impl Constructor<YamlSchema> for YamlSchema {
                             s.clone(),
                             yaml_to_string(value, "$schema must be a string")?,
                         );
+                    }
+                    "$ref" => {
+                        r#ref = Some(Reference::construct(hash)?);
                     }
                     "title" => {
                         metadata
@@ -215,7 +219,7 @@ impl Constructor<YamlSchema> for YamlSchema {
                 Some(metadata)
             },
             schema: Some(schema),
-            r#ref: None,
+            r#ref,
         })
     }
 }
@@ -714,7 +718,7 @@ fn load_array_items(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
         saphyr::Yaml::Hash(hash) => {
             if hash.contains_key(&sys("$ref")) {
                 let reference = Reference::construct(hash);
-                return Ok(BoolOrTypedSchema::Reference(reference?));
+                Ok(BoolOrTypedSchema::Reference(reference?))
             } else if hash.contains_key(&sys("type")) {
                 let typed_schema = TypedSchema::construct(hash)?;
                 return Ok(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema)));

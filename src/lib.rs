@@ -294,7 +294,7 @@ impl std::fmt::Display for Schema {
 
 impl std::fmt::Display for YamlSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{");
+        write!(f, "{{")?;
         if let Some(metadata) = &self.metadata {
             write!(f, "metadata: {:?}, ", metadata)?;
         }
