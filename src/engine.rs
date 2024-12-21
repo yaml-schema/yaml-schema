@@ -10,11 +10,11 @@ use crate::Schema;
 #[derive(Debug)]
 pub struct Engine<'a> {
     pub root_schema: &'a RootSchema,
-    pub context: Rc<RefCell<Context>>,
+    pub context: Rc<RefCell<Context<'a>>>,
 }
 
 impl<'a> Engine<'a> {
-    pub fn new(root_schema: &'a RootSchema, context: Context) -> Self {
+    pub fn new(root_schema: &'a RootSchema, context: Context<'a>) -> Self {
         Engine {
             root_schema,
             context: Rc::new(RefCell::new(context)),
@@ -25,12 +25,8 @@ impl<'a> Engine<'a> {
         root_schema: &'b RootSchema,
         value: &str,
         fail_fast: bool,
-    ) -> Result<Context> {
-        let context = Context {
-            current_schema: Some(root_schema.schema.clone()),
-            fail_fast,
-            ..Default::default()
-        };
+    ) -> Result<Context<'b>> {
+        let context = Context::with_root_schema(root_schema, fail_fast);
         let engine = Engine::new(root_schema, context);
         let docs = saphyr::MarkedYaml::load_from_str(value).map_err(Error::YamlParsingError)?;
         if docs.is_empty() {

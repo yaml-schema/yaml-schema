@@ -1,6 +1,7 @@
 use log::debug;
 
 use crate::format_vec;
+use crate::format_yaml_data;
 use crate::Context;
 use crate::Result;
 use crate::Validator;
@@ -30,10 +31,16 @@ impl Validator for ArraySchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         debug!("[ArraySchema] self: {:?}", self);
         let data = &value.data;
-        debug!("[ArraySchema] Validating value: {:?}", data);
+        debug!("[ArraySchema] Validating value: {}", format_yaml_data(data));
 
         if !data.is_array() {
-            context.add_error(value, format!("Expected an array, but got: {:?}", value));
+            context.add_error(
+                value,
+                format!(
+                    "Expected an array, but got: {}",
+                    format_yaml_data(&value.data)
+                ),
+            );
             fail_fast!(context);
             return Ok(());
         }
@@ -42,10 +49,15 @@ impl Validator for ArraySchema {
 
         // validate contains
         if let Some(sub_schema) = &self.contains {
-            if !array.iter().any(|item| {
-                let sub_context = Context::new(true);
+            let any_matches = array.iter().any(|item| {
+                let sub_context = crate::Context {
+                    root_schema: context.root_schema,
+                    fail_fast: true,
+                    ..Default::default()
+                };
                 sub_schema.validate(&sub_context, item).is_ok()
-            }) {
+            });
+            if !any_matches {
                 context.add_error(value, "Contains validation failed!".to_string());
             }
         }
@@ -216,5 +228,26 @@ mod tests {
         assert!(result.is_ok());
         let errors = context.errors.take();
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_contains_fails() {
+        let number_schema = YamlSchema::from(Schema::Number(NumberSchema::default()));
+        let schema = ArraySchema {
+            contains: Some(Box::new(number_schema)),
+            ..Default::default()
+        };
+        let s = r#"
+        - life
+        - universe
+        - everything
+        "#;
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        let errors = context.errors.take();
+        assert!(!errors.is_empty());
     }
 }

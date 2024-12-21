@@ -79,6 +79,13 @@ impl RootSchema {
         self.schema.validate(context, value)?;
         Ok(())
     }
+
+    pub fn get_def(&self, name: &str) -> Option<&YamlSchema> {
+        if let Some(defs) = &self.defs {
+            return defs.get(&name.to_owned());
+        }
+        None
+    }
 }
 
 /// A Number is either an integer or a float
@@ -340,7 +347,24 @@ fn format_yaml_data(data: &saphyr::YamlData<saphyr::MarkedYaml>) -> String {
         saphyr::YamlData::Integer(i) => i.to_string(),
         saphyr::YamlData::Real(s) => s.clone(),
         saphyr::YamlData::String(s) => format!("\"{}\"", s),
-        _ => format!("{:?}", data),
+        saphyr::YamlData::Array(array) => {
+            let items: Vec<String> = array.iter().map(|v| format_yaml_data(&v.data)).collect();
+            format!("[{}]", items.join(", "))
+        }
+        saphyr::YamlData::Hash(hash) => {
+            let items: Vec<String> = hash
+                .iter()
+                .map(|(k, v)| {
+                    format!(
+                        "{}: {}",
+                        format_yaml_data(&k.data),
+                        format_yaml_data(&v.data)
+                    )
+                })
+                .collect();
+            format!("[{}]", items.join(", "))
+        }
+        _ => format!("<unsupported type: {:?}>", data),
     }
 }
 

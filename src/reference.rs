@@ -1,16 +1,11 @@
 /// A RefSchema is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
-use log::debug;
-use std::rc::Rc;
-
 use crate::loader::Constructor;
 use crate::Result;
-use crate::YamlSchema;
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Reference {
     pub ref_name: String,
-    pub referenced_schema: Option<Rc<YamlSchema>>,
 }
 
 impl std::fmt::Display for Reference {
@@ -23,14 +18,12 @@ impl Reference {
     pub fn new<S: Into<String>>(ref_name: S) -> Reference {
         Reference {
             ref_name: ref_name.into(),
-            referenced_schema: None,
         }
     }
 }
 
 impl Constructor<Reference> for Reference {
     fn construct(hash: &saphyr::Hash) -> Result<Reference> {
-        debug!("[Reference] got hash: {:#?}", hash);
         let ref_key = saphyr::Yaml::String(String::from("$ref"));
         if !hash.contains_key(&ref_key) {
             return Err(generic_error!("Expected a $ref key, but got: {:#?}", hash));
@@ -38,7 +31,13 @@ impl Constructor<Reference> for Reference {
 
         let ref_value = hash.get(&ref_key).unwrap();
         match ref_value {
-            saphyr::Yaml::String(s) => Ok(Reference::new(s)),
+            saphyr::Yaml::String(s) => {
+                if !s.starts_with("#/$defs/") {
+                    return Err(generic_error!("Only local references, starting with #/$defs/ are supported for now. Found: {}", s));
+                }
+                let ref_name = s.strip_prefix("#/$defs/").unwrap();
+                Ok(Reference::new(ref_name))
+            }
             _ => Err(generic_error!(
                 "Expected a string value for $ref, but got: {:#?}",
                 ref_value
@@ -61,7 +60,7 @@ mod tests {
         );
         let reference = Reference::construct(&hash).unwrap();
         println!("reference: {:#?}", reference);
-        assert_eq!("#/$defs/name", reference.ref_name);
+        assert_eq!("name", reference.ref_name);
     }
 
     #[test]
@@ -84,9 +83,18 @@ mod tests {
             if let Some(properties) = &object_schema.properties {
                 if let Some(name_property) = properties.get("name") {
                     let name_ref = name_property.r#ref.as_ref().unwrap();
-                    assert_eq!(name_ref.ref_name, "#/$defs/name");
+                    assert_eq!(name_ref.ref_name, "name");
                 }
             }
         }
+        let context = crate::Context::with_root_schema(&root_schema, true);
+        let value = r##"
+            name: "John Doe"
+        "##;
+        let docs = saphyr::MarkedYaml::load_from_str(value).unwrap();
+        let value = docs.first().unwrap();
+        let result = root_schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
     }
 }

@@ -15,7 +15,7 @@ impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
-        debug!("Validating object: {:?}", data);
+        debug!("Validating object: {}", crate::format_yaml_data(data));
         match data {
             saphyr::YamlData::Hash(hash) => self.validate_object_mapping(context, value, hash),
             other => {
@@ -119,6 +119,7 @@ impl ObjectSchema {
             // Then we check if pattern_properties matches
             if let Some(pattern_properties) = &self.pattern_properties {
                 for (pattern, schema) in pattern_properties {
+                    log::debug!("pattern: {}", pattern);
                     // TODO: compile the regex once instead of every time we're evaluating
                     let re = regex::Regex::new(pattern).map_err(|e| {
                         Error::GenericError(format!("Invalid regular expression pattern: {}", e))

@@ -61,7 +61,10 @@ impl std::fmt::Display for ValidationError {
 impl Validator for Schema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         debug!("[Schema] self: {}", self);
-        debug!("[Schema] Validating value: {:?}", value);
+        debug!(
+            "[Schema] Validating value: {}",
+            crate::format_yaml_data(&value.data)
+        );
         match self {
             Schema::Empty => Ok(()),
             Schema::TypeNull => {
@@ -94,9 +97,24 @@ impl Validator for Schema {
 impl Validator for YamlSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         debug!("[YamlSchema] self: {}", self);
-        debug!("[YamlSchema] Validating value: {:?}", value);
-        if let Some(_reference) = &self.r#ref {
-            unimplemented!("Validation of references is not supported yet")
+        debug!(
+            "[YamlSchema] Validating value: {}",
+            crate::format_yaml_data(&value.data)
+        );
+        if let Some(reference) = &self.r#ref {
+            debug!("[YamlSchema] Reference found: {}", reference);
+            let ref_name = &reference.ref_name;
+            if let Some(root_schema) = &context.root_schema {
+                if let Some(schema) = root_schema.get_def(ref_name) {
+                    schema.validate(context, value)?;
+                } else {
+                    context.add_error(value, format!("Schema {} not found", ref_name));
+                }
+            } else {
+                return Err(generic_error!(
+                    "YamlSchema has a reference, but no root schema was provided!"
+                ));
+            }
         } else if let Some(schema) = &self.schema {
             schema.validate(context, value)?;
         }

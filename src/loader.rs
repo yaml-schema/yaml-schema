@@ -143,30 +143,35 @@ impl From<RootLoader> for RootSchema {
     }
 }
 
-impl Constructor<Schema> for Schema {
-    fn construct(hash: &saphyr::Hash) -> Result<Schema> {
-        if hash.contains_key(&sys("type")) {
+impl Constructor<Option<Schema>> for Schema {
+    fn construct(hash: &saphyr::Hash) -> Result<Option<Schema>> {
+        if hash.is_empty() {
+            Ok(None)
+        } else if hash.contains_key(&sys("type")) {
             match TypedSchema::construct(hash) {
-                Ok(typed_schema) => Ok(typed_schema.into()),
+                Ok(typed_schema) => Ok(Some(typed_schema.into())),
                 Err(e) => Err(e),
             }
         } else if hash.contains_key(&sys("enum")) {
             let enum_schema = EnumSchema::construct(hash)?;
-            return Ok(Schema::Enum(enum_schema));
+            return Ok(Some(Schema::Enum(enum_schema)));
         } else if hash.contains_key(&sys("const")) {
             let const_schema = ConstSchema::construct(hash)?;
-            return Ok(Schema::Const(const_schema));
+            return Ok(Some(Schema::Const(const_schema)));
         } else if hash.contains_key(&sys("anyOf")) {
             let any_of_schema = AnyOfSchema::construct(hash)?;
-            return Ok(Schema::AnyOf(any_of_schema));
+            return Ok(Some(Schema::AnyOf(any_of_schema)));
         } else if hash.contains_key(&sys("oneOf")) {
             let one_of_schema = OneOfSchema::construct(hash)?;
-            return Ok(Schema::OneOf(one_of_schema));
+            return Ok(Some(Schema::OneOf(one_of_schema)));
         } else if hash.contains_key(&sys("not")) {
             let not_schema = NotSchema::construct(hash)?;
-            return Ok(Schema::Not(not_schema));
+            return Ok(Some(Schema::Not(not_schema)));
         } else {
-            return Ok(Schema::Empty);
+            return Err(generic_error!(
+                "Don't know how to construct schema: {:#?}",
+                hash
+            ));
         }
     }
 }
@@ -218,7 +223,7 @@ impl Constructor<YamlSchema> for YamlSchema {
             } else {
                 Some(metadata)
             },
-            schema: Some(schema),
+            schema,
             r#ref,
         })
     }
@@ -965,5 +970,42 @@ mod tests {
             root_schema.schema.as_ref().schema.as_ref().unwrap(),
             &Schema::Enum(enum_schema)
         );
+    }
+
+    #[test]
+    fn test_one_of_with_ref() {
+        let docs = saphyr::Yaml::load_from_str(
+            r##"
+            $defs:
+              foo:
+                type: boolean
+            oneOf:
+              - type: string
+              - $ref: "#/$defs/foo"
+            "##,
+        )
+        .unwrap();
+        let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
+        println!("root_schema: {:#?}", root_schema);
+        let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
+        if let Schema::OneOf(one_of_schema) = root_schema_schema {
+            println!("one_of_schema: {:#?}", one_of_schema);
+        } else {
+            panic!("Expected Schema::OneOf, but got: {:?}", root_schema_schema);
+        }
+
+        let s = r#"
+        false
+        "#;
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::with_root_schema(&root_schema, true);
+        let result = root_schema.validate(&context, value);
+        println!("result: {:#?}", result);
+        assert!(result.is_ok());
+        for error in context.errors.borrow().iter() {
+            println!("error: {:#?}", error);
+        }
+        assert!(!context.has_errors());
     }
 }

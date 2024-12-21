@@ -28,9 +28,12 @@ $defs:
         $ref: "#/$defs/schema_type"
       properties:
         description: The properties that are defined in the schema
-        type: array
-        items:
-          $ref: "#/$defs/schema"
+        type: object
+        patternProperties:
+          "^[a-zA-Z0-9_-]+$":
+            $ref: "#/$defs/schema"
+      description:
+        type: string
   array_of_schemas:
     description: An array of schemas
     type: array
@@ -60,19 +63,14 @@ properties:
     type: string
   type:
     description: defines the first constraint on the JSON data.
-    type: string
-    enum:
-      - object
-      - string
+    $ref: "#/$defs/schema_type"
   properties:
     description: |
       The properties that are defined in the schema
     type: object
-    properties:
-      $ref: "#/$defs/array_of_schemas"
     patternProperties:
       "^[a-zA-Z0-9_-]+$":
-        $ref: "#/$defs/array_of_schemas"
+        $ref: "#/$defs/schema"
   additionalProperties:
     oneOf:
       - type: boolean
