@@ -1,4 +1,3 @@
-use std::fmt::Pointer;
 use std::rc::Rc;
 
 use hashlink::LinkedHashMap;

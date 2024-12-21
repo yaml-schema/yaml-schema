@@ -95,7 +95,7 @@ impl Validator for YamlSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         debug!("[YamlSchema] self: {}", self);
         debug!("[YamlSchema] Validating value: {:?}", value);
-        if let Some(reference) = &self.r#ref {
+        if let Some(_reference) = &self.r#ref {
             unimplemented!("Validation of references is not supported yet")
         } else if let Some(schema) = &self.schema {
             schema.validate(context, value)?;

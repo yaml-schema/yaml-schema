@@ -71,7 +71,7 @@ pub fn try_validate_value_against_additional_properties(
         BoolOrTypedSchema::TypedSchema(schema) => {
             schema.validate(&sub_context, value)?;
         }
-        BoolOrTypedSchema::Reference(r) => {
+        BoolOrTypedSchema::Reference(_reference) => {
             unimplemented!("References are not supported for additional_properties")
         }
     }
