@@ -3,6 +3,42 @@ $id: https://yaml-schema.net/draft/2020-12/meta-schema
 title: YAML Schema meta-schema
 description: Meta-schema for YAML Schema, based on JSON Schema meta-schema
 type: object
+$defs:
+  schema_type:
+    description: |
+      The type of the schema
+    type: string
+    enum:
+      - object
+      - string
+      - number
+      - integer
+      - boolean
+      - enum
+      - array
+      - oneOf
+      - anyOf
+      - not
+  schema:
+    description: |
+      A meta schema for a YAML object schema.
+    type: object
+    properties:
+      type:
+        $ref: "#/$defs/schema_type"
+      properties:
+        description: The properties that are defined in the schema
+        type: object
+        patternProperties:
+          "^[a-zA-Z0-9_-]+$":
+            $ref: "#/$defs/schema"
+      description:
+        type: string
+  array_of_schemas:
+    description: An array of schemas
+    type: array
+    items:
+      $ref: "#/$defs/schema"
 properties:
   $schema:
     description: Specifies which draft of the JSON Schema standard the schema adheres to.
@@ -12,43 +48,31 @@ properties:
       Sets a URI for the schema. You can use this unique URI to refer to elements of the
       schema from inside the same document or from external JSON documents.
     type: string
+  $defs:
+    description: A container for reusable JSON Schema fragments.
+    type: object
+    patternProperties:
+      "^[a-zA-Z0-9_-]+$":
+        $ref: "#/$defs/schema"
   title:
-    description: The title of the schema
+    description: |
+      The title of the schema
     type: string
   description:
     description: A description of the schema
     type: string
   type:
     description: defines the first constraint on the JSON data.
-    type: string
-    enum:
-      - object
-      - string
+    $ref: "#/$defs/schema_type"
   properties:
-    description: The properties that are defined in the schema
+    description: |
+      The properties that are defined in the schema
     type: object
-    properties:
-      $schema:
-        type: object
-        properties:
-          description:
-            type: string
-          type:
-            enum:
-              - boolean
-              - object
-              - string
     patternProperties:
       "^[a-zA-Z0-9_-]+$":
-        type: object
-        properties:
-          description:
-            type: string
-
+        $ref: "#/$defs/schema"
   additionalProperties:
     oneOf:
       - type: boolean
-      - type: array
-        items:
-          type: string
+      - $ref: "#/$defs/array_of_schemas"
 additionalProperties: false

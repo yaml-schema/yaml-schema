@@ -12,6 +12,7 @@ clap = { version = "4.5.4", features = ["cargo", "derive"] }
 env_logger = "0.11.3"
 eyre = "0.6.8"
 futures = "0.3.30"
+hashlink = "0.8.4"
 log = "0.4.21"
 regex = "1.10.4"
 saphyr = "0.0.3"

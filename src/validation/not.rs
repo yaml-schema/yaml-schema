@@ -12,7 +12,7 @@ impl Validator for NotSchema {
         );
 
         // Create a sub-context to validate against the inner schema
-        let sub_context = Context::new(true);
+        let sub_context = context.get_sub_context();
         let sub_result = self.not.validate(&sub_context, value);
 
         match sub_result {

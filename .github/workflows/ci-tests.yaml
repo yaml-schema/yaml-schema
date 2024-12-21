@@ -2,11 +2,14 @@ name: CI Tests
 on:
   push:
     paths:
-      - "src/**"
-      - "Cargo.*"
-      - "test/**"
-      - "features/**"
-      - ".github/workflows/ci-tests.yml"
+      - src/**
+      - Cargo.*
+      - test/**
+      - features/**
+      - .github/workflows/ci-tests.yaml
+
+permissions:
+  contents: write
 
 env:
   # We use environment variables to specify the Rust version and other settings once
@@ -23,6 +26,16 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - run: |
           cargo test
+
+  self-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - run: |
+          cargo run -- -f yaml-schema.yaml yaml-schema.yaml
 
   clippy:
     runs-on: ubuntu-latest

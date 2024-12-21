@@ -68,8 +68,14 @@ fn command_validate(opts: Opts) -> Result<i32> {
     }
 
     let schema_filename = opts.schemas.first().unwrap();
-    let root_schema = RootSchema::load_file(schema_filename)
-        .wrap_err_with(|| format!("Failed to read YAML schema file: {}", schema_filename))?;
+    let root_schema = match RootSchema::load_file(schema_filename) {
+        Ok(schema) => schema,
+        Err(e) => {
+            eprintln!("Failed to read YAML schema file: {}", schema_filename);
+            log::error!("{}", e);
+            return Ok(1);
+        }
+    };
 
     let yaml_filename = opts.file.as_ref().unwrap();
     let yaml_contents = std::fs::read_to_string(yaml_filename)

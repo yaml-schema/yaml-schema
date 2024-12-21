@@ -6,6 +6,7 @@ pub struct StringSchema {
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub pattern: Option<Regex>,
+    pub r#enum: Option<Vec<String>>,
 }
 
 impl PartialEq for StringSchema {

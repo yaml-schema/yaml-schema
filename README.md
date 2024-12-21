@@ -1,11 +1,12 @@
 ys - yaml-schema
 ====
 
-[![CI Tests](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml/badge.svg)](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml)
+[![CI Tests](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml/badge.svg)](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml) [![built with Codeium](https://codeium.com/badges/main)](https://codeium.com)
 
 **yaml-schema** is a tool to validate YAML files against a YAML schema.
 
-The YAML Schema specification is based on JSON Schema ([https://json-schema.org/](https://json-schema.org/)), but expressed as YAML.
+The YAML Schema specification is based on JSON Schema ([https://json-schema.org/](https://json-schema.org/)), but
+expressed as YAML.
 
 **yaml-schema** is both a Rust library _and_ an executable.
 
@@ -28,7 +29,6 @@ And a `valid.yaml` file containing:
 foo: "I'm a string"
 bar: 42
 ```
-
 
 Then when you issue the command
 
@@ -71,7 +71,8 @@ See the [features](features/) folder for all examples.
 
 ## Installation
 
-Currently, **yaml-schema** requires Git, Rust and Cargo to build and install: [https://doc.rust-lang.org/cargo/](https://doc.rust-lang.org/cargo/)
+Currently, **yaml-schema** requires Git, Rust and Cargo to build and
+install: [https://doc.rust-lang.org/cargo/](https://doc.rust-lang.org/cargo/)
 
 To install the `ys` binary, simply issue the command:
 
@@ -103,3 +104,13 @@ Options:
   -h, --help              Print help
   -V, --version           Print version
   ```
+
+## Self-Validation
+
+**yaml-schema** is _self-validating_. That is, running
+
+```
+cargo run -- -f yaml-schema.yaml yaml-schema.yaml
+```
+
+_should_ always succeed.

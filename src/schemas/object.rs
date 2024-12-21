@@ -6,6 +6,7 @@ use crate::YamlSchema;
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
 pub struct ObjectSchema {
+    pub metadata: Option<HashMap<String, String>>,
     pub properties: Option<HashMap<String, YamlSchema>>,
     pub required: Option<Vec<String>>,
     pub additional_properties: Option<BoolOrTypedSchema>,

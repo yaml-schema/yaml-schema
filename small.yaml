@@ -1,0 +1,35 @@
+$defs:
+  schema_type:
+    type: string
+    enum:
+      - object
+      - string
+      - number
+      - integer
+      - boolean
+      - enum
+      - array
+      - oneOf
+      - anyOf
+      - not
+  schema:
+    type: object
+    properties:
+      type:
+        $ref: "#/$defs/schema_type"
+      properties:
+        type: object
+        patternProperties:
+          "^[a-zA-Z0-9_-]+$":
+            $ref: "#/$defs/schema"
+  array_of_schemas:
+    type: array
+    items:
+      $ref: "#/$defs/schema"
+type: object
+properties:
+  $defs:
+    type: object
+    patternProperties:
+      "^[a-zA-Z0-9_-]+$":
+        $ref: "#/$defs/schema"

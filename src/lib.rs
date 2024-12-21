@@ -1,14 +1,18 @@
 use std::rc::Rc;
 
+use hashlink::LinkedHashMap;
+
 pub mod engine;
 #[macro_use]
 pub mod error;
 pub mod loader;
+pub mod reference;
 pub mod schemas;
 pub mod validation;
 
 pub use engine::Engine;
 pub use error::Error;
+pub use reference::Reference;
 pub use schemas::AnyOfSchema;
 pub use schemas::ArraySchema;
 pub use schemas::BoolOrTypedSchema;
@@ -38,17 +42,24 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct RootSchema {
     pub id: Option<String>,
     pub meta_schema: Option<String>,
+    pub defs: Option<LinkedHashMap<String, YamlSchema>>,
     pub schema: Rc<YamlSchema>,
 }
 
 impl RootSchema {
-    /// Create a new RootSchema with a YamlSchema::Empty
+    /// Create a new RootSchema with a YamlSchema
     pub fn new(schema: YamlSchema) -> RootSchema {
         RootSchema {
             id: None,
             meta_schema: None,
+            defs: None,
             schema: Rc::new(schema),
         }
+    }
+
+    /// Create a new RootSchema with a Schema
+    pub fn new_with_schema(schema: Schema) -> RootSchema {
+        RootSchema::new(YamlSchema::from(schema))
     }
 
     /// Load a RootSchema from a file
@@ -59,7 +70,7 @@ impl RootSchema {
     pub fn load_from_str(schema: &str) -> Result<RootSchema> {
         let docs = saphyr::Yaml::load_from_str(schema)?;
         if docs.is_empty() {
-            return Ok(RootSchema::new(YamlSchema::Empty)); // empty schema
+            return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
         }
         loader::load_from_doc(docs.first().unwrap())
     }
@@ -67,6 +78,13 @@ impl RootSchema {
     pub fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         self.schema.validate(context, value)?;
         Ok(())
+    }
+
+    pub fn get_def(&self, name: &str) -> Option<&YamlSchema> {
+        if let Some(defs) = &self.defs {
+            return defs.get(&name.to_owned());
+        }
+        None
     }
 }
 
@@ -189,7 +207,53 @@ impl std::fmt::Display for ConstValue {
 
 /// YamlSchema is the core of the validation model
 #[derive(Debug, Default, PartialEq)]
-pub enum YamlSchema {
+pub struct YamlSchema {
+    pub metadata: Option<LinkedHashMap<String, String>>,
+    pub r#ref: Option<Reference>,
+    pub schema: Option<Schema>,
+}
+
+impl From<Schema> for YamlSchema {
+    fn from(schema: Schema) -> Self {
+        YamlSchema {
+            schema: Some(schema),
+            ..Default::default()
+        }
+    }
+}
+
+impl YamlSchema {
+    pub fn empty() -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::Empty),
+            ..Default::default()
+        }
+    }
+
+    pub fn null() -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::TypeNull),
+            ..Default::default()
+        }
+    }
+
+    pub fn boolean_literal(value: bool) -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::BooleanLiteral(value)),
+            ..Default::default()
+        }
+    }
+
+    pub fn reference(reference: Reference) -> YamlSchema {
+        YamlSchema {
+            r#ref: Some(reference),
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub enum Schema {
     #[default]
     Empty, // no value
     BooleanLiteral(bool),   // `true` or `false`
@@ -207,51 +271,61 @@ pub enum YamlSchema {
     Not(NotSchema),         // `not`
 }
 
-impl YamlSchema {
-    pub fn boolean_literal(value: bool) -> YamlSchema {
-        YamlSchema::BooleanLiteral(value)
+impl std::fmt::Display for Schema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Schema::Empty => write!(f, "<empty schema>"),
+            Schema::TypeNull => write!(f, "type: null"),
+            Schema::BooleanLiteral(b) => write!(f, "{}", b),
+            Schema::BooleanSchema => write!(f, "type: boolean"),
+            Schema::Const(c) => write!(f, "{}", c),
+            Schema::Enum(e) => write!(f, "{}", e),
+            Schema::Integer(i) => write!(f, "{}", i),
+            Schema::AnyOf(any_of_schema) => {
+                write!(f, "{}", any_of_schema)
+            }
+            Schema::OneOf(one_of_schema) => {
+                write!(f, "{}", one_of_schema)
+            }
+            Schema::Not(not_schema) => {
+                write!(f, "{}", not_schema)
+            }
+            Schema::String(s) => write!(f, "{}", s),
+            Schema::Number(n) => write!(f, "{}", n),
+            Schema::Object(o) => write!(f, "{}", o),
+            Schema::Array(a) => write!(f, "{}", a),
+        }
     }
 }
 
 impl std::fmt::Display for YamlSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            YamlSchema::Empty => write!(f, "<empty schema>"),
-            YamlSchema::TypeNull => write!(f, "type: null"),
-            YamlSchema::BooleanLiteral(b) => write!(f, "{}", b),
-            YamlSchema::BooleanSchema => write!(f, "type: boolean"),
-            YamlSchema::Const(c) => write!(f, "{}", c),
-            YamlSchema::Enum(e) => write!(f, "{}", e),
-            YamlSchema::Integer(i) => write!(f, "{}", i),
-            YamlSchema::AnyOf(any_of_schema) => {
-                write!(f, "{}", any_of_schema)
-            }
-            YamlSchema::OneOf(one_of_schema) => {
-                write!(f, "{}", one_of_schema)
-            }
-            YamlSchema::Not(not_schema) => {
-                write!(f, "{}", not_schema)
-            }
-            YamlSchema::String(s) => write!(f, "{}", s),
-            YamlSchema::Number(n) => write!(f, "{}", n),
-            YamlSchema::Object(o) => write!(f, "{}", o),
-            YamlSchema::Array(a) => write!(f, "{}", a),
+        write!(f, "{{")?;
+        if let Some(metadata) = &self.metadata {
+            write!(f, "metadata: {:?}, ", metadata)?;
         }
+        if let Some(r#ref) = &self.r#ref {
+            r#ref.fmt(f)?;
+        }
+        if let Some(schema) = &self.schema {
+            write!(f, "schema: {}", schema)?;
+        }
+        write!(f, "}}")
     }
 }
 
 /// Converts (upcast) a TypedSchema to a YamlSchema
 /// Since a YamlSchema is a superset of a TypedSchema, this is a lossless conversion
-impl From<TypedSchema> for YamlSchema {
+impl From<TypedSchema> for Schema {
     fn from(schema: TypedSchema) -> Self {
         match schema {
-            TypedSchema::Array(array_schema) => YamlSchema::Array(array_schema),
-            TypedSchema::BooleanSchema => YamlSchema::BooleanSchema,
-            TypedSchema::Null => YamlSchema::TypeNull,
-            TypedSchema::Integer(integer_schema) => YamlSchema::Integer(integer_schema),
-            TypedSchema::Number(number_schema) => YamlSchema::Number(number_schema),
-            TypedSchema::Object(object_schema) => YamlSchema::Object(object_schema),
-            TypedSchema::String(string_schema) => YamlSchema::String(string_schema),
+            TypedSchema::Array(array_schema) => Schema::Array(array_schema),
+            TypedSchema::BooleanSchema => Schema::BooleanSchema,
+            TypedSchema::Null => Schema::TypeNull,
+            TypedSchema::Integer(integer_schema) => Schema::Integer(integer_schema),
+            TypedSchema::Number(number_schema) => Schema::Number(number_schema),
+            TypedSchema::Object(object_schema) => Schema::Object(object_schema),
+            TypedSchema::String(string_schema) => Schema::String(string_schema),
         }
     }
 }
@@ -273,7 +347,24 @@ fn format_yaml_data(data: &saphyr::YamlData<saphyr::MarkedYaml>) -> String {
         saphyr::YamlData::Integer(i) => i.to_string(),
         saphyr::YamlData::Real(s) => s.clone(),
         saphyr::YamlData::String(s) => format!("\"{}\"", s),
-        _ => format!("{:?}", data),
+        saphyr::YamlData::Array(array) => {
+            let items: Vec<String> = array.iter().map(|v| format_yaml_data(&v.data)).collect();
+            format!("[{}]", items.join(", "))
+        }
+        saphyr::YamlData::Hash(hash) => {
+            let items: Vec<String> = hash
+                .iter()
+                .map(|(k, v)| {
+                    format!(
+                        "{}: {}",
+                        format_yaml_data(&k.data),
+                        format_yaml_data(&v.data)
+                    )
+                })
+                .collect();
+            format!("[{}]", items.join(", "))
+        }
+        _ => format!("<unsupported type: {:?}>", data),
     }
 }
 

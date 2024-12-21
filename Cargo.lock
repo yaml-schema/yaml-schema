@@ -1362,6 +1362,7 @@ dependencies = [
  "env_logger",
  "eyre",
  "futures",
+ "hashlink",
  "log",
  "regex",
  "saphyr",

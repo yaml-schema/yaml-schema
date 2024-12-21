@@ -15,7 +15,7 @@ impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
-        debug!("Validating object: {:?}", data);
+        debug!("Validating object: {}", crate::format_yaml_data(data));
         match data {
             saphyr::YamlData::Hash(hash) => self.validate_object_mapping(context, value, hash),
             other => {
@@ -71,6 +71,9 @@ pub fn try_validate_value_against_additional_properties(
         BoolOrTypedSchema::TypedSchema(schema) => {
             schema.validate(&sub_context, value)?;
         }
+        BoolOrTypedSchema::Reference(_reference) => {
+            unimplemented!("References are not supported for additional_properties")
+        }
     }
     Ok(true)
 }
@@ -116,6 +119,7 @@ impl ObjectSchema {
             // Then we check if pattern_properties matches
             if let Some(pattern_properties) = &self.pattern_properties {
                 for (pattern, schema) in pattern_properties {
+                    log::debug!("pattern: {}", pattern);
                     // TODO: compile the regex once instead of every time we're evaluating
                     let re = regex::Regex::new(pattern).map_err(|e| {
                         Error::GenericError(format!("Invalid regular expression pattern: {}", e))
@@ -198,6 +202,7 @@ mod tests {
     use crate::engine;
     use crate::NumberSchema;
     use crate::RootSchema;
+    use crate::Schema;
     use crate::StringSchema;
 
     use super::*;
@@ -207,18 +212,17 @@ mod tests {
         let mut properties = HashMap::new();
         properties.insert(
             "foo".to_string(),
-            YamlSchema::String(StringSchema::default()),
+            YamlSchema::from(Schema::String(StringSchema::default())),
         );
         properties.insert(
             "bar".to_string(),
-            YamlSchema::Number(NumberSchema::default()),
+            YamlSchema::from(Schema::Number(NumberSchema::default())),
         );
-        let schema = ObjectSchema {
+        let object_schema = ObjectSchema {
             properties: Some(properties),
             ..Default::default()
         };
-        let yaml_schema = YamlSchema::Object(schema);
-        let root_schema = RootSchema::new(yaml_schema);
+        let root_schema = RootSchema::new_with_schema(Schema::Object(object_schema));
         let value = r#"
             foo: "I'm a string"
             bar: 42
