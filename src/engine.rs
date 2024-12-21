@@ -22,7 +22,7 @@ impl<'a> Engine<'a> {
     }
 
     pub fn evaluate<'b: 'a>(
-        root_schema: &'a RootSchema,
+        root_schema: &'b RootSchema,
         value: &str,
         fail_fast: bool,
     ) -> Result<Context> {
