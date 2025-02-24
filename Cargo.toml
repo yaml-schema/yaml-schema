@@ -4,7 +4,6 @@ version = "0.5.0"
 edition = "2021"
 description = "A YAML schema validator"
 license = "MIT"
-repository = "https://github.com/yaml-schema/yaml-schema"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
