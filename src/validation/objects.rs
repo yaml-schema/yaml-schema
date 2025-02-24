@@ -71,8 +71,24 @@ pub fn try_validate_value_against_additional_properties(
         BoolOrTypedSchema::TypedSchema(schema) => {
             schema.validate(&sub_context, value)?;
         }
-        BoolOrTypedSchema::Reference(_reference) => {
-            unimplemented!("References are not supported for additional_properties")
+        BoolOrTypedSchema::Reference(reference) => {
+            // Grab the reference from the root schema.
+            let Some(root) = &context.root_schema else {
+                context.add_error(
+                    value,
+                    "No root schema was provided to look up references".to_string(),
+                );
+                return Ok(false);
+            };
+            let Some(def) = root.get_def(&reference.ref_name) else {
+                context.add_error(
+                    value,
+                    format!("No definition for {} found", reference.ref_name),
+                );
+                return Ok(false);
+            };
+
+            def.validate(context, value)?;
         }
     }
     Ok(true)
@@ -116,6 +132,7 @@ impl ObjectSchema {
                     additional_properties,
                 )?;
             }
+
             // Then we check if pattern_properties matches
             if let Some(pattern_properties) = &self.pattern_properties {
                 for (pattern, schema) in pattern_properties {
@@ -147,6 +164,10 @@ impl ObjectSchema {
                     fail_fast!(context)
                 }
             }
+        }
+        // If we have any AnyOf specification, check the object format against one of them.
+        if let Some(any_of) = &self.any_of {
+            any_of.validate(context, object)?;
         }
 
         // Validate required properties

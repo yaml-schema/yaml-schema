@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::BoolOrTypedSchema;
 use crate::YamlSchema;
+use crate::AnyOfSchema;
 
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
@@ -14,6 +15,7 @@ pub struct ObjectSchema {
     pub property_names: Option<String>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
+    pub any_of: Option<AnyOfSchema>,
 }
 
 impl std::fmt::Display for ObjectSchema {
