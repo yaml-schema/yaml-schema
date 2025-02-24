@@ -104,7 +104,7 @@ impl RootLoader {
                         self.description =
                             Some(yaml_to_string(value, "description must be a string")?)
                     }
-                    "$defs" => {
+                    "$defs" | "definitions" => {
                         let hash = value.as_hash().ok_or_else(|| {
                             unsupported_type!("Expected a hash, but got: {:#?}", value)
                         })?;
