@@ -96,8 +96,23 @@ impl Validator for ArraySchema {
                         BoolOrTypedSchema::TypedSchema(typed_schema) => {
                             typed_schema.validate(context, item)?;
                         }
-                        BoolOrTypedSchema::Reference(_reference) => {
-                            unimplemented!("References not implemented yet");
+                        BoolOrTypedSchema::Reference(reference) => {
+                            // Grab the reference from the root schema.
+                            let Some(root) = &context.root_schema else {
+                                context.add_error(
+                                    item,
+                                    "No root schema was provided to look up references".to_string(),
+                                );
+                                continue;
+                            };
+                            let Some(def) = root.get_def(&reference.ref_name) else {
+                                context.add_error(
+                                    item,
+                                    format!("No definition for {} found", reference.ref_name),
+                                );
+                                continue;
+                            };
+                            def.validate(context, item)?;
                         }
                     }
                 } else {
@@ -122,8 +137,25 @@ impl Validator for ArraySchema {
                             typed_schema.validate(context, item)?;
                         }
                     }
-                    BoolOrTypedSchema::Reference(_reference) => {
-                        unimplemented!("References not implemented yet");
+                    BoolOrTypedSchema::Reference(reference) => {
+                        // Grab the reference from the root schema.
+                        let Some(root) = &context.root_schema else {
+                            context.add_error(
+                                array.first().unwrap(),
+                                "No root schema was provided to look up references".to_string(),
+                            );
+                            return Ok(());
+                        };
+                        let Some(def) = root.get_def(&reference.ref_name) else {
+                            context.add_error(
+                                array.first().unwrap(),
+                                format!("No definition for {} found", reference.ref_name),
+                            );
+                            return Ok(());
+                        };
+                        for item in array {
+                            def.validate(context, item)?;
+                        }
                     }
                 }
             }

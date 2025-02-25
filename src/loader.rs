@@ -104,7 +104,7 @@ impl RootLoader {
                         self.description =
                             Some(yaml_to_string(value, "description must be a string")?)
                     }
-                    "$defs" => {
+                    "$defs" | "definitions" => {
                         let hash = value.as_hash().ok_or_else(|| {
                             unsupported_type!("Expected a hash, but got: {:#?}", value)
                         })?;
@@ -434,6 +434,18 @@ impl Constructor<ObjectSchema> for ObjectSchema {
                         let pattern = load_string_value(hash.get(&sys("pattern")).unwrap())?;
                         object_schema.property_names = Some(pattern);
                     }
+                    "anyOf" => {
+                        if !value.is_array() {
+                            return Err(unsupported_type!(
+                                "anyOf: Expected an array, but got: {:?}",
+                                value
+                            ));
+                        }
+
+                        let mut any_of_schema = AnyOfSchema::default();
+                        any_of_schema.any_of = load_array_of_schemas(value)?;
+                        object_schema.any_of = Some(any_of_schema)
+                    }
                     "required" => {
                         if !value.is_array() {
                             return Err(unsupported_type!(
@@ -557,8 +569,13 @@ fn load_additional_properties(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema>
     match value {
         saphyr::Yaml::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
         saphyr::Yaml::Hash(hash) => {
-            let schema = TypedSchema::construct(hash)?;
-            Ok(BoolOrTypedSchema::TypedSchema(Box::new(schema)))
+            let ref_key = sys("$ref");
+            if hash.contains_key(&ref_key) {
+                Ok(BoolOrTypedSchema::Reference(Reference::construct(hash)?))
+            } else {
+                let schema = TypedSchema::construct(hash)?;
+                Ok(BoolOrTypedSchema::TypedSchema(Box::new(schema)))
+            }
         }
         _ => Err(unsupported_type!(
             "Expected type: boolean or hash, but got: {:?}",
