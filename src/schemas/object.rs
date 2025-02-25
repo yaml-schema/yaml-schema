@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+use crate::AnyOfSchema;
 use crate::BoolOrTypedSchema;
 use crate::YamlSchema;
-use crate::AnyOfSchema;
 
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
