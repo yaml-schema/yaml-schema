@@ -248,13 +248,18 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "ctor"
-version = "0.2.9"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32a2785755761f3ddc1492979ce1e48d2c00d09311c39e4466429188f3dd6501"
+checksum = "21d960ecacd0a1bf55e73144b72de745e7bf275c7952c50e36e8af0a0cb7ab1f"
 dependencies = [
- "quote",
- "syn",
+ "ctor-proc-macro",
 ]
+
+[[package]]
+name = "ctor-proc-macro"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c426d2ba3e525b39c1f0a9ba41b9fe61878dee11fa4e4a76b6ab440f46c5db5d"
 
 [[package]]
 name = "cucumber"
@@ -1364,19 +1369,17 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "yaml-schema"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "clap",
  "ctor",
  "cucumber",
  "env_logger",
  "eyre",
- "futures",
  "hashlink",
  "log",
  "regex",
  "saphyr",
- "saphyr-parser",
  "thiserror 2.0.11",
  "tokio",
 ]

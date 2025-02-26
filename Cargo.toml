@@ -1,6 +1,6 @@
 [package]
 name = "yaml-schema"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 description = "A YAML schema validator"
 license = "MIT"
@@ -12,16 +12,14 @@ repository = "https://github.com/yaml-schema/yaml-schema"
 clap = { version = "4.5.4", features = ["cargo", "derive"] }
 env_logger = "0.11.3"
 eyre = "0.6.8"
-futures = "0.3.30"
 hashlink = "0.8.4"
 log = "0.4.21"
 regex = "1.10.4"
 saphyr = "0.0.3"
-saphyr-parser = "0.0.3"
 thiserror = "2.0"
 
 [dev-dependencies]
-ctor = "0.2.8"
+ctor = "0.3.6"
 cucumber = "0.21.0"
 tokio = { version = "1.38.0", features = ["full"] }
 
