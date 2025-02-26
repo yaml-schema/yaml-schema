@@ -442,8 +442,9 @@ impl Constructor<ObjectSchema> for ObjectSchema {
                             ));
                         }
 
-                        let mut any_of_schema = AnyOfSchema::default();
-                        any_of_schema.any_of = load_array_of_schemas(value)?;
+                        let any_of_schema = AnyOfSchema {
+                            any_of: load_array_of_schemas(value)?,
+                        };
                         object_schema.any_of = Some(any_of_schema)
                     }
                     "required" => {
