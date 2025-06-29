@@ -29,7 +29,7 @@ fn evaluate(world: &mut BasicsWorld, s: &str) -> Result<bool> {
     let context = Engine::evaluate(&world.root_schema, s, false)?;
     world.errors = Some(context.errors.clone());
     for error in context.errors.borrow().iter() {
-        println!("{}", error);
+        println!("{error}");
     }
     Ok(!context.has_errors())
 }

@@ -483,7 +483,7 @@ impl Constructor<ObjectSchema> for ObjectSchema {
                                 key.clone(),
                                 yaml_to_string(
                                     value,
-                                    &format!("Value for {} must be a string", key),
+                                    &format!("Value for {key} must be a string"),
                                 )?,
                             );
                         } else {
@@ -716,7 +716,7 @@ impl Constructor<StringSchema> for StringSchema {
                                 .iter()
                                 .map(|v| match v {
                                     ConstValue::String(s) => Ok(s.clone()),
-                                    _ => Ok(format!("{}", v)),
+                                    _ => Ok(format!("{v}")),
                                 })
                                 .collect::<Result<Vec<String>>>()?;
                             string_schema.r#enum = Some(string_enum_values);
@@ -886,7 +886,7 @@ mod tests {
                 );
             }
         } else {
-            panic!("Expected Schema::Object, but got: {:?}", root_schema_schema);
+            panic!("Expected Schema::Object, but got: {root_schema_schema:?}");
         }
     }
 
@@ -1004,12 +1004,12 @@ mod tests {
         )
         .unwrap();
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
-        println!("root_schema: {:#?}", root_schema);
+        println!("root_schema: {root_schema:#?}");
         let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
         if let Schema::OneOf(one_of_schema) = root_schema_schema {
-            println!("one_of_schema: {:#?}", one_of_schema);
+            println!("one_of_schema: {one_of_schema:#?}");
         } else {
-            panic!("Expected Schema::OneOf, but got: {:?}", root_schema_schema);
+            panic!("Expected Schema::OneOf, but got: {root_schema_schema:?}");
         }
 
         let s = r#"
@@ -1019,10 +1019,10 @@ mod tests {
         let value = docs.first().unwrap();
         let context = crate::Context::with_root_schema(&root_schema, true);
         let result = root_schema.validate(&context, value);
-        println!("result: {:#?}", result);
+        println!("result: {result:#?}");
         assert!(result.is_ok());
         for error in context.errors.borrow().iter() {
-            println!("error: {:#?}", error);
+            println!("error: {error:#?}");
         }
         assert!(!context.has_errors());
     }

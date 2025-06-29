@@ -63,7 +63,7 @@ mod tests {
             saphyr::Yaml::String(String::from("#/$defs/name")),
         );
         let reference = Reference::construct(&hash).unwrap();
-        println!("reference: {:#?}", reference);
+        println!("reference: {reference:#?}");
         assert_eq!("name", reference.ref_name);
     }
 
@@ -80,9 +80,9 @@ mod tests {
         "##;
         let root_schema = RootSchema::load_from_str(schema).unwrap();
         let yaml_schema = root_schema.schema.as_ref();
-        println!("yaml_schema: {:#?}", yaml_schema);
+        println!("yaml_schema: {yaml_schema:#?}");
         let schema = yaml_schema.schema.as_ref().unwrap();
-        println!("schema: {:#?}", schema);
+        println!("schema: {schema:#?}");
         if let crate::Schema::Object(object_schema) = schema {
             if let Some(properties) = &object_schema.properties {
                 if let Some(name_property) = properties.get("name") {

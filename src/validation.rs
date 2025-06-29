@@ -108,7 +108,7 @@ impl Validator for YamlSchema {
                 if let Some(schema) = root_schema.get_def(ref_name) {
                     schema.validate(context, value)?;
                 } else {
-                    context.add_error(value, format!("Schema {} not found", ref_name));
+                    context.add_error(value, format!("Schema {ref_name} not found"));
                 }
             } else {
                 return Err(generic_error!(
@@ -124,7 +124,7 @@ impl Validator for YamlSchema {
 
 fn validate_boolean_schema(context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
     if !value.data.is_boolean() {
-        context.add_error(value, format!("Expected: boolean, found: {:?}", value));
+        context.add_error(value, format!("Expected: boolean, found: {value:?}"));
     }
     Ok(())
 }

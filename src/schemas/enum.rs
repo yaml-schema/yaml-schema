@@ -26,7 +26,7 @@ impl Validator for EnumSchema {
         let data = &value.data;
         debug!("[EnumSchema] Validating value: {:?}", data);
         let const_value: ConstValue = data.try_into().map_err(|_| {
-            Error::GenericError(format!("Unable to convert value: {:?} to ConstValue", data))
+            Error::GenericError(format!("Unable to convert value: {data:?} to ConstValue"))
         })?;
         debug!("[EnumSchema] const_value: {}", const_value);
         for value in &self.r#enum {
@@ -40,10 +40,10 @@ impl Validator for EnumSchema {
             let enum_values = self
                 .r#enum
                 .iter()
-                .map(|v| format!("{}", v))
+                .map(|v| format!("{v}"))
                 .collect::<Vec<String>>()
                 .join(", ");
-            let error = format!("Value {} is not in the enum: [{}]", value_str, enum_values);
+            let error = format!("Value {value_str} is not in the enum: [{enum_values}]");
             debug!("[EnumSchema] error: {}", error);
             context.add_error(value, error);
         }

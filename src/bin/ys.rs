@@ -49,7 +49,7 @@ fn main() {
                 std::process::exit(return_code);
             }
             Err(e) => {
-                eprintln!("Validation failed: {}", e);
+                eprintln!("Validation failed: {e}");
                 std::process::exit(1);
             }
         }
@@ -71,7 +71,7 @@ fn command_validate(opts: Opts) -> Result<i32> {
     let root_schema = match RootSchema::load_file(schema_filename) {
         Ok(schema) => schema,
         Err(e) => {
-            eprintln!("Failed to read YAML schema file: {}", schema_filename);
+            eprintln!("Failed to read YAML schema file: {schema_filename}");
             log::error!("{}", e);
             return Ok(1);
         }
@@ -79,20 +79,20 @@ fn command_validate(opts: Opts) -> Result<i32> {
 
     let yaml_filename = opts.file.as_ref().unwrap();
     let yaml_contents = std::fs::read_to_string(yaml_filename)
-        .wrap_err_with(|| format!("Failed to read YAML file: {}", yaml_filename))?;
+        .wrap_err_with(|| format!("Failed to read YAML file: {yaml_filename}"))?;
 
     match Engine::evaluate(&root_schema, &yaml_contents, opts.fail_fast) {
         Ok(context) => {
             if context.has_errors() {
                 for error in context.errors.borrow().iter() {
-                    eprintln!("{}", error);
+                    eprintln!("{error}");
                 }
                 return Ok(1);
             }
             Ok(0)
         }
         Err(e) => {
-            eprintln!("Validation failed: {}", e);
+            eprintln!("Validation failed: {e}");
             Ok(1)
         }
     }

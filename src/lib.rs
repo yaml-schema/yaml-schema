@@ -110,8 +110,8 @@ impl Number {
 impl std::fmt::Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Number::Integer(v) => write!(f, "{}", v),
-            Number::Float(v) => write!(f, "{}", v),
+            Number::Integer(v) => write!(f, "{v}"),
+            Number::Float(v) => write!(f, "{v}"),
         }
     }
 }
@@ -147,7 +147,7 @@ impl ConstValue {
             saphyr::Yaml::Real(s) => ConstValue::Number(Number::float(s.parse::<f64>().unwrap())),
             saphyr::Yaml::String(s) => ConstValue::String(s.clone()),
             saphyr::Yaml::Null => ConstValue::Null,
-            _ => panic!("Expected a constant value, but got: {:?}", value),
+            _ => panic!("Expected a constant value, but got: {value:?}"),
         }
     }
 }
@@ -197,10 +197,10 @@ impl TryFrom<saphyr::Yaml> for ConstValue {
 impl std::fmt::Display for ConstValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConstValue::Boolean(b) => write!(f, "{} (bool)", b),
+            ConstValue::Boolean(b) => write!(f, "{b} (bool)"),
             ConstValue::Null => write!(f, "null"),
-            ConstValue::Number(n) => write!(f, "{} (number)", n),
-            ConstValue::String(s) => write!(f, "\"{}\"", s),
+            ConstValue::Number(n) => write!(f, "{n} (number)"),
+            ConstValue::String(s) => write!(f, "\"{s}\""),
         }
     }
 }
@@ -276,24 +276,24 @@ impl std::fmt::Display for Schema {
         match &self {
             Schema::Empty => write!(f, "<empty schema>"),
             Schema::TypeNull => write!(f, "type: null"),
-            Schema::BooleanLiteral(b) => write!(f, "{}", b),
+            Schema::BooleanLiteral(b) => write!(f, "{b}"),
             Schema::BooleanSchema => write!(f, "type: boolean"),
-            Schema::Const(c) => write!(f, "{}", c),
-            Schema::Enum(e) => write!(f, "{}", e),
-            Schema::Integer(i) => write!(f, "{}", i),
+            Schema::Const(c) => write!(f, "{c}"),
+            Schema::Enum(e) => write!(f, "{e}"),
+            Schema::Integer(i) => write!(f, "{i}"),
             Schema::AnyOf(any_of_schema) => {
-                write!(f, "{}", any_of_schema)
+                write!(f, "{any_of_schema}")
             }
             Schema::OneOf(one_of_schema) => {
-                write!(f, "{}", one_of_schema)
+                write!(f, "{one_of_schema}")
             }
             Schema::Not(not_schema) => {
-                write!(f, "{}", not_schema)
+                write!(f, "{not_schema}")
             }
-            Schema::String(s) => write!(f, "{}", s),
-            Schema::Number(n) => write!(f, "{}", n),
-            Schema::Object(o) => write!(f, "{}", o),
-            Schema::Array(a) => write!(f, "{}", a),
+            Schema::String(s) => write!(f, "{s}"),
+            Schema::Number(n) => write!(f, "{n}"),
+            Schema::Object(o) => write!(f, "{o}"),
+            Schema::Array(a) => write!(f, "{a}"),
         }
     }
 }
@@ -302,13 +302,13 @@ impl std::fmt::Display for YamlSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
         if let Some(metadata) = &self.metadata {
-            write!(f, "metadata: {:?}, ", metadata)?;
+            write!(f, "metadata: {metadata:?}, ")?;
         }
         if let Some(r#ref) = &self.r#ref {
             r#ref.fmt(f)?;
         }
         if let Some(schema) = &self.schema {
-            write!(f, "schema: {}", schema)?;
+            write!(f, "schema: {schema}")?;
         }
         write!(f, "}}")
     }
@@ -335,7 +335,7 @@ fn format_vec<V>(vec: &[V]) -> String
 where
     V: std::fmt::Display,
 {
-    let items: Vec<String> = vec.iter().map(|v| format!("{}", v)).collect();
+    let items: Vec<String> = vec.iter().map(|v| format!("{v}")).collect();
     format!("[{}]", items.join(", "))
 }
 
@@ -346,7 +346,7 @@ fn format_yaml_data(data: &saphyr::YamlData<saphyr::MarkedYaml>) -> String {
         saphyr::YamlData::Boolean(b) => b.to_string(),
         saphyr::YamlData::Integer(i) => i.to_string(),
         saphyr::YamlData::Real(s) => s.clone(),
-        saphyr::YamlData::String(s) => format!("\"{}\"", s),
+        saphyr::YamlData::String(s) => format!("\"{s}\""),
         saphyr::YamlData::Array(array) => {
             let items: Vec<String> = array.iter().map(|v| format_yaml_data(&v.data)).collect();
             format!("[{}]", items.join(", "))
@@ -364,7 +364,7 @@ fn format_yaml_data(data: &saphyr::YamlData<saphyr::MarkedYaml>) -> String {
                 .collect();
             format!("[{}]", items.join(", "))
         }
-        _ => format!("<unsupported type: {:?}>", data),
+        _ => format!("<unsupported type: {data:?}>"),
     }
 }
 

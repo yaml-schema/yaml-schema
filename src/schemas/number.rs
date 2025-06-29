@@ -15,7 +15,7 @@ pub struct NumberSchema {
 
 impl std::fmt::Display for NumberSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Number {:?}", self)
+        write!(f, "Number {self:?}")
     }
 }
 
@@ -26,18 +26,18 @@ impl Validator for NumberSchema {
             match data.as_i64() {
                 Some(i) => self.validate_number_i64(context, value, i),
                 None => {
-                    context.add_error(value, format!("Expected an integer, but got: {:?}", data));
+                    context.add_error(value, format!("Expected an integer, but got: {data:?}"));
                 }
             }
         } else if data.is_real() {
             match data.as_f64() {
                 Some(f) => self.validate_number_f64(context, value, f),
                 None => {
-                    context.add_error(value, format!("Expected a float, but got: {:?}", data));
+                    context.add_error(value, format!("Expected a float, but got: {data:?}"));
                 }
             }
         } else {
-            context.add_error(value, format!("Expected a number, but got: {:?}", data));
+            context.add_error(value, format!("Expected a number, but got: {data:?}"));
         }
         if !context.errors.borrow().is_empty() {
             fail_fast!(context)
@@ -81,13 +81,13 @@ impl NumberSchema {
                 Number::Integer(multiple) => {
                     if i % *multiple != 0 {
                         context
-                            .add_error(value, format!("Number is not a multiple of {}!", multiple));
+                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
                     }
                 }
                 Number::Float(multiple) => {
                     if (i as f64) % *multiple != 0.0 {
                         context
-                            .add_error(value, format!("Number is not a multiple of {}!", multiple));
+                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
                     }
                 }
             }

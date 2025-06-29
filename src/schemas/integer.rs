@@ -17,7 +17,7 @@ pub struct IntegerSchema {
 
 impl std::fmt::Display for IntegerSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Number {:?}", self)
+        write!(f, "Number {self:?}")
     }
 }
 
@@ -30,7 +30,7 @@ impl Validator for IntegerSchema {
             match data.as_i64() {
                 Some(i) => self.validate_number_i64(context, value, i),
                 None => {
-                    context.add_error(value, format!("Expected an integer, but got: {:?}", data));
+                    context.add_error(value, format!("Expected an integer, but got: {data:?}"));
                 }
             }
         } else if data.is_real() {
@@ -40,15 +40,15 @@ impl Validator for IntegerSchema {
                         self.validate_number_i64(context, value, f as i64);
                     } else {
                         context
-                            .add_error(value, format!("Expected an integer, but got: {:?}", data));
+                            .add_error(value, format!("Expected an integer, but got: {data:?}"));
                     }
                 }
                 None => {
-                    context.add_error(value, format!("Expected a float, but got: {:?}", data));
+                    context.add_error(value, format!("Expected a float, but got: {data:?}"));
                 }
             }
         } else {
-            context.add_error(value, format!("Expected a number, but got: {:?}", data));
+            context.add_error(value, format!("Expected a number, but got: {data:?}"));
         }
         if !context.errors.borrow().is_empty() {
             fail_fast!(context)
@@ -92,13 +92,13 @@ impl IntegerSchema {
                 Number::Integer(multiple) => {
                     if i % *multiple != 0 {
                         context
-                            .add_error(value, format!("Number is not a multiple of {}!", multiple));
+                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
                     }
                 }
                 Number::Float(multiple) => {
                     if (i as f64) % *multiple != 0.0 {
                         context
-                            .add_error(value, format!("Number is not a multiple of {}!", multiple));
+                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
                     }
                 }
             }

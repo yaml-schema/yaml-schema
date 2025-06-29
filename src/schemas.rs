@@ -53,7 +53,7 @@ impl TypedSchema {
         match value {
             saphyr::Yaml::Null => Ok(TypedSchema::Null),
             saphyr::Yaml::String(s) => Ok(TypedSchema::for_type_string(s.as_str())?),
-            _ => panic!("Unknown type: {:?}", value),
+            _ => panic!("Unknown type: {value:?}"),
         }
     }
 
@@ -65,7 +65,7 @@ impl TypedSchema {
             "number" => Ok(TypedSchema::Number(NumberSchema::default())),
             "object" => Ok(TypedSchema::Object(ObjectSchema::default())),
             "string" => Ok(TypedSchema::String(StringSchema::default())),
-            _ => panic!("Unknown type: {}", r#type),
+            _ => panic!("Unknown type: {type}"),
         }
     }
 }
@@ -73,13 +73,13 @@ impl TypedSchema {
 impl fmt::Display for TypedSchema {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypedSchema::Array(a) => write!(f, "{}", a),
+            TypedSchema::Array(a) => write!(f, "{a}"),
             TypedSchema::BooleanSchema => write!(f, "type: boolean"),
             TypedSchema::Null => write!(f, "type: null"),
-            TypedSchema::Integer(i) => write!(f, "{}", i),
-            TypedSchema::Number(n) => write!(f, "{}", n),
-            TypedSchema::Object(o) => write!(f, "{}", o),
-            TypedSchema::String(s) => write!(f, "{}", s),
+            TypedSchema::Integer(i) => write!(f, "{i}"),
+            TypedSchema::Number(n) => write!(f, "{n}"),
+            TypedSchema::Object(o) => write!(f, "{o}"),
+            TypedSchema::String(s) => write!(f, "{s}"),
         }
     }
 }
@@ -93,7 +93,7 @@ impl Validator for TypedSchema {
             TypedSchema::BooleanSchema => Ok(()),
             TypedSchema::Null => {
                 if !value.data.is_null() {
-                    context.add_error(value, format!("Expected null, but got: {:?}", value));
+                    context.add_error(value, format!("Expected null, but got: {value:?}"));
                 }
                 Ok(())
             }

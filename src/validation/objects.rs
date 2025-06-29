@@ -19,7 +19,7 @@ impl Validator for ObjectSchema {
         match data {
             saphyr::YamlData::Hash(hash) => self.validate_object_mapping(context, value, hash),
             other => {
-                context.add_error(value, format!("Expected an object, but got: {:#?}", other));
+                context.add_error(value, format!("Expected an object, but got: {other:#?}"));
                 Ok(())
             }
         }
@@ -62,7 +62,7 @@ pub fn try_validate_value_against_additional_properties(
         BoolOrTypedSchema::Boolean(false) => {
             context.add_error(
                 value,
-                format!("Additional property '{}' is not allowed!", key),
+                format!("Additional property '{key}' is not allowed!"),
             );
             // returning `false` signals fail fast
             return Ok(false);
@@ -139,7 +139,7 @@ impl ObjectSchema {
                     log::debug!("pattern: {}", pattern);
                     // TODO: compile the regex once instead of every time we're evaluating
                     let re = regex::Regex::new(pattern).map_err(|e| {
-                        Error::GenericError(format!("Invalid regular expression pattern: {}", e))
+                        Error::GenericError(format!("Invalid regular expression pattern: {e}"))
                     })?;
                     if re.is_match(key.as_str()) {
                         schema.validate(context, value)?;
@@ -149,7 +149,7 @@ impl ObjectSchema {
             // Finally, we check if it matches property_names
             if let Some(property_names) = &self.property_names {
                 let re = regex::Regex::new(property_names).map_err(|e| {
-                    Error::GenericError(format!("Invalid regular expression pattern: {}", e))
+                    Error::GenericError(format!("Invalid regular expression pattern: {e}"))
                 })?;
                 debug!("Regex for property names: {}", re.as_str());
                 if !re.is_match(key.as_str()) {
@@ -180,7 +180,7 @@ impl ObjectSchema {
                 {
                     context.add_error(
                         object,
-                        format!("Required property '{}' is missing!", required_property),
+                        format!("Required property '{required_property}' is missing!"),
                     );
                     fail_fast!(context)
                 }
@@ -193,8 +193,7 @@ impl ObjectSchema {
                 context.add_error(
                     object,
                     format!(
-                        "Object has too few properties! Minimum is {}!",
-                        min_properties
+                        "Object has too few properties! Minimum is {min_properties}!"
                     ),
                 );
                 fail_fast!(context)
@@ -206,8 +205,7 @@ impl ObjectSchema {
                 context.add_error(
                     object,
                     format!(
-                        "Object has too many properties! Maximum is {}!",
-                        max_properties
+                        "Object has too many properties! Maximum is {max_properties}!"
                     ),
                 );
                 fail_fast!(context)

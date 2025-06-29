@@ -37,18 +37,18 @@ pub fn validate_string(
     let str_value = match data.as_str() {
         Some(s) => s,
         None => {
-            errors.push(format!("Expected a string, but got: {:?}", data));
+            errors.push(format!("Expected a string, but got: {data:?}"));
             return errors;
         }
     };
     if let Some(min_length) = min_length {
         if str_value.len() < min_length {
-            errors.push(format!("String is too short! (min length: {})", min_length));
+            errors.push(format!("String is too short! (min length: {min_length})"));
         }
     }
     if let Some(max_length) = max_length {
         if str_value.len() > max_length {
-            errors.push(format!("String is too long! (max length: {})", max_length));
+            errors.push(format!("String is too long! (max length: {max_length})"));
         }
     }
     if let Some(regex) = pattern {
@@ -61,7 +61,7 @@ pub fn validate_string(
     }
     if let Some(enum_values) = r#enum {
         if !enum_values.contains(&str_value.to_string()) {
-            errors.push(format!("String is not in enum: {:?}", enum_values));
+            errors.push(format!("String is not in enum: {enum_values:?}"));
         }
     }
     errors
