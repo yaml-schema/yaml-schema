@@ -1,11 +1,10 @@
 use log::debug;
 
-use crate::format_vec;
-use crate::format_yaml_data;
 use crate::Context;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
+use crate::{format_vec, format_yaml_data};
 
 use super::BoolOrTypedSchema;
 

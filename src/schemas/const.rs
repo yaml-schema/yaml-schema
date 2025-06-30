@@ -30,9 +30,7 @@ impl Validator for ConstSchema {
         match expected_value {
             ConstValue::Boolean(b) => {
                 if data.as_bool() != Some(*b) {
-                    let error = format!(
-                        "Const validation failed, expected: {b:?}, got: {data:?}"
-                    );
+                    let error = format!("Const validation failed, expected: {b:?}, got: {data:?}");
                     context.add_error(value, error);
                 }
             }
@@ -46,39 +44,33 @@ impl Validator for ConstSchema {
                 Number::Integer(i) => {
                     if data.is_integer() {
                         if data.as_i64() != Some(*i) {
-                            let error = format!(
-                                "Const validation failed, expected: {i:?}, got: {data:?}"
-                            );
+                            let error =
+                                format!("Const validation failed, expected: {i:?}, got: {data:?}");
                             context.add_error(value, error);
                         }
                     } else {
-                        let error = format!(
-                            "Const validation failed, expected: {i:?}, got: {data:?}"
-                        );
+                        let error =
+                            format!("Const validation failed, expected: {i:?}, got: {data:?}");
                         context.add_error(value, error);
                     }
                 }
                 Number::Float(f) => {
                     if data.is_real() {
                         if data.as_f64() != Some(*f) {
-                            let error = format!(
-                                "Const validation failed, expected: {f:?}, got: {data:?}"
-                            );
+                            let error =
+                                format!("Const validation failed, expected: {f:?}, got: {data:?}");
                             context.add_error(value, error);
                         }
                     } else {
-                        let error = format!(
-                            "Const validation failed, expected: {f:?}, got: {data:?}"
-                        );
+                        let error =
+                            format!("Const validation failed, expected: {f:?}, got: {data:?}");
                         context.add_error(value, error);
                     }
                 }
             },
             ConstValue::String(s) => {
                 if data.as_str() != Some(s) {
-                    let error = format!(
-                        "Const validation failed, expected: {s:?}, got: {data:?}"
-                    );
+                    let error = format!("Const validation failed, expected: {s:?}, got: {data:?}");
                     context.add_error(value, error);
                 }
             }

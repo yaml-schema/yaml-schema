@@ -6,6 +6,7 @@ mod objects;
 mod one_of;
 mod strings;
 
+use crate::format_yaml_data;
 use crate::Result;
 use crate::Schema;
 use crate::YamlSchema;
@@ -63,7 +64,7 @@ impl Validator for Schema {
         debug!("[Schema] self: {}", self);
         debug!(
             "[Schema] Validating value: {}",
-            crate::format_yaml_data(&value.data)
+            format_yaml_data(&value.data)
         );
         match self {
             Schema::Empty => Ok(()),
@@ -99,7 +100,7 @@ impl Validator for YamlSchema {
         debug!("[YamlSchema] self: {}", self);
         debug!(
             "[YamlSchema] Validating value: {}",
-            crate::format_yaml_data(&value.data)
+            format_yaml_data(&value.data)
         );
         if let Some(reference) = &self.r#ref {
             debug!("[YamlSchema] Reference found: {}", reference);

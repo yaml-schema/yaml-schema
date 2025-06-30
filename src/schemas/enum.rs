@@ -1,12 +1,11 @@
 use log::debug;
 
-use crate::format_vec;
-use crate::format_yaml_data;
 use crate::ConstValue;
 use crate::Context;
 use crate::Error;
 use crate::Result;
 use crate::Validator;
+use crate::{format_vec, format_yaml_data};
 
 /// An enum schema represents a set of constant values
 #[derive(Debug, Default, PartialEq)]

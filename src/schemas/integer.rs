@@ -39,8 +39,7 @@ impl Validator for IntegerSchema {
                     if f.fract() == 0.0 {
                         self.validate_number_i64(context, value, f as i64);
                     } else {
-                        context
-                            .add_error(value, format!("Expected an integer, but got: {data:?}"));
+                        context.add_error(value, format!("Expected an integer, but got: {data:?}"));
                     }
                 }
                 None => {

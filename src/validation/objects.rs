@@ -2,7 +2,6 @@
 use log::debug;
 use std::collections::HashMap;
 
-use crate::format_marker;
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
 use crate::validation::Context;
@@ -10,12 +9,13 @@ use crate::Error;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
+use crate::{format_marker, format_yaml_data};
 
 impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
-        debug!("Validating object: {}", crate::format_yaml_data(data));
+        debug!("Validating object: {}", format_yaml_data(data));
         match data {
             saphyr::YamlData::Hash(hash) => self.validate_object_mapping(context, value, hash),
             other => {
@@ -36,10 +36,10 @@ pub fn try_validate_value_against_properties(
     if let Some(schema) = properties.get(key) {
         debug!("Validating property '{}' with schema: {}", key, schema);
         let result = schema.validate(&sub_context, value);
-        match result {
-            Ok(_) => return Ok(true),
-            Err(e) => return Err(e),
-        }
+        return match result {
+            Ok(_) => Ok(true),
+            Err(e) => Err(e),
+        };
     }
     Ok(false)
 }
@@ -192,9 +192,7 @@ impl ObjectSchema {
             if mapping.len() < *min_properties {
                 context.add_error(
                     object,
-                    format!(
-                        "Object has too few properties! Minimum is {min_properties}!"
-                    ),
+                    format!("Object has too few properties! Minimum is {min_properties}!"),
                 );
                 fail_fast!(context)
             }
@@ -204,9 +202,7 @@ impl ObjectSchema {
             if mapping.len() > *max_properties {
                 context.add_error(
                     object,
-                    format!(
-                        "Object has too many properties! Maximum is {max_properties}!"
-                    ),
+                    format!("Object has too many properties! Maximum is {max_properties}!"),
                 );
                 fail_fast!(context)
             }
