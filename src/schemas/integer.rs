@@ -76,7 +76,7 @@ mod tests {
         let first_error = errors.first().unwrap();
         assert_eq!(
             first_error.error,
-            "Expected a number, but got: String(\"foo\")"
+            "Expected a number, but got: Value(String(\"foo\"))"
         );
     }
 }

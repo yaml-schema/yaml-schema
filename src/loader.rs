@@ -494,89 +494,94 @@ impl Constructor<ObjectSchema> for ObjectSchema {
     fn construct(mapping: &saphyr::Mapping) -> Result<ObjectSchema> {
         let mut object_schema = ObjectSchema::default();
         for (key, value) in mapping.iter() {
-            if let Ok(key) = load_string_value(key) {
-                match key.as_str() {
-                    "properties" => {
-                        let properties = load_properties(value)?;
-                        object_schema.properties = Some(properties);
-                    }
-                    "additionalProperties" => {
-                        let additional_properties = load_additional_properties(value)?;
-                        object_schema.additional_properties = Some(additional_properties);
-                    }
-                    "minProperties" => {
-                        object_schema.min_properties = Some(load_integer(value)? as usize);
-                    }
-                    "maxProperties" => {
-                        object_schema.max_properties = Some(load_integer(value)? as usize);
-                    }
-                    "patternProperties" => {
-                        let pattern_properties = load_properties(value)?;
-                        object_schema.pattern_properties = Some(pattern_properties);
-                    }
-                    "propertyNames" => {
-                        if let saphyr::Yaml::Mapping(mapping) = value {
-                            if !mapping.contains_key(&PATTERN) {
-                                return Err(generic_error!(
-                                    "propertyNames: Missing required key: pattern"
+            if let saphyr::Yaml::Value(scalar) = key {
+                if let saphyr::Scalar::String(key) = scalar {
+                    match key.as_ref() {
+                        "properties" => {
+                            let properties = load_properties(value)?;
+                            object_schema.properties = Some(properties);
+                        }
+                        "additionalProperties" => {
+                            let additional_properties = load_additional_properties(value)?;
+                            object_schema.additional_properties = Some(additional_properties);
+                        }
+                        "minProperties" => {
+                            object_schema.min_properties = Some(load_integer(value)? as usize);
+                        }
+                        "maxProperties" => {
+                            object_schema.max_properties = Some(load_integer(value)? as usize);
+                        }
+                        "patternProperties" => {
+                            let pattern_properties = load_properties(value)?;
+                            object_schema.pattern_properties = Some(pattern_properties);
+                        }
+                        "propertyNames" => {
+                            if let saphyr::Yaml::Mapping(mapping) = value {
+                                if !mapping.contains_key(&PATTERN) {
+                                    return Err(generic_error!(
+                                        "propertyNames: Missing required key: pattern"
+                                    ));
+                                }
+                                let pattern = load_string_value(
+                                    mapping.get(&saphyr_yaml_string("pattern")).unwrap(),
+                                )?;
+                                object_schema.property_names = Some(pattern);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "propertyNames: Expected a mapping, but got: {:?}",
+                                    value
                                 ));
                             }
-                            let pattern = load_string_value(
-                                mapping.get(&saphyr_yaml_string("pattern")).unwrap(),
-                            )?;
-                            object_schema.property_names = Some(pattern);
-                        } else {
-                            return Err(unsupported_type!(
-                                "propertyNames: Expected a mapping, but got: {:?}",
-                                value
-                            ));
                         }
-                    }
-                    "anyOf" => {
-                        let any_of = load_array_of_schemas(value)?;
-                        let any_of_schema = AnyOfSchema { any_of };
-                        object_schema.any_of = Some(any_of_schema);
-                    }
-                    "required" => {
-                        if let saphyr::Yaml::Sequence(values) = value {
-                            object_schema.required = Some(
-                                values
-                                    .iter()
-                                    .map(|v| load_string_value(v))
-                                    .collect::<Result<Vec<String>>>()?,
-                            );
-                        } else {
-                            return Err(unsupported_type!(
-                                "required: Expected an array, but got: {:?}",
-                                value
-                            ));
+                        "anyOf" => {
+                            let any_of = load_array_of_schemas(value)?;
+                            let any_of_schema = AnyOfSchema { any_of };
+                            object_schema.any_of = Some(any_of_schema);
                         }
-                    }
-                    "type" => {
-                        let s = load_string_value(value)?;
-                        if s != "object" {
-                            return Err(unsupported_type!("Expected type: object, but got: {}", s));
-                        }
-                    }
-                    _ => {
-                        if key.starts_with("$") {
-                            if object_schema.metadata.is_none() {
-                                object_schema.metadata = Some(HashMap::new());
+                        "required" => {
+                            if let saphyr::Yaml::Sequence(values) = value {
+                                object_schema.required = Some(
+                                    values
+                                        .iter()
+                                        .map(|v| load_string_value(v))
+                                        .collect::<Result<Vec<String>>>()?,
+                                );
+                            } else {
+                                return Err(unsupported_type!(
+                                    "required: Expected an array, but got: {:?}",
+                                    value
+                                ));
                             }
-                            object_schema.metadata.as_mut().unwrap().insert(
-                                key.clone(),
-                                yaml_to_string(
-                                    value,
-                                    &format!("Value for {key} must be a string"),
-                                )?,
-                            );
-                        } else {
-                            unimplemented!("Unsupported key for type: object: {}", key);
+                        }
+                        "type" => {
+                            let s = load_string_value(value)?;
+                            if s != "object" {
+                                return Err(unsupported_type!(
+                                    "Expected type: object, but got: {}",
+                                    s
+                                ));
+                            }
+                        }
+                        _ => {
+                            if key.starts_with("$") {
+                                if object_schema.metadata.is_none() {
+                                    object_schema.metadata = Some(HashMap::new());
+                                }
+                                object_schema.metadata.as_mut().unwrap().insert(
+                                    key.to_string(),
+                                    yaml_to_string(
+                                        value,
+                                        &format!("Value for {key} must be a string"),
+                                    )?,
+                                );
+                            } else {
+                                unimplemented!("Unsupported key for type: object: {}", key);
+                            }
                         }
                     }
                 }
             } else {
-                return Err(generic_error!("Expected a string key, got: {:#?}", key));
+                return Err(generic_error!("Expected a scalar key, got: {:#?}", key));
             }
         }
         Ok(object_schema)

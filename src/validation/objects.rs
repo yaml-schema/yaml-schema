@@ -1,3 +1,8 @@
+// A module to contain object type validation logic
+use std::collections::HashMap;
+
+use log::debug;
+
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
 use crate::validation::Context;
@@ -6,10 +11,6 @@ use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
 use crate::{format_marker, format_yaml_data};
-/// A module to contain object type validation logic
-use log::debug;
-use saphyr::MarkedYaml;
-use std::collections::HashMap;
 
 impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules
@@ -98,18 +99,21 @@ impl ObjectSchema {
         &self,
         context: &Context,
         object: &saphyr::MarkedYaml,
-        mapping: &saphyr::AnnotatedMapping<'a, MarkedYaml<'a>>,
+        mapping: &saphyr::AnnotatedMapping<'a, saphyr::MarkedYaml<'a>>,
     ) -> Result<()> {
         for (k, value) in mapping {
-            let key = match &k.data {
+            let key_string = match &k.data {
                 saphyr::YamlData::Value(scalar) => match scalar {
                     saphyr::Scalar::String(s) => s.to_string(),
-                    v => return Err(generic_error!("Expected a string key, got: {:?}", v)),
+                    saphyr::Scalar::Boolean(b) => b.to_string(),
+                    saphyr::Scalar::Integer(i) => i.to_string(),
+                    saphyr::Scalar::FloatingPoint(o) => o.to_string(),
+                    saphyr::Scalar::Null => "null".to_string(),
                 },
-                v => return Err(expected_scalar!("Expected a string key, got: {:?}", v)),
+                v => return Err(expected_scalar!("Expected a scalar key, got: {:?}", v)),
             };
             let span = &k.span;
-            debug!("validate_object_mapping: key: \"{key}\"");
+            debug!("validate_object_mapping: key: \"{key_string}\"");
             debug!(
                 "validate_object_mapping: span.start: {:?}",
                 format_marker(&span.start)
@@ -120,7 +124,7 @@ impl ObjectSchema {
             );
             // First, we check the explicitly defined properties, and validate against it if found
             if let Some(properties) = &self.properties {
-                if try_validate_value_against_properties(context, &key, value, properties)? {
+                if try_validate_value_against_properties(context, &key_string, value, properties)? {
                     continue;
                 }
             }
@@ -129,7 +133,7 @@ impl ObjectSchema {
             if let Some(additional_properties) = &self.additional_properties {
                 try_validate_value_against_additional_properties(
                     context,
-                    &key,
+                    &key_string,
                     value,
                     additional_properties,
                 )?;
@@ -143,7 +147,7 @@ impl ObjectSchema {
                     let re = regex::Regex::new(pattern).map_err(|e| {
                         Error::GenericError(format!("Invalid regular expression pattern: {e}"))
                     })?;
-                    if re.is_match(key.as_str()) {
+                    if re.is_match(key_string.as_ref()) {
                         schema.validate(context, value)?;
                     }
                 }
@@ -154,12 +158,12 @@ impl ObjectSchema {
                     Error::GenericError(format!("Invalid regular expression pattern: {e}"))
                 })?;
                 debug!("Regex for property names: {}", re.as_str());
-                if !re.is_match(key.as_str()) {
+                if !re.is_match(key_string.as_ref()) {
                     context.add_error(
                         k,
                         format!(
                             "Property name '{}' does not match pattern '{}'",
-                            key,
+                            key_string,
                             re.as_str()
                         ),
                     );
@@ -256,6 +260,9 @@ mod tests {
         let errors = context.errors.borrow();
         let first_error = errors.first().unwrap();
         assert_eq!(first_error.path, "foo");
-        assert_eq!(first_error.error, "Expected a string, but got: Integer(42)");
+        assert_eq!(
+            first_error.error,
+            "Expected a string, but got: Value(Integer(42))"
+        );
     }
 }
