@@ -98,7 +98,71 @@ impl RootLoader {
     }
 
     fn load_root_schema(&mut self, mapping: &saphyr::Mapping) -> Result<()> {
-        self.schema = Some(YamlSchema::construct(mapping)?);
+        let mut data = saphyr::Mapping::new();
+
+        for (key, value) in mapping.iter() {
+            match key {
+                saphyr::Yaml::Value(scalar) => match scalar {
+                    saphyr::Scalar::String(s) => match s.as_ref() {
+                        "$id" => self.id = Some(yaml_to_string(value, "$id must be a string")?),
+                        "$schema" => {
+                            self.meta_schema =
+                                Some(yaml_to_string(value, "$schema must be a string")?)
+                        }
+                        "title" => {
+                            self.title = Some(yaml_to_string(value, "title must be a string")?)
+                        }
+                        "description" => {
+                            self.description =
+                                Some(yaml_to_string(value, "description must be a string")?)
+                        }
+                        "$defs" | "definitions" => {
+                            if let saphyr::Yaml::Mapping(mapping) = value {
+                                let mut defs = LinkedHashMap::new();
+                                for (key, value) in mapping.iter() {
+                                    if let Ok(key_string) =
+                                        yaml_to_string(key, "key must be a string")
+                                    {
+                                        if let saphyr::Yaml::Mapping(mapping) = value {
+                                            let schema = YamlSchema::construct(mapping)?;
+                                            defs.insert(key_string, schema);
+                                        } else {
+                                            return Err(generic_error!(
+                                                "{} Expected a hash for {}, but got: {:#?}",
+                                                s,
+                                                key_string,
+                                                value
+                                            ));
+                                        }
+                                    } else {
+                                        return Err(generic_error!(
+                                            "{} Expected a string key, but got: {:#?}",
+                                            s,
+                                            value
+                                        ));
+                                    }
+                                }
+                                self.defs = Some(defs);
+                            } else {
+                                return Err(generic_error!(
+                                    "{} Expected a hash, but got: {:#?}",
+                                    s,
+                                    value
+                                ));
+                            }
+                        }
+                        _ => {
+                            data.insert(key.clone(), value.clone());
+                        }
+                    },
+                    _ => {
+                        data.insert(key.clone(), value.clone());
+                    }
+                },
+                _ => return Err(expected_scalar!("Expected scalar key, but got: {:#?}", key)),
+            }
+        }
+        self.schema = Some(YamlSchema::construct(&data)?);
         Ok(())
     }
 }
