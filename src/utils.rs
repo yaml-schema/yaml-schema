@@ -11,7 +11,7 @@ pub const fn saphyr_yaml_string(s: &str) -> saphyr::Yaml<'_> {
 /// Try to unwrap a saphyr::Scalar from a saphyr::Yaml
 pub fn try_unwrap_saphyr_scalar<'a>(yaml: &'a saphyr::Yaml) -> Result<&'a saphyr::Scalar<'a>> {
     if let saphyr::Yaml::Value(scalar) = yaml {
-        Ok(&scalar)
+        Ok(scalar)
     } else {
         Err(expected_scalar!("Expected a scalar, got: {:?}", yaml))
     }

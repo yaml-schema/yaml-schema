@@ -25,8 +25,7 @@ pub fn validate_any_of(
 ) -> Result<bool> {
     for schema in schemas {
         debug!(
-            "AnyOf: Validating value: {:?} against schema: {}",
-            value, schema
+            "AnyOf: Validating value: {value:?} against schema: {schema}"
         );
         // Since we're only looking for the first match, we can stop as soon as we find one
         // That also means that when evaluating sub schemas, we can fail fast to short circuit

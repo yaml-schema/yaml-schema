@@ -47,7 +47,7 @@ impl NumberSchema {
             &self.minimum,
             &self.maximum,
             &self.multiple_of,
-            &value,
+            value,
             i,
         )
     }

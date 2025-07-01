@@ -72,7 +72,7 @@ fn command_validate(opts: Opts) -> Result<i32> {
         Ok(schema) => schema,
         Err(e) => {
             eprintln!("Failed to read YAML schema file: {schema_filename}");
-            log::error!("{}", e);
+            log::error!("{e}");
             return Ok(1);
         }
     };

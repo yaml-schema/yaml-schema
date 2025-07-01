@@ -28,7 +28,7 @@ impl std::fmt::Display for ArraySchema {
 
 impl Validator for ArraySchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[ArraySchema] self: {:?}", self);
+        debug!("[ArraySchema] self: {self:?}");
         let data = &value.data;
         debug!("[ArraySchema] Validating value: {}", format_yaml_data(data));
 
@@ -65,8 +65,7 @@ impl Validator for ArraySchema {
                     } else if let Some(items) = &self.items {
                         // if the index is not within the prefix items, validate against the array items schema
                         debug!(
-                            "[ArraySchema] Validating array item {} with schema: {}",
-                            i, items
+                            "[ArraySchema] Validating array item {i} with schema: {items}"
                         );
                         match items {
                             BoolOrTypedSchema::Boolean(true) => {
@@ -158,7 +157,7 @@ impl Validator for ArraySchema {
                 ),
             );
             fail_fast!(context);
-            return Ok(());
+            Ok(())
         }
     }
 }
@@ -239,8 +238,7 @@ mod tests {
             }
         } else {
             panic!(
-                "Expected first_schema to be a Mapping, but got {:?}",
-                first_schema
+                "Expected first_schema to be a Mapping, but got {first_schema:?}"
             );
         }
     }

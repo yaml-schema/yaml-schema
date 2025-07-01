@@ -61,7 +61,7 @@ impl std::fmt::Display for ValidationError {
 
 impl Validator for Schema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[Schema] self: {}", self);
+        debug!("[Schema] self: {self}");
         debug!(
             "[Schema] Validating value: {}",
             format_yaml_data(&value.data)
@@ -97,13 +97,13 @@ impl Validator for Schema {
 
 impl Validator for YamlSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[YamlSchema] self: {}", self);
+        debug!("[YamlSchema] self: {self}");
         debug!(
             "[YamlSchema] Validating value: {}",
             format_yaml_data(&value.data)
         );
         if let Some(reference) = &self.r#ref {
-            debug!("[YamlSchema] Reference found: {}", reference);
+            debug!("[YamlSchema] Reference found: {reference}");
             let ref_name = &reference.ref_name;
             if let Some(root_schema) = &context.root_schema {
                 if let Some(schema) = root_schema.get_def(ref_name) {

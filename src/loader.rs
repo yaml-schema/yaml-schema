@@ -98,7 +98,7 @@ impl RootLoader {
     }
 
     fn load_root_schema(&mut self, mapping: &saphyr::Mapping) -> Result<()> {
-        self.schema = Some(YamlSchema::construct(&mapping)?);
+        self.schema = Some(YamlSchema::construct(mapping)?);
         Ok(())
     }
 }
@@ -170,44 +170,45 @@ impl Constructor<YamlSchema> for YamlSchema {
 
         for (key, value) in mapping.iter() {
             match key {
-                saphyr::Yaml::Value(scalar) => match scalar {
-                    saphyr::Scalar::String(s) => match s.as_ref() {
-                        "$id" => {
-                            metadata.insert(
-                                s.to_string(),
-                                yaml_to_string(value, "$id must be a string")?,
-                            );
+                saphyr::Yaml::Value(scalar) => {
+                    if let saphyr::Scalar::String(s) = scalar {
+                        match s.as_ref() {
+                            "$id" => {
+                                metadata.insert(
+                                    s.to_string(),
+                                    yaml_to_string(value, "$id must be a string")?,
+                                );
+                            }
+                            "$schema" => {
+                                metadata.insert(
+                                    s.to_string(),
+                                    yaml_to_string(value, "$schema must be a string")?,
+                                );
+                            }
+                            "$ref" => {
+                                r#ref = Some(Reference::construct(mapping)?);
+                                // TODO: What?
+                            }
+                            "title" => {
+                                metadata.insert(
+                                    s.to_string(),
+                                    yaml_to_string(value, "title must be a string")?,
+                                );
+                            }
+                            "description" => {
+                                metadata.insert(
+                                    s.to_string(),
+                                    yaml_to_string(value, "description must be a string")?,
+                                );
+                            }
+                            _ => {
+                                data.insert(key.clone(), value.clone());
+                            }
                         }
-                        "$schema" => {
-                            metadata.insert(
-                                s.to_string(),
-                                yaml_to_string(value, "$schema must be a string")?,
-                            );
-                        }
-                        "$ref" => {
-                            r#ref = Some(Reference::construct(mapping)?);
-                            // TODO: What?
-                        }
-                        "title" => {
-                            metadata.insert(
-                                s.to_string(),
-                                yaml_to_string(value, "title must be a string")?,
-                            );
-                        }
-                        "description" => {
-                            metadata.insert(
-                                s.to_string(),
-                                yaml_to_string(value, "description must be a string")?,
-                            );
-                        }
-                        _ => {
-                            data.insert(key.clone(), value.clone());
-                        }
-                    },
-                    _ => {
+                    } else {
                         data.insert(key.clone(), value.clone());
                     }
-                },
+                }
                 _ => {
                     data.insert(key.clone(), value.clone());
                 }
@@ -348,14 +349,12 @@ impl Constructor<ConstSchema> for ConstSchema {
                         r#const: ConstValue::float(f),
                     })
                 }
-                _ => return Err(generic_error!("Unsupported const value: {:#?}", value)),
+                _ => Err(generic_error!("Unsupported const value: {:#?}", value)),
             },
-            _ => {
-                return Err(expected_scalar!(
-                    "Expected a scalar value for const, but got: {:#?}",
-                    value
-                ))
-            }
+            _ => Err(expected_scalar!(
+                "Expected a scalar value for const, but got: {:#?}",
+                value
+            )),
         }
     }
 }
@@ -576,17 +575,15 @@ fn load_properties(value: &saphyr::Yaml) -> Result<HashMap<String, YamlSchema>> 
                 if key.as_str() == "$ref" {
                     let reference = Reference::construct(mapping)?;
                     properties.insert(key.clone(), YamlSchema::reference(reference));
+                } else if let saphyr::Yaml::Mapping(mapping) = value {
+                    let schema = YamlSchema::construct(mapping)?;
+                    properties.insert(key.clone(), schema);
                 } else {
-                    if let saphyr::Yaml::Mapping(mapping) = value {
-                        let schema = YamlSchema::construct(mapping)?;
-                        properties.insert(key.clone(), schema);
-                    } else {
-                        return Err(generic_error!(
-                            "properties: Expected a mapping for \"{}\", but got: {:?}",
-                            key,
-                            value
-                        ));
-                    }
+                    return Err(generic_error!(
+                        "properties: Expected a mapping for \"{}\", but got: {:?}",
+                        key,
+                        value
+                    ));
                 }
             } else {
                 return Err(unsupported_type!(
@@ -597,10 +594,10 @@ fn load_properties(value: &saphyr::Yaml) -> Result<HashMap<String, YamlSchema>> 
         }
         Ok(properties)
     } else {
-        return Err(generic_error!(
+        Err(generic_error!(
             "properties: expected a mapping, but got: {:#?}",
             value
-        ));
+        ))
     }
 }
 
@@ -826,7 +823,6 @@ fn yaml_to_string<S: Into<String> + Copy>(yaml: &saphyr::Yaml, msg: S) -> Result
             saphyr::Scalar::FloatingPoint(f) => Ok(f.to_string()),
             saphyr::Scalar::Boolean(b) => Ok(b.to_string()),
             saphyr::Scalar::Null => Ok("null".to_string()),
-            _ => Err(unsupported_type!(msg.into())),
         },
         _ => Err(unsupported_type!(msg.into())),
     }

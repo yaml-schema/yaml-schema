@@ -11,7 +11,7 @@ pub struct CliWorld {
 #[when(regex = "the following command is run:")]
 async fn run_command(world: &mut CliWorld, step: &Step) {
     let raw_command = step.docstring().unwrap();
-    debug!("raw_command {}", raw_command);
+    debug!("raw_command {raw_command}");
     let parts = raw_command.split_whitespace().collect::<Vec<&str>>();
     assert!(!parts.is_empty(), "No command provided");
     let mut args: Vec<&str> = parts[1..].to_vec();
@@ -22,12 +22,12 @@ async fn run_command(world: &mut CliWorld, step: &Step) {
     } else {
         parts[0]
     };
-    debug!("Executable: {}", executable);
+    debug!("Executable: {executable}");
 
     match Command::new(executable).args(args).output() {
         Ok(output) => {
             let output_str = String::from_utf8(output.stdout).unwrap();
-            debug!("Output: {}", output_str);
+            debug!("Output: {output_str}");
             world.command_output = Some(output_str);
         }
         Err(e) => {
@@ -38,14 +38,14 @@ async fn run_command(world: &mut CliWorld, step: &Step) {
 
 #[given(expr = r#"a file named `{word}` containing:"#)]
 async fn a_file_containing(_world: &mut CliWorld, filename: String, step: &Step) {
-    debug!("filename: {:?}", filename);
+    debug!("filename: {filename:?}");
     let file_content = step.docstring().unwrap();
-    debug!("file_content: {:?}", file_content);
+    debug!("file_content: {file_content:?}");
 }
 
 #[then(expr = "it should exit with status code {int}")]
 async fn it_should_exit_with_status(_world: &mut CliWorld, status: i32) {
-    debug!("status: {:?}", status);
+    debug!("status: {status:?}");
 }
 
 #[then(expr = "it should output:")]

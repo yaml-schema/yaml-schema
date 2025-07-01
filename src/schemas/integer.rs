@@ -29,7 +29,7 @@ impl Validator for IntegerSchema {
                     &self.minimum,
                     &self.maximum,
                     &self.multiple_of,
-                    &value,
+                    value,
                     *i,
                 )
             } else if let saphyr::Scalar::FloatingPoint(o) = scalar {
@@ -40,7 +40,7 @@ impl Validator for IntegerSchema {
                         &self.minimum,
                         &self.maximum,
                         &self.multiple_of,
-                        &value,
+                        value,
                         f as i64,
                     )
                 } else {

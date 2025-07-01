@@ -21,15 +21,15 @@ impl std::fmt::Display for EnumSchema {
 
 impl Validator for EnumSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[EnumSchema] self: {}", self);
+        debug!("[EnumSchema] self: {self}");
         let data = &value.data;
-        debug!("[EnumSchema] Validating value: {:?}", data);
+        debug!("[EnumSchema] Validating value: {data:?}");
         let const_value: ConstValue = data.try_into().map_err(|_| {
             Error::GenericError(format!("Unable to convert value: {data:?} to ConstValue"))
         })?;
-        debug!("[EnumSchema] const_value: {}", const_value);
+        debug!("[EnumSchema] const_value: {const_value}");
         for value in &self.r#enum {
-            debug!("[EnumSchema] value: {}", value);
+            debug!("[EnumSchema] value: {value}");
             if value.eq(&const_value) {
                 return Ok(());
             }
@@ -43,7 +43,7 @@ impl Validator for EnumSchema {
                 .collect::<Vec<String>>()
                 .join(", ");
             let error = format!("Value {value_str} is not in the enum: [{enum_values}]");
-            debug!("[EnumSchema] error: {}", error);
+            debug!("[EnumSchema] error: {error}");
             context.add_error(value, error);
         }
         Ok(())

@@ -26,8 +26,7 @@ pub fn validate_one_of(
     let mut one_of_is_valid = false;
     for schema in schemas {
         debug!(
-            "OneOf: Validating value: {:?} against schema: {}",
-            value, schema
+            "OneOf: Validating value: {value:?} against schema: {schema}"
         );
         let sub_context = context.get_sub_context();
         let sub_result = schema.validate(&sub_context, value);
@@ -52,7 +51,7 @@ pub fn validate_one_of(
             Err(e) => return Err(e),
         }
     }
-    debug!("OneOf: one_of_is_valid: {}", one_of_is_valid);
+    debug!("OneOf: one_of_is_valid: {one_of_is_valid}");
     Ok(one_of_is_valid)
 }
 

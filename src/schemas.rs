@@ -53,7 +53,7 @@ impl TypedSchema {
         match value {
             saphyr::Yaml::Value(scalar) => match scalar {
                 saphyr::Scalar::Null => Ok(TypedSchema::Null),
-                saphyr::Scalar::String(s) => TypedSchema::for_type_string(&s),
+                saphyr::Scalar::String(s) => TypedSchema::for_type_string(s),
                 _ => panic!("Unknown type: {value:?}"),
             },
             _ => panic!("Unknown type: {value:?}"),
@@ -89,8 +89,8 @@ impl fmt::Display for TypedSchema {
 
 impl Validator for TypedSchema {
     fn validate(&self, context: &crate::Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[TypedSchema] self: {}", self);
-        debug!("[TypedSchema] Validating value: {:?}", value);
+        debug!("[TypedSchema] self: {self}");
+        debug!("[TypedSchema] Validating value: {value:?}");
         match self {
             TypedSchema::Array(a) => a.validate(context, value),
             TypedSchema::BooleanSchema => Ok(()),

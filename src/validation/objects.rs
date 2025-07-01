@@ -1,6 +1,5 @@
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
-use crate::utils::saphyr_yaml_string;
 use crate::validation::Context;
 use crate::Error;
 use crate::Result;
@@ -34,7 +33,7 @@ pub fn try_validate_value_against_properties(
 ) -> Result<bool> {
     let sub_context = context.append_path(key);
     if let Some(schema) = properties.get(key) {
-        debug!("Validating property '{}' with schema: {}", key, schema);
+        debug!("Validating property '{key}' with schema: {schema}");
         let result = schema.validate(&sub_context, value);
         return match result {
             Ok(_) => Ok(true),
@@ -110,7 +109,7 @@ impl ObjectSchema {
                 v => return Err(expected_scalar!("Expected a string key, got: {:?}", v)),
             };
             let span = &k.span;
-            debug!("validate_object_mapping: key: \"{}\"", key);
+            debug!("validate_object_mapping: key: \"{key}\"");
             debug!(
                 "validate_object_mapping: span.start: {:?}",
                 format_marker(&span.start)
@@ -139,7 +138,7 @@ impl ObjectSchema {
             // Then we check if pattern_properties matches
             if let Some(pattern_properties) = &self.pattern_properties {
                 for (pattern, schema) in pattern_properties {
-                    log::debug!("pattern: {}", pattern);
+                    log::debug!("pattern: {pattern}");
                     // TODO: compile the regex once instead of every time we're evaluating
                     let re = regex::Regex::new(pattern).map_err(|e| {
                         Error::GenericError(format!("Invalid regular expression pattern: {e}"))

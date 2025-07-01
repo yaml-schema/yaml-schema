@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use hashlink::LinkedHashMap;
-use ordered_float::OrderedFloat;
 use saphyr::LoadableYamlNode;
 
 pub mod engine;
@@ -153,7 +152,6 @@ impl ConstValue {
                 }
                 saphyr::Scalar::String(s) => ConstValue::String(s.to_string()),
                 saphyr::Scalar::Null => ConstValue::Null,
-                _ => panic!("Expected a scalar value, but got: {value:?}"),
             },
             _ => panic!("Expected a scalar value, but got: {value:?}"),
         }
