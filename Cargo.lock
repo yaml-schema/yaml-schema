@@ -1521,7 +1521,7 @@ checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
 
 [[package]]
 name = "yaml-schema"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "clap",
  "ctor",
