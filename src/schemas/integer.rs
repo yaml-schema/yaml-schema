@@ -1,5 +1,3 @@
-use log::debug;
-
 use crate::validation::Context;
 use crate::validation::Validator;
 use crate::Number;
@@ -17,37 +15,42 @@ pub struct IntegerSchema {
 
 impl std::fmt::Display for IntegerSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Number {self:?}")
+        write!(f, "Integer {self:?}")
     }
 }
 
 impl Validator for IntegerSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[IntegerSchema] self: {}", self);
-        debug!("[IntegerSchema] Validating value: {:?}", value);
         let data = &value.data;
-        if data.is_integer() {
-            match data.as_i64() {
-                Some(i) => self.validate_number_i64(context, value, i),
-                None => {
+        if let saphyr::YamlData::Value(scalar) = data {
+            if let saphyr::Scalar::Integer(i) = scalar {
+                crate::validation::validate_integer(
+                    context,
+                    &self.minimum,
+                    &self.maximum,
+                    &self.multiple_of,
+                    &value,
+                    *i,
+                )
+            } else if let saphyr::Scalar::FloatingPoint(o) = scalar {
+                let f = o.into_inner();
+                if f.fract() == 0.0 {
+                    crate::validation::validate_integer(
+                        context,
+                        &self.minimum,
+                        &self.maximum,
+                        &self.multiple_of,
+                        &value,
+                        f as i64,
+                    )
+                } else {
                     context.add_error(value, format!("Expected an integer, but got: {data:?}"));
                 }
-            }
-        } else if data.is_real() {
-            match data.as_f64() {
-                Some(f) => {
-                    if f.fract() == 0.0 {
-                        self.validate_number_i64(context, value, f as i64);
-                    } else {
-                        context.add_error(value, format!("Expected an integer, but got: {data:?}"));
-                    }
-                }
-                None => {
-                    context.add_error(value, format!("Expected a float, but got: {data:?}"));
-                }
+            } else {
+                context.add_error(value, format!("Expected a number, but got: {data:?}"));
             }
         } else {
-            context.add_error(value, format!("Expected a number, but got: {data:?}"));
+            context.add_error(value, format!("Expected a scalar value, but got: {data:?}"));
         }
         if !context.errors.borrow().is_empty() {
             fail_fast!(context)
@@ -56,58 +59,10 @@ impl Validator for IntegerSchema {
     }
 }
 
-impl IntegerSchema {
-    fn validate_number_i64(&self, context: &Context, value: &saphyr::MarkedYaml, i: i64) {
-        if let Some(minimum) = &self.minimum {
-            match minimum {
-                Number::Integer(min) => {
-                    if i < *min {
-                        context.add_error(value, "Number is too small!".to_string());
-                    }
-                }
-                Number::Float(min) => {
-                    if (i as f64) < *min {
-                        context.add_error(value, "Number is too small!".to_string());
-                    }
-                }
-            }
-        }
-        if let Some(maximum) = &self.maximum {
-            match maximum {
-                Number::Integer(max) => {
-                    if i > *max {
-                        context.add_error(value, "Number is too big!".to_string());
-                    }
-                }
-                Number::Float(max) => {
-                    if (i as f64) > *max {
-                        context.add_error(value, "Number is too big!".to_string());
-                    }
-                }
-            }
-        }
-        if let Some(multiple_of) = &self.multiple_of {
-            match multiple_of {
-                Number::Integer(multiple) => {
-                    if i % *multiple != 0 {
-                        context
-                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
-                    }
-                }
-                Number::Float(multiple) => {
-                    if (i as f64) % *multiple != 0.0 {
-                        context
-                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
-                    }
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_integer_schema_against_string() {

@@ -1,9 +1,11 @@
-use hashlink::LinkedHashMap;
-
 use std::collections::HashMap;
 use std::fs;
 use std::rc::Rc;
 
+use hashlink::LinkedHashMap;
+use saphyr::LoadableYamlNode;
+
+use crate::utils::{saphyr_yaml_string, try_unwrap_saphyr_scalar};
 use crate::AnyOfSchema;
 use crate::ArraySchema;
 use crate::BoolOrTypedSchema;
@@ -42,27 +44,33 @@ pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
 pub fn load_from_doc(doc: &saphyr::Yaml) -> Result<RootSchema> {
     let mut loader = RootLoader::new();
     match doc {
-        saphyr::Yaml::Boolean(r#bool) => {
-            loader.set_schema(YamlSchema::boolean_literal(*r#bool));
-        }
-        saphyr::Yaml::Hash(hash) => {
-            loader.load_root_schema(hash)?;
-        }
-        saphyr::Yaml::Null => {
-            loader.set_schema(YamlSchema::null());
-        }
-        saphyr::Yaml::String(s) => match s.as_str() {
-            "true" => {
-                loader.set_schema(YamlSchema::boolean_literal(true));
+        saphyr::Yaml::Value(scalar) => match scalar {
+            saphyr::Scalar::Boolean(r#bool) => {
+                loader.set_schema(YamlSchema::boolean_literal(*r#bool));
             }
-            "false" => {
-                loader.set_schema(YamlSchema::boolean_literal(false));
+            saphyr::Scalar::Null => {
+                loader.set_schema(YamlSchema::null());
             }
-            s => return Err(generic_error!("Expected true or false, but got: {}", s)),
+            saphyr::Scalar::String(s) => match s.as_ref() {
+                "true" => {
+                    loader.set_schema(YamlSchema::boolean_literal(true));
+                }
+                "false" => {
+                    loader.set_schema(YamlSchema::boolean_literal(false));
+                }
+                s => return Err(generic_error!("Expected true or false, but got: {}", s)),
+            },
+            _ => {
+                return Err(generic_error!(
+                    "Don't know how to a handle scalar: {:?}",
+                    scalar
+                ))
+            }
         },
-        _ => {
-            unimplemented!()
+        saphyr::Yaml::Mapping(mapping) => {
+            loader.load_root_schema(mapping)?;
         }
+        _ => return Err(generic_error!("Don't know how to load: {:?}", doc)),
     }
     Ok(loader.into()) // See From<Loader> for RootSchema below
 }
@@ -89,43 +97,8 @@ impl RootLoader {
         self.schema = Some(schema);
     }
 
-    fn load_root_schema(&mut self, hash: &saphyr::Hash) -> Result<()> {
-        let mut data = LinkedHashMap::new();
-
-        for (key, value) in hash.iter() {
-            match key {
-                saphyr::Yaml::String(s) => match s.as_str() {
-                    "$id" => self.id = Some(yaml_to_string(value, "$id must be a string")?),
-                    "$schema" => {
-                        self.meta_schema = Some(yaml_to_string(value, "$schema must be a string")?)
-                    }
-                    "title" => self.title = Some(yaml_to_string(value, "title must be a string")?),
-                    "description" => {
-                        self.description =
-                            Some(yaml_to_string(value, "description must be a string")?)
-                    }
-                    "$defs" | "definitions" => {
-                        let hash = value.as_hash().ok_or_else(|| {
-                            unsupported_type!("Expected a hash, but got: {:#?}", value)
-                        })?;
-                        let mut defs = LinkedHashMap::new();
-                        for (key, value) in hash.iter() {
-                            let schema = YamlSchema::construct(value.as_hash().unwrap())?;
-                            let key_string = yaml_to_string(key, "key must be a string")?;
-                            defs.insert(key_string, schema);
-                        }
-                        self.defs = Some(defs);
-                    }
-                    _ => {
-                        data.insert(key.clone(), value.clone());
-                    }
-                },
-                _ => {
-                    data.insert(key.clone(), value.clone());
-                }
-            }
-        }
-        self.schema = Some(YamlSchema::construct(&data)?);
+    fn load_root_schema(&mut self, mapping: &saphyr::Mapping) -> Result<()> {
+        self.schema = Some(YamlSchema::construct(&mapping)?);
         Ok(())
     }
 }
@@ -143,70 +116,94 @@ impl From<RootLoader> for RootSchema {
     }
 }
 
+/// "type" key
+const TYPE: saphyr::Yaml = saphyr_yaml_string("type");
+/// "enum" key
+const ENUM: saphyr::Yaml = saphyr_yaml_string("enum");
+/// "const" key
+const CONST: saphyr::Yaml = saphyr_yaml_string("const");
+/// "anyOf" key
+const ANY_OF: saphyr::Yaml = saphyr_yaml_string("anyOf");
+/// "oneOf" key
+const ONE_OF: saphyr::Yaml = saphyr_yaml_string("oneOf");
+/// "not" key
+const NOT: saphyr::Yaml = saphyr_yaml_string("not");
+
 impl Constructor<Option<Schema>> for Schema {
-    fn construct(hash: &saphyr::Hash) -> Result<Option<Schema>> {
-        if hash.is_empty() {
+    fn construct(mapping: &saphyr::Mapping) -> Result<Option<Schema>> {
+        if mapping.is_empty() {
             Ok(None)
-        } else if hash.contains_key(&sys("type")) {
-            match TypedSchema::construct(hash) {
+        } else if mapping.contains_key(&TYPE) {
+            match TypedSchema::construct(mapping) {
                 Ok(typed_schema) => Ok(Some(typed_schema.into())),
                 Err(e) => Err(e),
             }
-        } else if hash.contains_key(&sys("enum")) {
-            let enum_schema = EnumSchema::construct(hash)?;
+        } else if mapping.contains_key(&ENUM) {
+            let enum_schema = EnumSchema::construct(mapping)?;
             return Ok(Some(Schema::Enum(enum_schema)));
-        } else if hash.contains_key(&sys("const")) {
-            let const_schema = ConstSchema::construct(hash)?;
+        } else if mapping.contains_key(&CONST) {
+            let const_schema = ConstSchema::construct(mapping)?;
             return Ok(Some(Schema::Const(const_schema)));
-        } else if hash.contains_key(&sys("anyOf")) {
-            let any_of_schema = AnyOfSchema::construct(hash)?;
+        } else if mapping.contains_key(&ANY_OF) {
+            let any_of_schema = AnyOfSchema::construct(mapping)?;
             return Ok(Some(Schema::AnyOf(any_of_schema)));
-        } else if hash.contains_key(&sys("oneOf")) {
-            let one_of_schema = OneOfSchema::construct(hash)?;
+        } else if mapping.contains_key(&ONE_OF) {
+            let one_of_schema = OneOfSchema::construct(mapping)?;
             return Ok(Some(Schema::OneOf(one_of_schema)));
-        } else if hash.contains_key(&sys("not")) {
-            let not_schema = NotSchema::construct(hash)?;
+        } else if mapping.contains_key(&NOT) {
+            let not_schema = NotSchema::construct(mapping)?;
             return Ok(Some(Schema::Not(not_schema)));
         } else {
             return Err(generic_error!(
                 "Don't know how to construct schema: {:#?}",
-                hash
+                mapping
             ));
         }
     }
 }
 
 impl Constructor<YamlSchema> for YamlSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<YamlSchema> {
-        let mut metadata = LinkedHashMap::new();
+    fn construct(mapping: &saphyr::Mapping) -> Result<YamlSchema> {
+        let mut metadata: LinkedHashMap<String, String> = LinkedHashMap::new();
         let mut r#ref: Option<Reference> = None;
-        let mut data = LinkedHashMap::new();
+        let mut data = saphyr::Mapping::new();
 
-        for (key, value) in hash.iter() {
+        for (key, value) in mapping.iter() {
             match key {
-                saphyr::Yaml::String(s) => match s.as_str() {
-                    "$id" => {
-                        metadata.insert(s.clone(), yaml_to_string(value, "$id must be a string")?);
-                    }
-                    "$schema" => {
-                        metadata.insert(
-                            s.clone(),
-                            yaml_to_string(value, "$schema must be a string")?,
-                        );
-                    }
-                    "$ref" => {
-                        r#ref = Some(Reference::construct(hash)?);
-                    }
-                    "title" => {
-                        metadata
-                            .insert(s.clone(), yaml_to_string(value, "title must be a string")?);
-                    }
-                    "description" => {
-                        metadata.insert(
-                            s.clone(),
-                            yaml_to_string(value, "description must be a string")?,
-                        );
-                    }
+                saphyr::Yaml::Value(scalar) => match scalar {
+                    saphyr::Scalar::String(s) => match s.as_ref() {
+                        "$id" => {
+                            metadata.insert(
+                                s.to_string(),
+                                yaml_to_string(value, "$id must be a string")?,
+                            );
+                        }
+                        "$schema" => {
+                            metadata.insert(
+                                s.to_string(),
+                                yaml_to_string(value, "$schema must be a string")?,
+                            );
+                        }
+                        "$ref" => {
+                            r#ref = Some(Reference::construct(mapping)?);
+                            // TODO: What?
+                        }
+                        "title" => {
+                            metadata.insert(
+                                s.to_string(),
+                                yaml_to_string(value, "title must be a string")?,
+                            );
+                        }
+                        "description" => {
+                            metadata.insert(
+                                s.to_string(),
+                                yaml_to_string(value, "description must be a string")?,
+                            );
+                        }
+                        _ => {
+                            data.insert(key.clone(), value.clone());
+                        }
+                    },
                     _ => {
                         data.insert(key.clone(), value.clone());
                     }
@@ -230,88 +227,104 @@ impl Constructor<YamlSchema> for YamlSchema {
 }
 
 impl Constructor<TypedSchema> for TypedSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<TypedSchema> {
-        let type_key = saphyr::Yaml::String(String::from("type"));
-        if hash.contains_key(&type_key) {
-            let value = hash.get(&type_key).unwrap();
+    fn construct(mapping: &saphyr::Mapping) -> Result<TypedSchema> {
+        let type_key = saphyr_yaml_string("type");
+        if mapping.contains_key(&type_key) {
+            let value = mapping.get(&type_key).unwrap();
             match value {
-                saphyr::Yaml::String(s) => match s.as_str() {
-                    "array" => {
-                        let array_schema = ArraySchema::construct(hash)?;
-                        Ok(TypedSchema::Array(array_schema))
-                    }
-                    "boolean" => Ok(TypedSchema::BooleanSchema),
-                    "integer" => {
-                        let integer_schema = IntegerSchema::construct(hash)?;
-                        Ok(TypedSchema::Integer(integer_schema))
-                    }
-                    "number" => {
-                        let number_schema = NumberSchema::construct(hash)?;
-                        Ok(TypedSchema::Number(number_schema))
-                    }
-                    "object" => {
-                        let object_schema = ObjectSchema::construct(hash)?;
-                        Ok(TypedSchema::Object(object_schema))
-                    }
-                    "string" => {
-                        let string_schema = StringSchema::construct(hash)?;
-                        Ok(TypedSchema::String(string_schema))
-                    }
-                    s => Err(unsupported_type!(s.to_string())),
+                saphyr::Yaml::Value(scalar) => match scalar {
+                    saphyr::Scalar::String(s) => match s.as_ref() {
+                        "array" => {
+                            let array_schema = ArraySchema::construct(mapping)?;
+                            Ok(TypedSchema::Array(array_schema))
+                        }
+                        "boolean" => Ok(TypedSchema::BooleanSchema),
+                        "integer" => {
+                            let integer_schema = IntegerSchema::construct(mapping)?;
+                            Ok(TypedSchema::Integer(integer_schema))
+                        }
+                        "number" => {
+                            let number_schema = NumberSchema::construct(mapping)?;
+                            Ok(TypedSchema::Number(number_schema))
+                        }
+                        "object" => {
+                            let object_schema = ObjectSchema::construct(mapping)?;
+                            Ok(TypedSchema::Object(object_schema))
+                        }
+                        "string" => {
+                            let string_schema = StringSchema::construct(mapping)?;
+                            Ok(TypedSchema::String(string_schema))
+                        }
+                        s => Err(unsupported_type!(s.to_string())),
+                    },
+                    saphyr::Scalar::Null => Ok(TypedSchema::Null),
+                    v => Err(unsupported_type!(
+                        "Expected type: string, but got: {:#?}",
+                        v
+                    )),
                 },
-                saphyr::Yaml::Null => Ok(TypedSchema::Null),
-                v => Err(unsupported_type!(
-                    "Expected type: string, but got: {:#?}",
-                    v
-                )),
+                v => Err(expected_scalar!("Expected scalar type, but got: {:#?}", v)),
             }
         } else {
-            Err(generic_error!("No type key found in hash: {:#?}", hash))
+            Err(generic_error!(
+                "No type key found in mapping: {:#?}",
+                mapping
+            ))
         }
     }
 }
 
-/// A Constructor constructs an object (a schema) from a saphyr::Hash
+/// A Constructor constructs an object (a schema) from a saphyr::Mapping
 pub trait Constructor<T> {
-    fn construct(hash: &saphyr::Hash) -> Result<T>;
+    fn construct(mapping: &saphyr::Mapping) -> Result<T>;
 }
 
 fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
-    match value {
-        saphyr::Yaml::String(s) => Ok(s.clone()),
-        _ => Err(unsupported_type!(
-            "Expected a string value, but got: {:?}",
-            value
-        )),
+    // When RustRover stops complaining about let chains (Rust 1.88), can rewrite the ff.
+    if let saphyr::Yaml::Value(scalar) = value {
+        if let saphyr::Scalar::String(s) = scalar {
+            return Ok(s.to_string());
+        }
     }
+
+    Err(expected_scalar!(
+        "Expected a string value, but got: {:?}",
+        value
+    ))
 }
 
 impl Constructor<ArraySchema> for ArraySchema {
-    fn construct(hash: &saphyr::Hash) -> Result<ArraySchema> {
+    fn construct(mapping: &saphyr::Mapping) -> Result<ArraySchema> {
         let mut array_schema = ArraySchema::default();
-        for (key, value) in hash.iter() {
-            if let saphyr::Yaml::String(key) = key {
-                match key.as_str() {
-                    "contains" => {
-                        let yaml_schema = YamlSchema::construct(value.as_hash().unwrap())?;
+        for (key, value) in mapping.iter() {
+            let s = load_string_value(key)?;
+            match s.as_str() {
+                "contains" => {
+                    if let saphyr::Yaml::Mapping(mapping) = value {
+                        let yaml_schema = YamlSchema::construct(mapping)?;
                         array_schema.contains = Some(Box::new(yaml_schema));
+                    } else {
+                        return Err(generic_error!(
+                            "contains: expected a mapping, but got: {:#?}",
+                            value
+                        ));
                     }
-                    "items" => {
-                        let array_items = load_array_items(value)?;
-                        array_schema.items = Some(array_items);
-                    }
-                    "type" => {
-                        let s = load_string_value(value)?;
-                        if s != "array" {
-                            return Err(unsupported_type!("Expected type: array, but got: {}", s));
-                        }
-                    }
-                    "prefixItems" => {
-                        let prefix_items = load_array_of_schemas(value)?;
-                        array_schema.prefix_items = Some(prefix_items);
-                    }
-                    _ => unimplemented!("Unsupported key: {}", key),
                 }
+                "items" => {
+                    let array_items = load_array_items(value)?;
+                    array_schema.items = Some(array_items);
+                }
+                "type" => {
+                    let s = load_string_value(value)?;
+                    if s != "array" {
+                        return Err(unsupported_type!("Expected type: array, but got: {}", s));
+                    }
+                }
+                "prefixItems" => {
+                    let prefix_items = load_array_of_schemas(value)?;
+                    array_schema.prefix_items = Some(prefix_items);
+                }
+                _ => unimplemented!("Unsupported key for ArraySchema: {}", s),
             }
         }
         Ok(array_schema)
@@ -319,59 +332,73 @@ impl Constructor<ArraySchema> for ArraySchema {
 }
 
 impl Constructor<ConstSchema> for ConstSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<ConstSchema> {
-        let const_key = sys("const");
-        let value = hash.get(&const_key).unwrap();
+    fn construct(mapping: &saphyr::Mapping) -> Result<ConstSchema> {
+        let value = mapping.get(&CONST).unwrap();
         match value {
-            saphyr::Yaml::String(s) => Ok(ConstSchema {
-                r#const: ConstValue::string(s),
-            }),
-            saphyr::Yaml::Integer(i) => Ok(ConstSchema {
-                r#const: ConstValue::integer(*i),
-            }),
-            saphyr::Yaml::Real(s) => {
-                let f = s.parse::<f64>()?;
-                Ok(ConstSchema {
-                    r#const: ConstValue::float(f),
-                })
+            saphyr::Yaml::Value(scalar) => match scalar {
+                saphyr::Scalar::String(s) => Ok(ConstSchema {
+                    r#const: ConstValue::string(s.to_string()),
+                }),
+                saphyr::Scalar::Integer(i) => Ok(ConstSchema {
+                    r#const: ConstValue::integer(*i),
+                }),
+                saphyr::Scalar::FloatingPoint(o) => {
+                    let f = o.into_inner();
+                    Ok(ConstSchema {
+                        r#const: ConstValue::float(f),
+                    })
+                }
+                _ => return Err(generic_error!("Unsupported const value: {:#?}", value)),
+            },
+            _ => {
+                return Err(expected_scalar!(
+                    "Expected a scalar value for const, but got: {:#?}",
+                    value
+                ))
             }
-            _ => unimplemented!("Unsupported const value: {:#?}", value),
         }
     }
 }
 
 impl Constructor<IntegerSchema> for IntegerSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<IntegerSchema> {
+    fn construct(mapping: &saphyr::Mapping) -> Result<IntegerSchema> {
         let mut integer_schema = IntegerSchema::default();
-        for (key, value) in hash.iter() {
-            if let saphyr::Yaml::String(key) = key {
-                match key.as_str() {
-                    "minimum" => {
-                        integer_schema.minimum = Some(load_number(value)?);
-                    }
-                    "maximum" => {
-                        integer_schema.maximum = Some(load_number(value)?);
-                    }
-                    "exclusiveMinimum" => {
-                        integer_schema.exclusive_minimum = Some(load_number(value)?);
-                    }
-                    "exclusiveMaximum" => {
-                        integer_schema.exclusive_maximum = Some(load_number(value)?);
-                    }
-                    "multipleOf" => {
-                        integer_schema.multiple_of = Some(load_number(value)?);
-                    }
-                    "type" => {
-                        let s = load_string_value(value)?;
-                        if s != "integer" {
-                            return Err(unsupported_type!(
-                                "Expected type: integer, but got: {}",
-                                s
-                            ));
+        for (key, value) in mapping.iter() {
+            if let saphyr::Yaml::Value(scalar) = key {
+                if let saphyr::Scalar::String(key) = scalar {
+                    match key.as_ref() {
+                        "minimum" => {
+                            integer_schema.minimum = Some(load_number(value)?);
                         }
+                        "maximum" => {
+                            integer_schema.maximum = Some(load_number(value)?);
+                        }
+                        "exclusiveMinimum" => {
+                            integer_schema.exclusive_minimum = Some(load_number(value)?);
+                        }
+                        "exclusiveMaximum" => {
+                            integer_schema.exclusive_maximum = Some(load_number(value)?);
+                        }
+                        "multipleOf" => {
+                            integer_schema.multiple_of = Some(load_number(value)?);
+                        }
+                        "type" => {
+                            let s = load_string_value(value)?;
+                            if s != "integer" {
+                                return Err(unsupported_type!(
+                                    "Expected type: integer, but got: {}",
+                                    s
+                                ));
+                            }
+                        }
+                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
                     }
-                    _ => unimplemented!("Unsupported key for type: integer: {}", key),
                 }
+            } else {
+                return Err(expected_scalar!(
+                    "Expected a scalar value for the key, got: {:#?}",
+                    key
+                ));
             }
         }
         Ok(integer_schema)
@@ -379,29 +406,35 @@ impl Constructor<IntegerSchema> for IntegerSchema {
 }
 
 impl Constructor<EnumSchema> for EnumSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<EnumSchema> {
-        let enum_key = sys("enum");
-        let value = hash.get(&enum_key).unwrap();
-        match value {
-            saphyr::Yaml::Array(values) => {
+    fn construct(mapping: &saphyr::Mapping) -> Result<EnumSchema> {
+        if let Some(value) = mapping.get(&ENUM) {
+            if let saphyr::Yaml::Sequence(values) = value {
                 let enum_values = load_enum_values(values)?;
                 Ok(EnumSchema {
                     r#enum: enum_values,
                 })
+            } else {
+                Err(generic_error!(
+                    "enum: Expected an array, but got: {:#?}",
+                    value
+                ))
             }
-            v => Err(generic_error!("enum: Expected an array, but got: {:#?}", v)),
+        } else {
+            Err(generic_error!("No \"enum\" key found!"))
         }
     }
 }
 
+const PATTERN: saphyr::Yaml = saphyr_yaml_string("pattern");
+
 impl Constructor<ObjectSchema> for ObjectSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<ObjectSchema> {
+    fn construct(mapping: &saphyr::Mapping) -> Result<ObjectSchema> {
         let mut object_schema = ObjectSchema::default();
-        for (key, value) in hash.iter() {
-            if let saphyr::Yaml::String(key) = key {
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = load_string_value(key) {
                 match key.as_str() {
                     "properties" => {
-                        let properties = load_properties(value.as_hash().unwrap())?;
+                        let properties = load_properties(value)?;
                         object_schema.properties = Some(properties);
                     }
                     "additionalProperties" => {
@@ -415,58 +448,46 @@ impl Constructor<ObjectSchema> for ObjectSchema {
                         object_schema.max_properties = Some(load_integer(value)? as usize);
                     }
                     "patternProperties" => {
-                        let pattern_properties = load_properties(value.as_hash().unwrap())?;
+                        let pattern_properties = load_properties(value)?;
                         object_schema.pattern_properties = Some(pattern_properties);
                     }
                     "propertyNames" => {
-                        if !value.is_hash() {
+                        if let saphyr::Yaml::Mapping(mapping) = value {
+                            if !mapping.contains_key(&PATTERN) {
+                                return Err(generic_error!(
+                                    "propertyNames: Missing required key: pattern"
+                                ));
+                            }
+                            let pattern = load_string_value(
+                                mapping.get(&saphyr_yaml_string("pattern")).unwrap(),
+                            )?;
+                            object_schema.property_names = Some(pattern);
+                        } else {
                             return Err(unsupported_type!(
-                                "propertyNames: Expected a hash, but got: {:?}",
+                                "propertyNames: Expected a mapping, but got: {:?}",
                                 value
                             ));
                         }
-                        let hash = value.as_hash().unwrap();
-                        if !hash.contains_key(&sys("pattern")) {
-                            return Err(generic_error!(
-                                "propertyNames: Missing required key: pattern"
-                            ));
-                        }
-                        let pattern = load_string_value(hash.get(&sys("pattern")).unwrap())?;
-                        object_schema.property_names = Some(pattern);
                     }
                     "anyOf" => {
-                        if !value.is_array() {
-                            return Err(unsupported_type!(
-                                "anyOf: Expected an array, but got: {:?}",
-                                value
-                            ));
-                        }
-
-                        let any_of_schema = AnyOfSchema {
-                            any_of: load_array_of_schemas(value)?,
-                        };
-                        object_schema.any_of = Some(any_of_schema)
+                        let any_of = load_array_of_schemas(value)?;
+                        let any_of_schema = AnyOfSchema { any_of };
+                        object_schema.any_of = Some(any_of_schema);
                     }
                     "required" => {
-                        if !value.is_array() {
+                        if let saphyr::Yaml::Sequence(values) = value {
+                            object_schema.required = Some(
+                                values
+                                    .iter()
+                                    .map(|v| load_string_value(v))
+                                    .collect::<Result<Vec<String>>>()?,
+                            );
+                        } else {
                             return Err(unsupported_type!(
                                 "required: Expected an array, but got: {:?}",
                                 value
                             ));
                         }
-                        let array = value.as_vec().unwrap();
-                        object_schema.required = Some(
-                            array
-                                .iter()
-                                .map(|v| match v {
-                                    saphyr::Yaml::String(s) => Ok(s.clone()),
-                                    _ => Err(unsupported_type!(
-                                        "required: Expected a string, but got: {:?}",
-                                        v
-                                    )),
-                                })
-                                .collect::<Result<Vec<String>>>()?,
-                        );
                     }
                     "type" => {
                         let s = load_string_value(value)?;
@@ -491,6 +512,8 @@ impl Constructor<ObjectSchema> for ObjectSchema {
                         }
                     }
                 }
+            } else {
+                return Err(generic_error!("Expected a string key, got: {:#?}", key));
             }
         }
         Ok(object_schema)
@@ -498,29 +521,29 @@ impl Constructor<ObjectSchema> for ObjectSchema {
 }
 
 fn load_array_of_schemas(value: &saphyr::Yaml) -> Result<Vec<YamlSchema>> {
-    match value {
-        saphyr::Yaml::Array(values) => values
+    if let saphyr::Yaml::Sequence(values) = value {
+        values
             .iter()
             .map(|v| match v {
-                saphyr::Yaml::Hash(hash) => YamlSchema::construct(hash),
-                _ => Err(unsupported_type!("Expected a hash, but got: {:?}", v)),
+                saphyr::Yaml::Mapping(mapping) => YamlSchema::construct(mapping),
+                _ => Err(generic_error!("Expected a mapping, but got: {:?}", v)),
             })
-            .collect::<Result<Vec<YamlSchema>>>(),
-        _ => Err(unsupported_type!(
-            "Expected an array of hashes, but got: {:?}",
-            value
-        )),
+            .collect::<Result<Vec<YamlSchema>>>()
+    } else {
+        Err(generic_error!("Expected a sequence, but got: {:?}", value))
     }
 }
 
 impl Constructor<AnyOfSchema> for AnyOfSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<AnyOfSchema> {
+    fn construct(mapping: &saphyr::Mapping) -> Result<AnyOfSchema> {
         let mut any_of_schema = AnyOfSchema::default();
-        for (key, value) in hash.iter() {
-            if let saphyr::Yaml::String(key) = key {
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = load_string_value(key) {
                 match key.as_str() {
-                    "anyOf" => any_of_schema.any_of = load_array_of_schemas(value)?,
-                    _ => return Err(unsupported_type!("Unsupported key: {}", key)),
+                    "anyOf" => {
+                        any_of_schema.any_of = load_array_of_schemas(value)?;
+                    }
+                    _ => return Err(generic_error!("Unsupported key: {}", key)),
                 }
             }
         }
@@ -529,10 +552,10 @@ impl Constructor<AnyOfSchema> for AnyOfSchema {
 }
 
 impl Constructor<OneOfSchema> for OneOfSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<OneOfSchema> {
+    fn construct(mapping: &saphyr::Mapping) -> Result<OneOfSchema> {
         let mut one_of_schema = OneOfSchema::default();
-        for (key, value) in hash.iter() {
-            if let saphyr::Yaml::String(key) = key {
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = load_string_value(key) {
                 match key.as_str() {
                     "oneOf" => {
                         one_of_schema.one_of = load_array_of_schemas(value)?;
@@ -545,68 +568,93 @@ impl Constructor<OneOfSchema> for OneOfSchema {
     }
 }
 
-fn load_properties(hash: &saphyr::Hash) -> Result<HashMap<String, YamlSchema>> {
-    let mut properties = HashMap::new();
-    for (key, value) in hash.iter() {
-        if let saphyr::Yaml::String(key) = key {
-            if key.as_str() == "$ref" {
-                let reference = Reference::construct(hash)?;
-                properties.insert(key.clone(), YamlSchema::reference(reference));
+fn load_properties(value: &saphyr::Yaml) -> Result<HashMap<String, YamlSchema>> {
+    if let saphyr::Yaml::Mapping(mapping) = value {
+        let mut properties = HashMap::new();
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = load_string_value(key) {
+                if key.as_str() == "$ref" {
+                    let reference = Reference::construct(mapping)?;
+                    properties.insert(key.clone(), YamlSchema::reference(reference));
+                } else {
+                    if let saphyr::Yaml::Mapping(mapping) = value {
+                        let schema = YamlSchema::construct(mapping)?;
+                        properties.insert(key.clone(), schema);
+                    } else {
+                        return Err(generic_error!(
+                            "properties: Expected a mapping for \"{}\", but got: {:?}",
+                            key,
+                            value
+                        ));
+                    }
+                }
             } else {
-                let schema = YamlSchema::construct(value.as_hash().unwrap())?;
-                properties.insert(key.clone(), schema);
+                return Err(unsupported_type!(
+                    "Expected a string key, but got: {:?}",
+                    key
+                ));
             }
-        } else {
-            return Err(unsupported_type!(
-                "Expected a string key, but got: {:?}",
-                key
-            ));
         }
+        Ok(properties)
+    } else {
+        return Err(generic_error!(
+            "properties: expected a mapping, but got: {:#?}",
+            value
+        ));
     }
-    Ok(properties)
 }
 
 fn load_additional_properties(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
     match value {
-        saphyr::Yaml::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
-        saphyr::Yaml::Hash(hash) => {
-            let ref_key = sys("$ref");
-            if hash.contains_key(&ref_key) {
-                Ok(BoolOrTypedSchema::Reference(Reference::construct(hash)?))
+        saphyr::Yaml::Value(scalar) => match scalar {
+            saphyr::Scalar::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
+            _ => Err(generic_error!(
+                "Expected a boolean scalar, but got: {:#?}",
+                scalar
+            )),
+        },
+        saphyr::Yaml::Mapping(mapping) => {
+            let ref_key = saphyr_yaml_string("$ref");
+            if mapping.contains_key(&ref_key) {
+                Ok(BoolOrTypedSchema::Reference(Reference::construct(mapping)?))
             } else {
-                let schema = TypedSchema::construct(hash)?;
+                let schema = TypedSchema::construct(mapping)?;
                 Ok(BoolOrTypedSchema::TypedSchema(Box::new(schema)))
             }
         }
         _ => Err(unsupported_type!(
-            "Expected type: boolean or hash, but got: {:?}",
+            "Expected type: boolean or mapping, but got: {:?}",
             value
         )),
     }
 }
 
 impl Constructor<NotSchema> for NotSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<NotSchema> {
-        for (key, value) in hash.iter() {
-            if let saphyr::Yaml::String(key) = key {
+    fn construct(mapping: &saphyr::Mapping) -> Result<NotSchema> {
+        let mut not_schema = NotSchema::default();
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = load_string_value(key) {
                 match key.as_str() {
                     "not" => {
-                        let schema = YamlSchema::construct(value.as_hash().unwrap())?;
-                        return Ok(NotSchema {
-                            not: Box::new(schema),
-                        });
+                        if let saphyr::Yaml::Mapping(mapping) = value {
+                            let schema = YamlSchema::construct(mapping)?;
+                            not_schema.not = Box::new(schema);
+                        } else {
+                            return Err(generic_error!("Expected a mapping, but got: {:#?}", key));
+                        }
                     }
-                    _ => unimplemented!(),
+                    _ => return Err(generic_error!("Unsupported key: {}", key)),
                 }
             }
         }
-        unimplemented!()
+        Ok(not_schema)
     }
 }
 
 fn load_integer(value: &saphyr::Yaml) -> Result<i64> {
-    match value {
-        saphyr::Yaml::Integer(i) => Ok(*i),
+    let scalar = try_unwrap_saphyr_scalar(value)?;
+    match scalar {
+        saphyr::Scalar::Integer(i) => Ok(*i),
         _ => Err(unsupported_type!(
             "Expected type: integer, but got: {:?}",
             value
@@ -615,9 +663,10 @@ fn load_integer(value: &saphyr::Yaml) -> Result<i64> {
 }
 
 fn load_number(value: &saphyr::Yaml) -> Result<Number> {
-    match value {
-        saphyr::Yaml::Integer(i) => Ok(Number::integer(*i)),
-        saphyr::Yaml::Real(f) => Ok(Number::float(f.parse::<f64>()?)),
+    let scalar = try_unwrap_saphyr_scalar(value)?;
+    match scalar {
+        saphyr::Scalar::Integer(i) => Ok(Number::integer(*i)),
+        saphyr::Scalar::FloatingPoint(o) => Ok(Number::float(o.into_inner())),
         _ => Err(unsupported_type!(
             "Expected type: integer or float, but got: {:?}",
             value
@@ -626,10 +675,10 @@ fn load_number(value: &saphyr::Yaml) -> Result<Number> {
 }
 
 impl Constructor<NumberSchema> for NumberSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<NumberSchema> {
+    fn construct(mapping: &saphyr::Mapping) -> Result<NumberSchema> {
         let mut number_schema = NumberSchema::default();
-        for (key, value) in hash.iter() {
-            if let saphyr::Yaml::String(key) = key {
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = load_string_value(key) {
                 match key.as_str() {
                     "minimum" => {
                         let minimum = load_number(value).map_err(|_| {
@@ -667,14 +716,14 @@ impl Constructor<NumberSchema> for NumberSchema {
 }
 
 impl Constructor<StringSchema> for StringSchema {
-    fn construct(hash: &saphyr::Hash) -> Result<StringSchema> {
+    fn construct(mapping: &saphyr::Mapping) -> Result<StringSchema> {
         let mut string_schema = StringSchema::default();
-        for (key, value) in hash.iter() {
-            if let saphyr::Yaml::String(key) = key {
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = load_string_value(key) {
                 match key.as_str() {
                     "minLength" => {
-                        if let saphyr::Yaml::Integer(i) = value {
-                            string_schema.min_length = Some(*i as usize);
+                        if let Ok(i) = load_integer(value) {
+                            string_schema.min_length = Some(i as usize);
                         } else {
                             return Err(unsupported_type!(
                                 "minLength expected integer, but got: {:?}",
@@ -683,8 +732,8 @@ impl Constructor<StringSchema> for StringSchema {
                         }
                     }
                     "maxLength" => {
-                        if let saphyr::Yaml::Integer(i) = value {
-                            string_schema.max_length = Some(*i as usize);
+                        if let Ok(i) = load_integer(value) {
+                            string_schema.max_length = Some(i as usize);
                         } else {
                             return Err(unsupported_type!(
                                 "maxLength expected integer, but got: {:?}",
@@ -693,7 +742,7 @@ impl Constructor<StringSchema> for StringSchema {
                         }
                     }
                     "pattern" => {
-                        if let saphyr::Yaml::String(s) = value {
+                        if let Ok(s) = load_string_value(value) {
                             let regex = regex::Regex::new(s.as_str())?;
                             string_schema.pattern = Some(regex);
                         } else {
@@ -710,8 +759,8 @@ impl Constructor<StringSchema> for StringSchema {
                         }
                     }
                     "enum" => {
-                        if let saphyr::Yaml::Array(values) = value {
-                            let enum_values = load_enum_values(values)?;
+                        if let saphyr::Yaml::Sequence(sequence) = value {
+                            let enum_values = load_enum_values(sequence)?;
                             let string_enum_values = enum_values
                                 .iter()
                                 .map(|v| match v {
@@ -737,22 +786,31 @@ impl Constructor<StringSchema> for StringSchema {
 
 fn load_array_items(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
     match value {
-        saphyr::Yaml::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
-        saphyr::Yaml::Hash(hash) => {
-            if hash.contains_key(&sys("$ref")) {
-                let reference = Reference::construct(hash);
+        saphyr::Yaml::Value(scalar) => match scalar {
+            saphyr::Scalar::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
+            _ => Err(generic_error!(
+                "array: boolean or mapping with type or $ref, but got: {:?}",
+                value
+            )),
+        },
+        saphyr::Yaml::Mapping(mapping) => {
+            if mapping.contains_key(&saphyr_yaml_string("$ref")) {
+                let reference = Reference::construct(mapping);
                 Ok(BoolOrTypedSchema::Reference(reference?))
-            } else if hash.contains_key(&sys("type")) {
-                let typed_schema = TypedSchema::construct(hash)?;
-                return Ok(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema)));
+            } else if mapping.contains_key(&saphyr_yaml_string("type")) {
+                let typed_schema = TypedSchema::construct(mapping)?;
+                Ok(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema)))
             } else {
-                return Err(generic_error!(
-                    "Expected type: boolean or hash with type or $ref, but got: {:?}",
+                Err(generic_error!(
+                    "array: boolean or mapping with type or $ref, but got: {:?}",
                     value
-                ));
+                ))
             }
         }
-        _ => unimplemented!(),
+        _ => Err(generic_error!(
+            "array: boolean or mapping with type or $ref, but got: {:?}",
+            value
+        )),
     }
 }
 
@@ -762,18 +820,16 @@ fn load_enum_values(values: &[saphyr::Yaml]) -> Result<Vec<ConstValue>> {
 
 fn yaml_to_string<S: Into<String> + Copy>(yaml: &saphyr::Yaml, msg: S) -> Result<String> {
     match yaml {
-        saphyr::Yaml::String(s) => Ok(s.clone()),
-        saphyr::Yaml::Integer(i) => Ok(i.to_string()),
-        saphyr::Yaml::Real(f) => Ok(f.to_string()),
-        saphyr::Yaml::Boolean(b) => Ok(b.to_string()),
-        saphyr::Yaml::Null => Ok("null".to_string()),
+        saphyr::Yaml::Value(scalar) => match scalar {
+            saphyr::Scalar::String(s) => Ok(s.to_string()),
+            saphyr::Scalar::Integer(i) => Ok(i.to_string()),
+            saphyr::Scalar::FloatingPoint(f) => Ok(f.to_string()),
+            saphyr::Scalar::Boolean(b) => Ok(b.to_string()),
+            saphyr::Scalar::Null => Ok("null".to_string()),
+            _ => Err(unsupported_type!(msg.into())),
+        },
         _ => Err(unsupported_type!(msg.into())),
     }
-}
-
-/// Convenience function to create saphyr::Yaml::String from a &str
-fn sys(str: &str) -> saphyr::Yaml {
-    saphyr::Yaml::String(String::from(str))
 }
 
 #[cfg(test)]
@@ -784,7 +840,7 @@ mod tests {
 
     #[test]
     fn test_boolean_literal_true() {
-        let root_schema = load_from_doc(&sys("true")).unwrap();
+        let root_schema = load_from_doc(&saphyr_yaml_string("true")).unwrap();
         assert_eq!(
             *root_schema.schema.as_ref(),
             YamlSchema::boolean_literal(true)
@@ -793,7 +849,7 @@ mod tests {
 
     #[test]
     fn test_boolean_literal_false() {
-        let root_schema = load_from_doc(&sys("false")).unwrap();
+        let root_schema = load_from_doc(&saphyr_yaml_string("false")).unwrap();
         assert_eq!(
             *root_schema.schema.as_ref(),
             YamlSchema::boolean_literal(false)
@@ -910,10 +966,13 @@ mod tests {
 
     #[test]
     fn test_array_constructor_items_true() {
-        let mut hash = saphyr::Hash::new();
-        hash.insert(sys("type"), sys("array"));
-        hash.insert(sys("items"), saphyr::Yaml::Boolean(true));
-        let array_schema = ArraySchema::construct(&hash).unwrap();
+        let mut mapping = saphyr::Mapping::new();
+        mapping.insert(saphyr_yaml_string("type"), saphyr_yaml_string("array"));
+        mapping.insert(
+            saphyr_yaml_string("items"),
+            saphyr::Yaml::Value(saphyr::Scalar::Boolean(true)),
+        );
+        let array_schema = ArraySchema::construct(&mapping).unwrap();
         assert_eq!(
             array_schema,
             ArraySchema {

@@ -6,10 +6,10 @@ mod objects;
 mod one_of;
 mod strings;
 
-use crate::format_yaml_data;
 use crate::Result;
 use crate::Schema;
 use crate::YamlSchema;
+use crate::{format_yaml_data, Number};
 pub use context::Context;
 use log::debug;
 
@@ -24,7 +24,7 @@ pub struct LineCol {
     pub col: usize,
 }
 
-impl From<&saphyr::MarkedYaml> for LineCol {
+impl From<&saphyr::MarkedYaml<'_>> for LineCol {
     fn from(value: &saphyr::MarkedYaml) -> Self {
         LineCol {
             line: value.span.start.line(),
@@ -130,8 +130,62 @@ fn validate_boolean_schema(context: &Context, value: &saphyr::MarkedYaml) -> Res
     Ok(())
 }
 
+pub fn validate_integer(
+    context: &Context,
+    minimum: &Option<Number>,
+    maximum: &Option<Number>,
+    multiple_of: &Option<Number>,
+    value: &saphyr::MarkedYaml,
+    i: i64,
+) {
+    if let Some(minimum) = minimum {
+        match minimum {
+            Number::Integer(min) => {
+                if i < *min {
+                    context.add_error(value, "Number is too small!".to_string());
+                }
+            }
+            Number::Float(min) => {
+                if (i as f64) < *min {
+                    context.add_error(value, "Number is too small!".to_string());
+                }
+            }
+        }
+    }
+    if let Some(maximum) = maximum {
+        match maximum {
+            Number::Integer(max) => {
+                if i > *max {
+                    context.add_error(value, "Number is too big!".to_string());
+                }
+            }
+            Number::Float(max) => {
+                if (i as f64) > *max {
+                    context.add_error(value, "Number is too big!".to_string());
+                }
+            }
+        }
+    }
+    if let Some(multiple_of) = &multiple_of {
+        match multiple_of {
+            Number::Integer(multiple) => {
+                if i % *multiple != 0 {
+                    context.add_error(value, format!("Number is not a multiple of {multiple}!"));
+                }
+            }
+            Number::Float(multiple) => {
+                if (i as f64) % *multiple != 0.0 {
+                    context.add_error(value, format!("Number is not a multiple of {multiple}!"));
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use saphyr::LoadableYamlNode;
+
     use super::*;
 
     #[test]

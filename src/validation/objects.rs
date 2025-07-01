@@ -1,27 +1,27 @@
-/// A module to contain object type validation logic
-use log::debug;
-use std::collections::HashMap;
-
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
+use crate::utils::saphyr_yaml_string;
 use crate::validation::Context;
 use crate::Error;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
 use crate::{format_marker, format_yaml_data};
+/// A module to contain object type validation logic
+use log::debug;
+use saphyr::MarkedYaml;
+use std::collections::HashMap;
 
 impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
         debug!("Validating object: {}", format_yaml_data(data));
-        match data {
-            saphyr::YamlData::Hash(hash) => self.validate_object_mapping(context, value, hash),
-            other => {
-                context.add_error(value, format!("Expected an object, but got: {other:#?}"));
-                Ok(())
-            }
+        if let saphyr::YamlData::Mapping(mapping) = data {
+            self.validate_object_mapping(context, value, mapping)
+        } else {
+            context.add_error(value, format!("Expected an object, but got: {data:#?}"));
+            Ok(())
         }
     }
 }
@@ -95,16 +95,19 @@ pub fn try_validate_value_against_additional_properties(
 }
 
 impl ObjectSchema {
-    fn validate_object_mapping(
+    fn validate_object_mapping<'a>(
         &self,
         context: &Context,
         object: &saphyr::MarkedYaml,
-        mapping: &saphyr::AnnotatedHash<saphyr::MarkedYaml>,
+        mapping: &saphyr::AnnotatedMapping<'a, MarkedYaml<'a>>,
     ) -> Result<()> {
         for (k, value) in mapping {
             let key = match &k.data {
-                saphyr::YamlData::String(s) => s.clone(),
-                _ => k.data.as_str().unwrap_or_default().to_string(),
+                saphyr::YamlData::Value(scalar) => match scalar {
+                    saphyr::Scalar::String(s) => s.to_string(),
+                    v => return Err(generic_error!("Expected a string key, got: {:?}", v)),
+                },
+                v => return Err(expected_scalar!("Expected a string key, got: {:?}", v)),
             };
             let span = &k.span;
             debug!("validate_object_mapping: key: \"{}\"", key);

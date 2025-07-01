@@ -53,6 +53,7 @@ impl Validator for EnumSchema {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_enum_schema() {

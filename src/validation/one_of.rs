@@ -60,6 +60,7 @@ pub fn validate_one_of(
 mod tests {
     use crate::RootSchema;
     use crate::Schema;
+    use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_validate_one_of_with_array_of_schemas() {

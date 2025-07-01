@@ -43,16 +43,19 @@ pub enum TypedSchema {
 
 /// A type value is either a string or an array of strings
 #[derive(Debug, PartialEq)]
-pub enum TypeValue {
-    Single(saphyr::Yaml),
+pub enum TypeValue<'a> {
+    Single(saphyr::Yaml<'a>),
     Array(Vec<String>),
 }
 
 impl TypedSchema {
     pub fn for_yaml_value(value: &saphyr::Yaml) -> Result<TypedSchema> {
         match value {
-            saphyr::Yaml::Null => Ok(TypedSchema::Null),
-            saphyr::Yaml::String(s) => Ok(TypedSchema::for_type_string(s.as_str())?),
+            saphyr::Yaml::Value(scalar) => match scalar {
+                saphyr::Scalar::Null => Ok(TypedSchema::Null),
+                saphyr::Scalar::String(s) => TypedSchema::for_type_string(&s),
+                _ => panic!("Unknown type: {value:?}"),
+            },
             _ => panic!("Unknown type: {value:?}"),
         }
     }

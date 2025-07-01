@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
 use hashlink::LinkedHashMap;
+use ordered_float::OrderedFloat;
+use saphyr::LoadableYamlNode;
 
 pub mod engine;
 #[macro_use]
@@ -8,6 +10,7 @@ pub mod error;
 pub mod loader;
 pub mod reference;
 pub mod schemas;
+pub mod utils;
 pub mod validation;
 
 pub use engine::Engine;
@@ -142,50 +145,57 @@ impl ConstValue {
     }
     pub fn from_saphyr_yaml(value: &saphyr::Yaml) -> ConstValue {
         match value {
-            saphyr::Yaml::Boolean(b) => ConstValue::Boolean(*b),
-            saphyr::Yaml::Integer(i) => ConstValue::Number(Number::integer(*i)),
-            saphyr::Yaml::Real(s) => ConstValue::Number(Number::float(s.parse::<f64>().unwrap())),
-            saphyr::Yaml::String(s) => ConstValue::String(s.clone()),
-            saphyr::Yaml::Null => ConstValue::Null,
-            _ => panic!("Expected a constant value, but got: {value:?}"),
+            saphyr::Yaml::Value(scalar) => match scalar {
+                saphyr::Scalar::Boolean(b) => ConstValue::Boolean(*b),
+                saphyr::Scalar::Integer(i) => ConstValue::Number(Number::integer(*i)),
+                saphyr::Scalar::FloatingPoint(o) => {
+                    ConstValue::Number(Number::float(o.into_inner()))
+                }
+                saphyr::Scalar::String(s) => ConstValue::String(s.to_string()),
+                saphyr::Scalar::Null => ConstValue::Null,
+                _ => panic!("Expected a scalar value, but got: {value:?}"),
+            },
+            _ => panic!("Expected a scalar value, but got: {value:?}"),
         }
     }
 }
 
-impl TryFrom<&saphyr::YamlData<saphyr::MarkedYaml>> for ConstValue {
+impl<'a> TryFrom<&saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>> for ConstValue {
     type Error = crate::Error;
 
-    fn try_from(value: &saphyr::YamlData<saphyr::MarkedYaml>) -> Result<Self> {
+    fn try_from(value: &saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>) -> Result<Self> {
         match value {
-            saphyr::YamlData::String(s) => Ok(ConstValue::String(s.clone())),
-            saphyr::YamlData::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
-            saphyr::YamlData::Real(f) => {
-                let f = f.parse::<f64>()?;
-                Ok(ConstValue::Number(Number::float(f)))
-            }
-            saphyr::YamlData::Boolean(b) => Ok(ConstValue::Boolean(*b)),
-            saphyr::YamlData::Null => Ok(ConstValue::Null),
+            saphyr::YamlData::Value(scalar) => match scalar {
+                saphyr::Scalar::String(s) => Ok(ConstValue::String(s.to_string())),
+                saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
+                saphyr::Scalar::FloatingPoint(o) => {
+                    Ok(ConstValue::Number(Number::float(o.into_inner())))
+                }
+                saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
+                saphyr::Scalar::Null => Ok(ConstValue::Null),
+            },
             v => Err(unsupported_type!(
-                "Expected a constant value, but got: {:?}",
+                "Expected a scalar value, but got: {:?}",
                 v
             )),
         }
     }
 }
 
-impl TryFrom<saphyr::Yaml> for ConstValue {
+impl TryFrom<saphyr::Yaml<'_>> for ConstValue {
     type Error = crate::Error;
 
     fn try_from(value: saphyr::Yaml) -> Result<Self> {
         match value {
-            saphyr::Yaml::Boolean(b) => Ok(ConstValue::Boolean(b)),
-            saphyr::Yaml::Integer(i) => Ok(ConstValue::Number(Number::integer(i))),
-            saphyr::Yaml::Real(s) => {
-                let f = s.parse::<f64>()?;
-                Ok(ConstValue::Number(Number::float(f)))
-            }
-            saphyr::Yaml::String(s) => Ok(ConstValue::String(s.clone())),
-            saphyr::Yaml::Null => Ok(ConstValue::Null),
+            saphyr::Yaml::Value(scalar) => match scalar {
+                saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(b)),
+                saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(i))),
+                saphyr::Scalar::FloatingPoint(o) => {
+                    Ok(ConstValue::Number(Number::float(o.into_inner())))
+                }
+                saphyr::Scalar::String(s) => Ok(ConstValue::String(s.to_string())),
+                saphyr::Scalar::Null => Ok(ConstValue::Null),
+            },
             v => Err(unsupported_type!(
                 "Expected a constant value, but got: {:?}",
                 v
@@ -340,19 +350,21 @@ where
 }
 
 /// Formats a saphyr::YamlData as a string
-fn format_yaml_data(data: &saphyr::YamlData<saphyr::MarkedYaml>) -> String {
+fn format_yaml_data<'a>(data: &saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>) -> String {
     match data {
-        saphyr::YamlData::Null => "null".to_string(),
-        saphyr::YamlData::Boolean(b) => b.to_string(),
-        saphyr::YamlData::Integer(i) => i.to_string(),
-        saphyr::YamlData::Real(s) => s.clone(),
-        saphyr::YamlData::String(s) => format!("\"{s}\""),
-        saphyr::YamlData::Array(array) => {
-            let items: Vec<String> = array.iter().map(|v| format_yaml_data(&v.data)).collect();
+        saphyr::YamlData::Value(scalar) => match scalar {
+            saphyr::Scalar::Null => "null".to_string(),
+            saphyr::Scalar::Boolean(b) => b.to_string(),
+            saphyr::Scalar::Integer(i) => i.to_string(),
+            saphyr::Scalar::FloatingPoint(o) => o.to_string(),
+            saphyr::Scalar::String(s) => format!("\"{s}\""),
+        },
+        saphyr::YamlData::Sequence(seq) => {
+            let items: Vec<String> = seq.iter().map(|v| format_yaml_data(&v.data)).collect();
             format!("[{}]", items.join(", "))
         }
-        saphyr::YamlData::Hash(hash) => {
-            let items: Vec<String> = hash
+        saphyr::YamlData::Mapping(mapping) => {
+            let items: Vec<String> = mapping
                 .iter()
                 .map(|(k, v)| {
                     format!(
