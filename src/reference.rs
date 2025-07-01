@@ -32,23 +32,17 @@ impl Constructor<Reference> for Reference {
 
         let ref_value = hash.get(&ref_key).unwrap();
         match ref_value {
-            saphyr::Yaml::Value(scalar) => match scalar {
-                saphyr::Scalar::String(s) => {
-                    if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
-                        return Err(generic_error!("Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}", s));
-                    }
-                    let ref_name = match s.strip_prefix("#/$defs/") {
-                        Some(ref_name) => ref_name,
-                        _ => s.strip_prefix("#/definitions/").unwrap(),
-                    };
-
-                    Ok(Reference::new(ref_name))
+            saphyr::Yaml::Value(saphyr::Scalar::String(s)) => {
+                if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
+                    return Err(generic_error!("Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}", s));
                 }
-                _ => Err(generic_error!(
-                    "Expected a string value for $ref, but got: {:#?}",
-                    ref_value
-                )),
-            },
+                let ref_name = match s.strip_prefix("#/$defs/") {
+                    Some(ref_name) => ref_name,
+                    _ => s.strip_prefix("#/definitions/").unwrap(),
+                };
+
+                Ok(Reference::new(ref_name))
+            }
             _ => Err(generic_error!(
                 "Expected a string value for $ref, but got: {:#?}",
                 ref_value

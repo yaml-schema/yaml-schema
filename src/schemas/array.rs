@@ -64,9 +64,7 @@ impl Validator for ArraySchema {
                         prefix_items[i].validate(context, item)?;
                     } else if let Some(items) = &self.items {
                         // if the index is not within the prefix items, validate against the array items schema
-                        debug!(
-                            "[ArraySchema] Validating array item {i} with schema: {items}"
-                        );
+                        debug!("[ArraySchema] Validating array item {i} with schema: {items}");
                         match items {
                             BoolOrTypedSchema::Boolean(true) => {
                                 // `items: true` allows any items
@@ -237,9 +235,7 @@ mod tests {
                 println!("{}", result.unwrap_err());
             }
         } else {
-            panic!(
-                "Expected first_schema to be a Mapping, but got {first_schema:?}"
-            );
+            panic!("Expected first_schema to be a Mapping, but got {first_schema:?}");
         }
     }
 

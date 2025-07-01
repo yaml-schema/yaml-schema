@@ -234,43 +234,39 @@ impl Constructor<YamlSchema> for YamlSchema {
 
         for (key, value) in mapping.iter() {
             match key {
-                saphyr::Yaml::Value(scalar) => {
-                    if let saphyr::Scalar::String(s) = scalar {
-                        match s.as_ref() {
-                            "$id" => {
-                                metadata.insert(
-                                    s.to_string(),
-                                    yaml_to_string(value, "$id must be a string")?,
-                                );
-                            }
-                            "$schema" => {
-                                metadata.insert(
-                                    s.to_string(),
-                                    yaml_to_string(value, "$schema must be a string")?,
-                                );
-                            }
-                            "$ref" => {
-                                r#ref = Some(Reference::construct(mapping)?);
-                                // TODO: What?
-                            }
-                            "title" => {
-                                metadata.insert(
-                                    s.to_string(),
-                                    yaml_to_string(value, "title must be a string")?,
-                                );
-                            }
-                            "description" => {
-                                metadata.insert(
-                                    s.to_string(),
-                                    yaml_to_string(value, "description must be a string")?,
-                                );
-                            }
-                            _ => {
-                                data.insert(key.clone(), value.clone());
-                            }
+                saphyr::Yaml::Value(saphyr::Scalar::String(s)) => {
+                    match s.as_ref() {
+                        "$id" => {
+                            metadata.insert(
+                                s.to_string(),
+                                yaml_to_string(value, "$id must be a string")?,
+                            );
                         }
-                    } else {
-                        data.insert(key.clone(), value.clone());
+                        "$schema" => {
+                            metadata.insert(
+                                s.to_string(),
+                                yaml_to_string(value, "$schema must be a string")?,
+                            );
+                        }
+                        "$ref" => {
+                            r#ref = Some(Reference::construct(mapping)?);
+                            // TODO: What?
+                        }
+                        "title" => {
+                            metadata.insert(
+                                s.to_string(),
+                                yaml_to_string(value, "title must be a string")?,
+                            );
+                        }
+                        "description" => {
+                            metadata.insert(
+                                s.to_string(),
+                                yaml_to_string(value, "description must be a string")?,
+                            );
+                        }
+                        _ => {
+                            data.insert(key.clone(), value.clone());
+                        }
                     }
                 }
                 _ => {
@@ -346,10 +342,8 @@ pub trait Constructor<T> {
 
 fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
     // When RustRover stops complaining about let chains (Rust 1.88), can rewrite the ff.
-    if let saphyr::Yaml::Value(scalar) = value {
-        if let saphyr::Scalar::String(s) = scalar {
-            return Ok(s.to_string());
-        }
+    if let saphyr::Yaml::Value(saphyr::Scalar::String(s)) = value {
+        return Ok(s.to_string());
     }
 
     Err(expected_scalar!(
@@ -852,13 +846,16 @@ impl Constructor<StringSchema> for StringSchema {
 
 fn load_array_items(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
     match value {
-        saphyr::Yaml::Value(scalar) => match scalar {
-            saphyr::Scalar::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
-            _ => Err(generic_error!(
-                "array: boolean or mapping with type or $ref, but got: {:?}",
-                value
-            )),
-        },
+        saphyr::Yaml::Value(scalar) => {
+            if let saphyr::Scalar::Boolean(b) = scalar {
+                Ok(BoolOrTypedSchema::Boolean(*b))
+            } else {
+                Err(generic_error!(
+                    "array: boolean or mapping with type or $ref, but got: {:?}",
+                    value
+                ))
+            }
+        }
         saphyr::Yaml::Mapping(mapping) => {
             if mapping.contains_key(&saphyr_yaml_string("$ref")) {
                 let reference = Reference::construct(mapping);
