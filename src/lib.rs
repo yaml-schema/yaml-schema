@@ -143,18 +143,7 @@ impl ConstValue {
         ConstValue::String(value.into())
     }
     pub fn from_saphyr_yaml(value: &saphyr::Yaml) -> ConstValue {
-        match value {
-            saphyr::Yaml::Value(scalar) => match scalar {
-                saphyr::Scalar::Boolean(b) => ConstValue::Boolean(*b),
-                saphyr::Scalar::Integer(i) => ConstValue::Number(Number::integer(*i)),
-                saphyr::Scalar::FloatingPoint(o) => {
-                    ConstValue::Number(Number::float(o.into_inner()))
-                }
-                saphyr::Scalar::String(s) => ConstValue::String(s.to_string()),
-                saphyr::Scalar::Null => ConstValue::Null,
-            },
-            _ => panic!("Expected a scalar value, but got: {value:?}"),
-        }
+        value.try_into().unwrap()
     }
 }
 
@@ -180,14 +169,14 @@ impl<'a> TryFrom<&saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>> for ConstValue {
     }
 }
 
-impl TryFrom<saphyr::Yaml<'_>> for ConstValue {
+impl TryFrom<&saphyr::Yaml<'_>> for ConstValue {
     type Error = crate::Error;
 
-    fn try_from(value: saphyr::Yaml) -> Result<Self> {
+    fn try_from(value: &saphyr::Yaml) -> Result<Self> {
         match value {
             saphyr::Yaml::Value(scalar) => match scalar {
-                saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(b)),
-                saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(i))),
+                saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
+                saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
                 saphyr::Scalar::FloatingPoint(o) => {
                     Ok(ConstValue::Number(Number::float(o.into_inner())))
                 }
