@@ -1,3 +1,4 @@
+@arrays
 Feature: Arrays
 
   Scenario: Array type

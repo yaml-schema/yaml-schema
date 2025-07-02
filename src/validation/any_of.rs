@@ -10,8 +10,8 @@ impl Validator for crate::schemas::AnyOfSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let any_of_is_valid = validate_any_of(&self.any_of, context, value)?;
         if !any_of_is_valid {
-            error!("AnyOf: None of the schemas in `oneOf` matched!");
-            context.add_error(value, "None of the schemas in `oneOf` matched!");
+            error!("AnyOf: None of the schemas in `anyOf` matched!");
+            context.add_error(value, "None of the schemas in `anyOf` matched!");
             fail_fast!(context);
         }
         Ok(())

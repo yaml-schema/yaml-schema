@@ -1,7 +1,6 @@
 pub mod any_of;
 /// Validation engine for YamlSchema
 mod context;
-mod not;
 mod objects;
 mod one_of;
 mod strings;
