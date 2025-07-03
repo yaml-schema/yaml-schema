@@ -149,10 +149,10 @@ impl ConstValue {
     }
 }
 
-impl<'a> TryFrom<&saphyr::Scalar<'a>> for ConstValue {
+impl TryFrom<&saphyr::Scalar<'_>> for ConstValue {
     type Error = crate::Error;
 
-    fn try_from(scalar: &saphyr::Scalar<'a>) -> std::result::Result<ConstValue, Self::Error> {
+    fn try_from(scalar: &saphyr::Scalar) -> std::result::Result<ConstValue, Self::Error> {
         match scalar {
             saphyr::Scalar::Null => Ok(ConstValue::Null),
             saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
@@ -170,15 +170,7 @@ impl<'a> TryFrom<&saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>> for ConstValue {
 
     fn try_from(value: &saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>) -> Result<Self> {
         match value {
-            saphyr::YamlData::Value(scalar) => match scalar {
-                saphyr::Scalar::String(s) => Ok(ConstValue::String(s.to_string())),
-                saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
-                saphyr::Scalar::FloatingPoint(o) => {
-                    Ok(ConstValue::Number(Number::float(o.into_inner())))
-                }
-                saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
-                saphyr::Scalar::Null => Ok(ConstValue::Null),
-            },
+            saphyr::YamlData::Value(scalar) => scalar.try_into(),
             v => Err(unsupported_type!(
                 "Expected a scalar value, but got: {:?}",
                 v
@@ -192,15 +184,7 @@ impl TryFrom<&saphyr::Yaml<'_>> for ConstValue {
 
     fn try_from(value: &saphyr::Yaml) -> Result<Self> {
         match value {
-            saphyr::Yaml::Value(scalar) => match scalar {
-                saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
-                saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
-                saphyr::Scalar::FloatingPoint(o) => {
-                    Ok(ConstValue::Number(Number::float(o.into_inner())))
-                }
-                saphyr::Scalar::String(s) => Ok(ConstValue::String(s.to_string())),
-                saphyr::Scalar::Null => Ok(ConstValue::Null),
-            },
+            saphyr::Yaml::Value(scalar) => scalar.try_into(),
             v => Err(unsupported_type!(
                 "Expected a constant value, but got: {:?}",
                 v
@@ -360,6 +344,7 @@ fn init() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ordered_float::OrderedFloat;
 
     #[test]
     fn test_const_equality() {
@@ -374,9 +359,25 @@ mod tests {
 
     #[test]
     fn test_scalar_to_constvalue() -> Result<()> {
-        let scalars = vec![saphyr::Scalar::Null];
+        let scalars = vec![
+            saphyr::Scalar::Null,
+            saphyr::Scalar::Boolean(true),
+            saphyr::Scalar::Boolean(false),
+            saphyr::Scalar::Integer(42),
+            saphyr::Scalar::Integer(-1),
+            saphyr::Scalar::FloatingPoint(OrderedFloat::from(3.14)),
+            saphyr::Scalar::String("foo".into()),
+        ];
 
-        let expected = vec![ConstValue::Null];
+        let expected = vec![
+            ConstValue::Null,
+            ConstValue::Boolean(true),
+            ConstValue::Boolean(false),
+            ConstValue::Number(Number::Integer(42)),
+            ConstValue::Number(Number::Integer(-1)),
+            ConstValue::Number(Number::Float(3.14)),
+            ConstValue::String("foo".to_string()),
+        ];
 
         for (scalar, expected) in scalars.iter().zip(expected.iter()) {
             let actual: ConstValue = scalar.try_into()?;
