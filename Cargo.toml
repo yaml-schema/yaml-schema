@@ -5,6 +5,12 @@ edition = "2021"
 description = "A YAML schema validator"
 license = "MIT"
 repository = "https://github.com/yaml-schema/yaml-schema"
+documentation = "https://docs.rs/yaml-schema"
+readme = "README.md"
+homepage = "https://github.com/yaml-schema/yaml-schema"
+exclude = [
+    ".github/*"
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
