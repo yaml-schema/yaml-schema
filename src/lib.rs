@@ -39,7 +39,8 @@ pub fn version() -> String {
 // Alias for std::result::Result<T, yaml_schema::Error>
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// A RootSchema is a YamlSchema document
+/// A RootSchema represents the root document in a schema file, and can include additional
+/// fields not present in the 'base' YamlSchema
 #[derive(Debug, Default)]
 pub struct RootSchema {
     pub id: Option<String>,

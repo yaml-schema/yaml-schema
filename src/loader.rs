@@ -1,3 +1,5 @@
+// The loader module loads the YAML schema from a file into the in-memory model
+
 use std::collections::HashMap;
 use std::fs;
 use std::rc::Rc;
