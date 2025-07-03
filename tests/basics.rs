@@ -15,11 +15,11 @@ pub struct BasicsWorld {
 #[given(regex = "a YAML schema:")]
 async fn a_yaml_schema(world: &mut BasicsWorld, step: &Step) {
     let schema = step.docstring().unwrap();
-    debug!("schema: {:?}", schema);
+    debug!("schema: {schema:?}");
     match RootSchema::load_from_str(schema) {
         Ok(root_schema) => world.root_schema = root_schema,
         Err(e) => {
-            error!("Error: {:?}", e);
+            error!("Error: {e:?}");
             world.yaml_schema_error = Some(e);
         }
     }
@@ -85,6 +85,7 @@ async fn main() {
     BasicsWorld::run("features/validation/booleans.feature").await;
     BasicsWorld::run("features/validation/const.feature").await;
     BasicsWorld::run("features/validation/enums.feature").await;
+    BasicsWorld::run("features/validation/not.feature").await;
     BasicsWorld::run("features/validation/nulls.feature").await;
     BasicsWorld::run("features/validation/numbers.feature").await;
     BasicsWorld::run("features/validation/objects.feature").await;

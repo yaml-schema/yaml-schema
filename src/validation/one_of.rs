@@ -25,10 +25,7 @@ pub fn validate_one_of(
 ) -> Result<bool> {
     let mut one_of_is_valid = false;
     for schema in schemas {
-        debug!(
-            "OneOf: Validating value: {:?} against schema: {}",
-            value, schema
-        );
+        debug!("OneOf: Validating value: {value:?} against schema: {schema}");
         let sub_context = context.get_sub_context();
         let sub_result = schema.validate(&sub_context, value);
         match sub_result {
@@ -52,7 +49,7 @@ pub fn validate_one_of(
             Err(e) => return Err(e),
         }
     }
-    debug!("OneOf: one_of_is_valid: {}", one_of_is_valid);
+    debug!("OneOf: one_of_is_valid: {one_of_is_valid}");
     Ok(one_of_is_valid)
 }
 
@@ -60,6 +57,7 @@ pub fn validate_one_of(
 mod tests {
     use crate::RootSchema;
     use crate::Schema;
+    use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_validate_one_of_with_array_of_schemas() {

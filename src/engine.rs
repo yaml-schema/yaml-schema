@@ -1,3 +1,4 @@
+use saphyr::LoadableYamlNode;
 use std::cell::RefCell;
 use std::rc::Rc;
 

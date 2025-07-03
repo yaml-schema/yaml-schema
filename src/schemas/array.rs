@@ -28,11 +28,125 @@ impl std::fmt::Display for ArraySchema {
 
 impl Validator for ArraySchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[ArraySchema] self: {:?}", self);
+        debug!("[ArraySchema] self: {self:?}");
         let data = &value.data;
         debug!("[ArraySchema] Validating value: {}", format_yaml_data(data));
 
-        if !data.is_array() {
+        if let saphyr::YamlData::Sequence(array) = data {
+            // validate contains
+            if let Some(sub_schema) = &self.contains {
+                let any_matches = array.iter().any(|item| {
+                    let sub_context = crate::Context {
+                        root_schema: context.root_schema,
+                        fail_fast: true,
+                        ..Default::default()
+                    };
+                    sub_schema.validate(&sub_context, item).is_ok()
+                });
+                if !any_matches {
+                    context.add_error(value, "Contains validation failed!".to_string());
+                }
+            }
+
+            // validate prefix items
+            if let Some(prefix_items) = &self.prefix_items {
+                debug!(
+                    "[ArraySchema] Validating prefix items: {}",
+                    format_vec(prefix_items)
+                );
+                for (i, item) in array.iter().enumerate() {
+                    // if the index is within the prefix items, validate against the prefix items schema
+                    if i < prefix_items.len() {
+                        debug!(
+                            "[ArraySchema] Validating prefix item {} with schema: {}",
+                            i, prefix_items[i]
+                        );
+                        prefix_items[i].validate(context, item)?;
+                    } else if let Some(items) = &self.items {
+                        // if the index is not within the prefix items, validate against the array items schema
+                        debug!("[ArraySchema] Validating array item {i} with schema: {items}");
+                        match items {
+                            BoolOrTypedSchema::Boolean(true) => {
+                                // `items: true` allows any items
+                                break;
+                            }
+                            BoolOrTypedSchema::Boolean(false) => {
+                                context.add_error(
+                                    item,
+                                    "Additional array items are not allowed!".to_string(),
+                                );
+                            }
+                            BoolOrTypedSchema::TypedSchema(typed_schema) => {
+                                typed_schema.validate(context, item)?;
+                            }
+                            BoolOrTypedSchema::Reference(reference) => {
+                                // Grab the reference from the root schema.
+                                let Some(root) = &context.root_schema else {
+                                    context.add_error(
+                                        item,
+                                        "No root schema was provided to look up references"
+                                            .to_string(),
+                                    );
+                                    continue;
+                                };
+                                let Some(def) = root.get_def(&reference.ref_name) else {
+                                    context.add_error(
+                                        item,
+                                        format!("No definition for {} found", reference.ref_name),
+                                    );
+                                    continue;
+                                };
+                                def.validate(context, item)?;
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                // validate array items
+                if let Some(items) = &self.items {
+                    match items {
+                        BoolOrTypedSchema::Boolean(true) => { /* no-op */ }
+                        BoolOrTypedSchema::Boolean(false) => {
+                            if self.prefix_items.is_none() && !array.is_empty() {
+                                context.add_error(
+                                    array.first().unwrap(),
+                                    "Array items are not allowed!".to_string(),
+                                );
+                            }
+                        }
+                        BoolOrTypedSchema::TypedSchema(typed_schema) => {
+                            for item in array {
+                                typed_schema.validate(context, item)?;
+                            }
+                        }
+                        BoolOrTypedSchema::Reference(reference) => {
+                            // Grab the reference from the root schema.
+                            let Some(root) = &context.root_schema else {
+                                context.add_error(
+                                    array.first().unwrap(),
+                                    "No root schema was provided to look up references".to_string(),
+                                );
+                                return Ok(());
+                            };
+                            let Some(def) = root.get_def(&reference.ref_name) else {
+                                context.add_error(
+                                    array.first().unwrap(),
+                                    format!("No definition for {} found", reference.ref_name),
+                                );
+                                return Ok(());
+                            };
+                            for item in array {
+                                def.validate(context, item)?;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        } else {
             context.add_error(
                 value,
                 format!(
@@ -41,126 +155,8 @@ impl Validator for ArraySchema {
                 ),
             );
             fail_fast!(context);
-            return Ok(());
+            Ok(())
         }
-
-        let array = data.as_vec().unwrap();
-
-        // validate contains
-        if let Some(sub_schema) = &self.contains {
-            let any_matches = array.iter().any(|item| {
-                let sub_context = crate::Context {
-                    root_schema: context.root_schema,
-                    fail_fast: true,
-                    ..Default::default()
-                };
-                sub_schema.validate(&sub_context, item).is_ok()
-            });
-            if !any_matches {
-                context.add_error(value, "Contains validation failed!".to_string());
-            }
-        }
-
-        // validate prefix items
-        if let Some(prefix_items) = &self.prefix_items {
-            debug!(
-                "[ArraySchema] Validating prefix items: {}",
-                format_vec(prefix_items)
-            );
-            for (i, item) in array.iter().enumerate() {
-                // if the index is within the prefix items, validate against the prefix items schema
-                if i < prefix_items.len() {
-                    debug!(
-                        "[ArraySchema] Validating prefix item {} with schema: {}",
-                        i, prefix_items[i]
-                    );
-                    prefix_items[i].validate(context, item)?;
-                } else if let Some(items) = &self.items {
-                    // if the index is not within the prefix items, validate against the array items schema
-                    debug!(
-                        "[ArraySchema] Validating array item {} with schema: {}",
-                        i, items
-                    );
-                    match items {
-                        BoolOrTypedSchema::Boolean(true) => {
-                            // `items: true` allows any items
-                            break;
-                        }
-                        BoolOrTypedSchema::Boolean(false) => {
-                            context.add_error(
-                                item,
-                                "Additional array items are not allowed!".to_string(),
-                            );
-                        }
-                        BoolOrTypedSchema::TypedSchema(typed_schema) => {
-                            typed_schema.validate(context, item)?;
-                        }
-                        BoolOrTypedSchema::Reference(reference) => {
-                            // Grab the reference from the root schema.
-                            let Some(root) = &context.root_schema else {
-                                context.add_error(
-                                    item,
-                                    "No root schema was provided to look up references".to_string(),
-                                );
-                                continue;
-                            };
-                            let Some(def) = root.get_def(&reference.ref_name) else {
-                                context.add_error(
-                                    item,
-                                    format!("No definition for {} found", reference.ref_name),
-                                );
-                                continue;
-                            };
-                            def.validate(context, item)?;
-                        }
-                    }
-                } else {
-                    break;
-                }
-            }
-        } else {
-            // validate array items
-            if let Some(items) = &self.items {
-                match items {
-                    BoolOrTypedSchema::Boolean(true) => { /* no-op */ }
-                    BoolOrTypedSchema::Boolean(false) => {
-                        if self.prefix_items.is_none() && !array.is_empty() {
-                            context.add_error(
-                                array.first().unwrap(),
-                                "Array items are not allowed!".to_string(),
-                            );
-                        }
-                    }
-                    BoolOrTypedSchema::TypedSchema(typed_schema) => {
-                        for item in array {
-                            typed_schema.validate(context, item)?;
-                        }
-                    }
-                    BoolOrTypedSchema::Reference(reference) => {
-                        // Grab the reference from the root schema.
-                        let Some(root) = &context.root_schema else {
-                            context.add_error(
-                                array.first().unwrap(),
-                                "No root schema was provided to look up references".to_string(),
-                            );
-                            return Ok(());
-                        };
-                        let Some(def) = root.get_def(&reference.ref_name) else {
-                            context.add_error(
-                                array.first().unwrap(),
-                                format!("No definition for {} found", reference.ref_name),
-                            );
-                            return Ok(());
-                        };
-                        for item in array {
-                            def.validate(context, item)?;
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
     }
 }
 
@@ -171,6 +167,7 @@ mod tests {
     use crate::Schema;
     use crate::StringSchema;
     use crate::TypedSchema;
+    use saphyr::LoadableYamlNode;
 
     use super::*;
 
@@ -228,14 +225,17 @@ mod tests {
 
         let s_docs = saphyr::Yaml::load_from_str(schema_string).unwrap();
         let first_schema = s_docs.first().unwrap();
-        let array_schema_hash = first_schema.as_hash().unwrap();
-        let schema = ArraySchema::construct(array_schema_hash).unwrap();
-        let docs = saphyr::MarkedYaml::load_from_str(yaml_string).unwrap();
-        let value = docs.first().unwrap();
-        let context = crate::Context::default();
-        let result = schema.validate(&context, value);
-        if result.is_err() {
-            println!("{}", result.unwrap_err());
+        if let saphyr::Yaml::Mapping(array_schema_hash) = first_schema {
+            let schema = ArraySchema::construct(array_schema_hash).unwrap();
+            let docs = saphyr::MarkedYaml::load_from_str(yaml_string).unwrap();
+            let value = docs.first().unwrap();
+            let context = crate::Context::default();
+            let result = schema.validate(&context, value);
+            if result.is_err() {
+                println!("{}", result.unwrap_err());
+            }
+        } else {
+            panic!("Expected first_schema to be a Mapping, but got {first_schema:?}");
         }
     }
 

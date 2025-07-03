@@ -1,6 +1,7 @@
-/// A module to contain object type validation logic
-use log::debug;
+// A module to contain object type validation logic
 use std::collections::HashMap;
+
+use log::debug;
 
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
@@ -16,12 +17,11 @@ impl Validator for ObjectSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
         debug!("Validating object: {}", format_yaml_data(data));
-        match data {
-            saphyr::YamlData::Hash(hash) => self.validate_object_mapping(context, value, hash),
-            other => {
-                context.add_error(value, format!("Expected an object, but got: {other:#?}"));
-                Ok(())
-            }
+        if let saphyr::YamlData::Mapping(mapping) = data {
+            self.validate_object_mapping(context, value, mapping)
+        } else {
+            context.add_error(value, format!("Expected an object, but got: {data:#?}"));
+            Ok(())
         }
     }
 }
@@ -34,7 +34,7 @@ pub fn try_validate_value_against_properties(
 ) -> Result<bool> {
     let sub_context = context.append_path(key);
     if let Some(schema) = properties.get(key) {
-        debug!("Validating property '{}' with schema: {}", key, schema);
+        debug!("Validating property '{key}' with schema: {schema}");
         let result = schema.validate(&sub_context, value);
         return match result {
             Ok(_) => Ok(true),
@@ -95,19 +95,25 @@ pub fn try_validate_value_against_additional_properties(
 }
 
 impl ObjectSchema {
-    fn validate_object_mapping(
+    fn validate_object_mapping<'a>(
         &self,
         context: &Context,
         object: &saphyr::MarkedYaml,
-        mapping: &saphyr::AnnotatedHash<saphyr::MarkedYaml>,
+        mapping: &saphyr::AnnotatedMapping<'a, saphyr::MarkedYaml<'a>>,
     ) -> Result<()> {
         for (k, value) in mapping {
-            let key = match &k.data {
-                saphyr::YamlData::String(s) => s.clone(),
-                _ => k.data.as_str().unwrap_or_default().to_string(),
+            let key_string = match &k.data {
+                saphyr::YamlData::Value(scalar) => match scalar {
+                    saphyr::Scalar::String(s) => s.to_string(),
+                    saphyr::Scalar::Boolean(b) => b.to_string(),
+                    saphyr::Scalar::Integer(i) => i.to_string(),
+                    saphyr::Scalar::FloatingPoint(o) => o.to_string(),
+                    saphyr::Scalar::Null => "null".to_string(),
+                },
+                v => return Err(expected_scalar!("Expected a scalar key, got: {:?}", v)),
             };
             let span = &k.span;
-            debug!("validate_object_mapping: key: \"{}\"", key);
+            debug!("validate_object_mapping: key: \"{key_string}\"");
             debug!(
                 "validate_object_mapping: span.start: {:?}",
                 format_marker(&span.start)
@@ -118,7 +124,7 @@ impl ObjectSchema {
             );
             // First, we check the explicitly defined properties, and validate against it if found
             if let Some(properties) = &self.properties {
-                if try_validate_value_against_properties(context, &key, value, properties)? {
+                if try_validate_value_against_properties(context, &key_string, value, properties)? {
                     continue;
                 }
             }
@@ -127,7 +133,7 @@ impl ObjectSchema {
             if let Some(additional_properties) = &self.additional_properties {
                 try_validate_value_against_additional_properties(
                     context,
-                    &key,
+                    &key_string,
                     value,
                     additional_properties,
                 )?;
@@ -136,12 +142,12 @@ impl ObjectSchema {
             // Then we check if pattern_properties matches
             if let Some(pattern_properties) = &self.pattern_properties {
                 for (pattern, schema) in pattern_properties {
-                    log::debug!("pattern: {}", pattern);
+                    log::debug!("pattern: {pattern}");
                     // TODO: compile the regex once instead of every time we're evaluating
                     let re = regex::Regex::new(pattern).map_err(|e| {
                         Error::GenericError(format!("Invalid regular expression pattern: {e}"))
                     })?;
-                    if re.is_match(key.as_str()) {
+                    if re.is_match(key_string.as_ref()) {
                         schema.validate(context, value)?;
                     }
                 }
@@ -152,12 +158,12 @@ impl ObjectSchema {
                     Error::GenericError(format!("Invalid regular expression pattern: {e}"))
                 })?;
                 debug!("Regex for property names: {}", re.as_str());
-                if !re.is_match(key.as_str()) {
+                if !re.is_match(key_string.as_ref()) {
                     context.add_error(
                         k,
                         format!(
                             "Property name '{}' does not match pattern '{}'",
-                            key,
+                            key_string,
                             re.as_str()
                         ),
                     );
@@ -254,6 +260,9 @@ mod tests {
         let errors = context.errors.borrow();
         let first_error = errors.first().unwrap();
         assert_eq!(first_error.path, "foo");
-        assert_eq!(first_error.error, "Expected a string, but got: Integer(42)");
+        assert_eq!(
+            first_error.error,
+            "Expected a string, but got: Value(Integer(42))"
+        );
     }
 }

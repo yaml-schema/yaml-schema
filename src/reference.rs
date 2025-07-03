@@ -1,6 +1,7 @@
 /// A RefSchema is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
 use crate::loader::Constructor;
+use crate::utils::saphyr_yaml_string;
 use crate::Result;
 
 #[derive(Debug, Default, PartialEq)]
@@ -23,15 +24,15 @@ impl Reference {
 }
 
 impl Constructor<Reference> for Reference {
-    fn construct(hash: &saphyr::Hash) -> Result<Reference> {
-        let ref_key = saphyr::Yaml::String(String::from("$ref"));
+    fn construct(hash: &saphyr::Mapping) -> Result<Reference> {
+        let ref_key = saphyr_yaml_string("$ref");
         if !hash.contains_key(&ref_key) {
             return Err(generic_error!("Expected a $ref key, but got: {:#?}", hash));
         }
 
         let ref_value = hash.get(&ref_key).unwrap();
         match ref_value {
-            saphyr::Yaml::String(s) => {
+            saphyr::Yaml::Value(saphyr::Scalar::String(s)) => {
                 if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
                     return Err(generic_error!("Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}", s));
                 }
@@ -54,13 +55,14 @@ impl Constructor<Reference> for Reference {
 mod tests {
     use super::*;
     use crate::RootSchema;
+    use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_reference_constructor() {
-        let mut hash = saphyr::Hash::new();
+        let mut hash = saphyr::Mapping::new();
         hash.insert(
-            saphyr::Yaml::String(String::from("$ref")),
-            saphyr::Yaml::String(String::from("#/$defs/name")),
+            saphyr_yaml_string("$ref"),
+            saphyr_yaml_string("#/$defs/name"),
         );
         let reference = Reference::construct(&hash).unwrap();
         println!("reference: {reference:#?}");

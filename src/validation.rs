@@ -1,15 +1,14 @@
 pub mod any_of;
 /// Validation engine for YamlSchema
 mod context;
-mod not;
 mod objects;
 mod one_of;
 mod strings;
 
-use crate::format_yaml_data;
 use crate::Result;
 use crate::Schema;
 use crate::YamlSchema;
+use crate::{format_yaml_data, Number};
 pub use context::Context;
 use log::debug;
 
@@ -24,7 +23,7 @@ pub struct LineCol {
     pub col: usize,
 }
 
-impl From<&saphyr::MarkedYaml> for LineCol {
+impl From<&saphyr::MarkedYaml<'_>> for LineCol {
     fn from(value: &saphyr::MarkedYaml) -> Self {
         LineCol {
             line: value.span.start.line(),
@@ -61,7 +60,7 @@ impl std::fmt::Display for ValidationError {
 
 impl Validator for Schema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[Schema] self: {}", self);
+        debug!("[Schema] self: {self}");
         debug!(
             "[Schema] Validating value: {}",
             format_yaml_data(&value.data)
@@ -97,13 +96,13 @@ impl Validator for Schema {
 
 impl Validator for YamlSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[YamlSchema] self: {}", self);
+        debug!("[YamlSchema] self: {self}");
         debug!(
             "[YamlSchema] Validating value: {}",
             format_yaml_data(&value.data)
         );
         if let Some(reference) = &self.r#ref {
-            debug!("[YamlSchema] Reference found: {}", reference);
+            debug!("[YamlSchema] Reference found: {reference}");
             let ref_name = &reference.ref_name;
             if let Some(root_schema) = &context.root_schema {
                 if let Some(schema) = root_schema.get_def(ref_name) {
@@ -130,8 +129,62 @@ fn validate_boolean_schema(context: &Context, value: &saphyr::MarkedYaml) -> Res
     Ok(())
 }
 
+pub fn validate_integer(
+    context: &Context,
+    minimum: &Option<Number>,
+    maximum: &Option<Number>,
+    multiple_of: &Option<Number>,
+    value: &saphyr::MarkedYaml,
+    i: i64,
+) {
+    if let Some(minimum) = minimum {
+        match minimum {
+            Number::Integer(min) => {
+                if i < *min {
+                    context.add_error(value, "Number is too small!".to_string());
+                }
+            }
+            Number::Float(min) => {
+                if (i as f64) < *min {
+                    context.add_error(value, "Number is too small!".to_string());
+                }
+            }
+        }
+    }
+    if let Some(maximum) = maximum {
+        match maximum {
+            Number::Integer(max) => {
+                if i > *max {
+                    context.add_error(value, "Number is too big!".to_string());
+                }
+            }
+            Number::Float(max) => {
+                if (i as f64) > *max {
+                    context.add_error(value, "Number is too big!".to_string());
+                }
+            }
+        }
+    }
+    if let Some(multiple_of) = &multiple_of {
+        match multiple_of {
+            Number::Integer(multiple) => {
+                if i % *multiple != 0 {
+                    context.add_error(value, format!("Number is not a multiple of {multiple}!"));
+                }
+            }
+            Number::Float(multiple) => {
+                if (i as f64) % *multiple != 0.0 {
+                    context.add_error(value, format!("Number is not a multiple of {multiple}!"));
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use saphyr::LoadableYamlNode;
+
     use super::*;
 
     #[test]
@@ -156,6 +209,9 @@ mod tests {
         assert!(context.has_errors());
         let errors = context.errors.borrow();
         let error = errors.first().unwrap();
-        assert_eq!(error.error, "Expected null, but got: String(\"value\")");
+        assert_eq!(
+            error.error,
+            "Expected null, but got: Value(String(\"value\"))"
+        );
     }
 }

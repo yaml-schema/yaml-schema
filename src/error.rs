@@ -19,6 +19,8 @@ pub enum Error {
     UnsupportedType(String),
     #[error("Generic YAML schema error: {0}")]
     GenericError(String),
+    #[error("Expected YAML scalar: {0}")]
+    ExpectedScalar(String),
     #[error("Fail fast signal")]
     FailFast,
 }
@@ -49,5 +51,15 @@ macro_rules! generic_error {
     };
     ($s:literal) => {
         $crate::Error::GenericError($s.to_string())
+    };
+}
+
+#[macro_export]
+macro_rules! expected_scalar {
+    ($s:literal, $($e:expr),+) => {
+        $crate::Error::ExpectedScalar(format!($s, $($e),+))
+    };
+    ($s:literal) => {
+        $crate::Error::ExpectedScalar($s.to_string())
     };
 }

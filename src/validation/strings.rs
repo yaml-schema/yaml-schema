@@ -72,6 +72,7 @@ mod tests {
     use crate::Engine;
     use crate::RootSchema;
     use crate::Schema;
+    use saphyr::LoadableYamlNode;
 
     use super::*;
 
