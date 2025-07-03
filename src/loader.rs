@@ -5,7 +5,7 @@ use std::rc::Rc;
 use hashlink::LinkedHashMap;
 use saphyr::LoadableYamlNode;
 
-use crate::utils::{saphyr_yaml_string, try_unwrap_saphyr_scalar};
+use crate::utils::{format_scalar, saphyr_yaml_string, try_unwrap_saphyr_scalar};
 use crate::AnyOfSchema;
 use crate::ArraySchema;
 use crate::BoolOrTypedSchema;
@@ -320,8 +320,8 @@ impl Constructor<TypedSchema> for TypedSchema {
                     },
                     saphyr::Scalar::Null => Ok(TypedSchema::Null),
                     v => Err(unsupported_type!(
-                        "Expected type: string, but got: {:#?}",
-                        v
+                        "Expected a string value for 'type:', but got: {}",
+                        format_scalar(v)
                     )),
                 },
                 v => Err(expected_scalar!("Expected scalar type, but got: {:#?}", v)),

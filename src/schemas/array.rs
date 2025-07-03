@@ -1,12 +1,12 @@
 use log::debug;
 
+use super::BoolOrTypedSchema;
+use crate::utils::format_vec;
+use crate::utils::format_yaml_data;
 use crate::Context;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
-use crate::{format_vec, format_yaml_data};
-
-use super::BoolOrTypedSchema;
 
 /// An array schema represents an array
 #[derive(Debug, Default, PartialEq)]

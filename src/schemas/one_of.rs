@@ -1,7 +1,7 @@
 /// The `oneOf` schema is a schema that matches if one, and only one of the schemas in the `oneOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
 /// to the context.
-use crate::format_vec;
+use crate::utils::format_vec;
 use crate::YamlSchema;
 
 /// The `oneOf` schema is a schema that matches if one, and only one of the schemas in the `oneOf` array match.

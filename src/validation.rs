@@ -5,10 +5,11 @@ mod objects;
 mod one_of;
 mod strings;
 
+use crate::utils::format_yaml_data;
+use crate::Number;
 use crate::Result;
 use crate::Schema;
 use crate::YamlSchema;
-use crate::{format_yaml_data, Number};
 pub use context::Context;
 use log::debug;
 

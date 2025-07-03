@@ -5,12 +5,12 @@ use log::debug;
 
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
+use crate::utils::{format_marker, format_yaml_data};
 use crate::validation::Context;
 use crate::Error;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
-use crate::{format_marker, format_yaml_data};
 
 impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules

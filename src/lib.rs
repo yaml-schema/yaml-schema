@@ -327,50 +327,6 @@ impl From<TypedSchema> for Schema {
     }
 }
 
-/// Formats a vector of values as a string, by joining them with commas
-fn format_vec<V>(vec: &[V]) -> String
-where
-    V: std::fmt::Display,
-{
-    let items: Vec<String> = vec.iter().map(|v| format!("{v}")).collect();
-    format!("[{}]", items.join(", "))
-}
-
-/// Formats a saphyr::YamlData as a string
-fn format_yaml_data<'a>(data: &saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>) -> String {
-    match data {
-        saphyr::YamlData::Value(scalar) => match scalar {
-            saphyr::Scalar::Null => "null".to_string(),
-            saphyr::Scalar::Boolean(b) => b.to_string(),
-            saphyr::Scalar::Integer(i) => i.to_string(),
-            saphyr::Scalar::FloatingPoint(o) => o.to_string(),
-            saphyr::Scalar::String(s) => format!("\"{s}\""),
-        },
-        saphyr::YamlData::Sequence(seq) => {
-            let items: Vec<String> = seq.iter().map(|v| format_yaml_data(&v.data)).collect();
-            format!("[{}]", items.join(", "))
-        }
-        saphyr::YamlData::Mapping(mapping) => {
-            let items: Vec<String> = mapping
-                .iter()
-                .map(|(k, v)| {
-                    format!(
-                        "{}: {}",
-                        format_yaml_data(&k.data),
-                        format_yaml_data(&v.data)
-                    )
-                })
-                .collect();
-            format!("[{}]", items.join(", "))
-        }
-        _ => format!("<unsupported type: {data:?}>"),
-    }
-}
-
-fn format_marker(marker: &saphyr::Marker) -> String {
-    format!("[{}, {}]", marker.line(), marker.col())
-}
-
 /// Use the ctor crate to initialize the logger for tests
 #[cfg(test)]
 #[ctor::ctor]
