@@ -5,7 +5,7 @@ use log::debug;
 
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
-use crate::utils::{format_marker, format_yaml_data};
+use crate::utils::{format_marker, format_yaml_data, scalar_to_string};
 use crate::validation::Context;
 use crate::Error;
 use crate::Result;
@@ -103,13 +103,7 @@ impl ObjectSchema {
     ) -> Result<()> {
         for (k, value) in mapping {
             let key_string = match &k.data {
-                saphyr::YamlData::Value(scalar) => match scalar {
-                    saphyr::Scalar::String(s) => s.to_string(),
-                    saphyr::Scalar::Boolean(b) => b.to_string(),
-                    saphyr::Scalar::Integer(i) => i.to_string(),
-                    saphyr::Scalar::FloatingPoint(o) => o.to_string(),
-                    saphyr::Scalar::Null => "null".to_string(),
-                },
+                saphyr::YamlData::Value(scalar) => scalar_to_string(scalar),
                 v => return Err(expected_scalar!("Expected a scalar key, got: {:?}", v)),
             };
             let span = &k.span;

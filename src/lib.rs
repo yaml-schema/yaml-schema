@@ -118,6 +118,8 @@ impl std::fmt::Display for Number {
     }
 }
 
+/// A ConstValue is similar to a saphyr::Scalar, but for validating "number" types
+/// we treat integers and floating point values as 'fungible'
 #[derive(Debug, PartialEq)]
 pub enum ConstValue {
     Boolean(bool),
@@ -144,6 +146,22 @@ impl ConstValue {
     }
     pub fn from_saphyr_yaml(value: &saphyr::Yaml) -> ConstValue {
         value.try_into().unwrap()
+    }
+}
+
+impl<'a> TryFrom<&saphyr::Scalar<'a>> for ConstValue {
+    type Error = crate::Error;
+
+    fn try_from(scalar: &saphyr::Scalar<'a>) -> std::result::Result<ConstValue, Self::Error> {
+        match scalar {
+            saphyr::Scalar::Null => Ok(ConstValue::Null),
+            saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
+            saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
+            saphyr::Scalar::FloatingPoint(o) => {
+                Ok(ConstValue::Number(Number::float(o.into_inner())))
+            }
+            saphyr::Scalar::String(s) => Ok(ConstValue::String(s.to_string())),
+        }
     }
 }
 
@@ -352,5 +370,19 @@ mod tests {
         let s1 = ConstValue::string("NW");
         let s2 = ConstValue::string("NW");
         assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn test_scalar_to_constvalue() -> Result<()> {
+        let scalars = vec![saphyr::Scalar::Null];
+
+        let expected = vec![ConstValue::Null];
+
+        for (scalar, expected) in scalars.iter().zip(expected.iter()) {
+            let actual: ConstValue = scalar.try_into()?;
+            assert_eq!(*expected, actual);
+        }
+
+        Ok(())
     }
 }
