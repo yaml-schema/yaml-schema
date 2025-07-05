@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_scalar_to_constvalue() -> Result<()> {
-        let scalars = vec![
+        let scalars = [
             saphyr::Scalar::Null,
             saphyr::Scalar::Boolean(true),
             saphyr::Scalar::Boolean(false),
@@ -370,7 +370,7 @@ mod tests {
             saphyr::Scalar::String("foo".into()),
         ];
 
-        let expected = vec![
+        let expected = [
             ConstValue::Null,
             ConstValue::Boolean(true),
             ConstValue::Boolean(false),

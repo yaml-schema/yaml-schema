@@ -64,7 +64,7 @@ impl<'r> Context<'r> {
         let path = self.path();
         self.push_error(ValidationError {
             path,
-            line_col: None,
+            marker: None,
             error: error.into(),
         });
     }
@@ -74,7 +74,7 @@ impl<'r> Context<'r> {
         let path = self.path();
         self.push_error(ValidationError {
             path,
-            line_col: Some(marked_yaml.into()),
+            marker: Some(marked_yaml.span.start),
             error: error.into(),
         });
     }

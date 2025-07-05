@@ -12,25 +12,11 @@ use crate::Schema;
 use crate::YamlSchema;
 pub use context::Context;
 use log::debug;
+use saphyr::Marker;
 
 /// A trait for validating a sahpyr::Yaml value against a schema
 pub trait Validator {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()>;
-}
-
-#[derive(Debug)]
-pub struct LineCol {
-    pub line: usize,
-    pub col: usize,
-}
-
-impl From<&saphyr::MarkedYaml<'_>> for LineCol {
-    fn from(value: &saphyr::MarkedYaml) -> Self {
-        LineCol {
-            line: value.span.start.line(),
-            col: value.span.start.col() + 1, // contrary to the documentation, columns are 0-indexed
-        }
-    }
 }
 
 /// A validation error simply contains a path and an error message
@@ -39,7 +25,7 @@ pub struct ValidationError {
     /// The path to the value that caused the error
     pub path: String,
     /// The line and column of the value that caused the error
-    pub line_col: Option<LineCol>,
+    pub marker: Option<Marker>,
     /// The error message
     pub error: String,
 }
@@ -47,11 +33,14 @@ pub struct ValidationError {
 /// Display this ValidationErrors as "{path}: {error}"
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(line_col) = &self.line_col {
+        if let Some(marker) = &self.marker {
             write!(
                 f,
                 "[{}:{}] .{}: {}",
-                line_col.line, line_col.col, self.path, self.error
+                marker.line(),
+                marker.col() + 1, // contrary to the documentation, columns are 0-indexed
+                self.path,
+                self.error
             )
         } else {
             write!(f, ".{}: {}", self.path, self.error)

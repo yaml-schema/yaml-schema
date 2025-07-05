@@ -273,7 +273,7 @@ Feature: Object types
       ```
       -001 invalid: "value"
       ```
-    And the error message should be "[1:1] .: Property name '-001 invalid' does not match pattern '^[A-Za-z_][A-Za-z0-9_]*$'"
+    And the error message should be "[1:0] .: Property name '-001 invalid' does not match pattern '^[A-Za-z_][A-Za-z0-9_]*$'"
 
   Scenario: Size
     Given a YAML schema:

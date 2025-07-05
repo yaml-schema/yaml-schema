@@ -77,6 +77,11 @@ pub fn load_from_doc(doc: &saphyr::Yaml) -> Result<RootSchema> {
     Ok(loader.into()) // See From<Loader> for RootSchema below
 }
 
+pub fn load_from_str(s: &str) -> Result<RootSchema> {
+    let docs = saphyr::Yaml::load_from_str(s)?;
+    Ok(load_from_doc(docs.first().unwrap()).unwrap())
+}
+
 #[derive(Debug, Default)]
 struct RootLoader {
     pub id: Option<String>,
@@ -970,7 +975,7 @@ mod tests {
 
     #[test]
     fn test_type_object_with_string_with_description() {
-        let docs = saphyr::Yaml::load_from_str(
+        let root_schema = load_from_str(
             r#"
             type: object
             properties:
@@ -980,7 +985,6 @@ mod tests {
         "#,
         )
         .unwrap();
-        let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let root_schema_schema = &root_schema.schema.as_ref().schema.as_ref().unwrap();
         let expected = StringSchema::default();
         if let Schema::Object(object_schema) = root_schema_schema {
@@ -1012,14 +1016,13 @@ mod tests {
 
     #[test]
     fn test_type_string_with_pattern() {
-        let docs = saphyr::Yaml::load_from_str(
+        let root_schema = load_from_str(
             r#"
         type: string
         pattern: "^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$"
         "#,
         )
         .unwrap();
-        let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let expected = StringSchema {
             pattern: Some(Regex::new("^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$").unwrap()),
             ..Default::default()
@@ -1060,7 +1063,7 @@ mod tests {
 
     #[test]
     fn test_enum() {
-        let docs = saphyr::Yaml::load_from_str(
+        let root_schema = load_from_str(
             r#"
         enum:
           - foo
@@ -1069,7 +1072,6 @@ mod tests {
         "#,
         )
         .unwrap();
-        let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let enum_values = ["foo", "bar", "baz"]
             .iter()
             .map(|s| ConstValue::string(s.to_string()))
@@ -1085,7 +1087,7 @@ mod tests {
 
     #[test]
     fn test_enum_without_type() {
-        let docs = saphyr::Yaml::load_from_str(
+        let root_schema = load_from_str(
             r#"
             enum:
               - red
@@ -1096,7 +1098,6 @@ mod tests {
             "#,
         )
         .unwrap();
-        let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let enum_values = vec![
             ConstValue::string("red".to_string()),
             ConstValue::string("amber".to_string()),
@@ -1115,7 +1116,7 @@ mod tests {
 
     #[test]
     fn test_one_of_with_ref() {
-        let docs = saphyr::Yaml::load_from_str(
+        let root_schema = load_from_str(
             r##"
             $defs:
               foo:
@@ -1126,7 +1127,6 @@ mod tests {
             "##,
         )
         .unwrap();
-        let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         println!("root_schema: {root_schema:#?}");
         let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
         if let Schema::OneOf(one_of_schema) = root_schema_schema {
