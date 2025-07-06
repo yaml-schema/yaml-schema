@@ -5,7 +5,7 @@ description: Meta-schema for YAML Schema, based on JSON Schema meta-schema
 type: object
 $defs:
   schema_type:
-    description: |
+    description: |-
       The type of the schema
     type: string
     enum:
@@ -20,8 +20,8 @@ $defs:
       - anyOf
       - not
   schema:
-    description: |
-      A meta schema for a YAML object schema.
+    description: |-
+      A meta schema for a YAML object schema
     type: object
     properties:
       type:
@@ -35,7 +35,8 @@ $defs:
       description:
         type: string
   array_of_schemas:
-    description: An array of schemas
+    description: |-
+      An array of schemas
     type: array
     items:
       $ref: "#/$defs/schema"

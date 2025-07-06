@@ -34,6 +34,12 @@ impl std::fmt::Display for ObjectSchema {
 
 pub struct ObjectSchemaBuilder(ObjectSchema);
 
+impl Default for ObjectSchemaBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ObjectSchemaBuilder {
     pub fn new() -> Self {
         Self(ObjectSchema::default())
@@ -41,6 +47,10 @@ impl ObjectSchemaBuilder {
 
     pub fn build(&mut self) -> ObjectSchema {
         std::mem::take(&mut self.0)
+    }
+
+    pub fn boxed(&mut self) -> Box<ObjectSchema> {
+        Box::new(self.build())
     }
 
     pub fn metadata<K, V>(&mut self, key: K, value: V) -> &mut Self

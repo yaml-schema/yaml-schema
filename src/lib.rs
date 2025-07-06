@@ -6,6 +6,7 @@ use saphyr::LoadableYamlNode;
 pub mod engine;
 #[macro_use]
 pub mod error;
+pub mod codegen;
 pub mod loader;
 pub mod reference;
 pub mod schemas;
@@ -41,7 +42,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// A RootSchema represents the root document in a schema file, and can include additional
 /// fields not present in the 'base' YamlSchema
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct RootSchema {
     pub id: Option<String>,
     pub meta_schema: Option<String>,
@@ -256,19 +257,19 @@ impl YamlSchema {
 pub enum Schema {
     #[default]
     Empty, // no value
-    BooleanLiteral(bool),   // `true` or `false`
-    Const(ConstSchema),     // `const`
-    TypeNull,               // `type: null`
-    Array(ArraySchema),     // `type: array`
-    BooleanSchema,          // `type: boolean`
-    Integer(IntegerSchema), // `type: integer`
-    Number(NumberSchema),   // `type: number`
-    Object(ObjectSchema),   // `type: object`
-    String(StringSchema),   // `type: string`
-    Enum(EnumSchema),       // `enum`
-    AnyOf(AnyOfSchema),     // `anyOf`
-    OneOf(OneOfSchema),     // `oneOf`
-    Not(NotSchema),         // `not`
+    BooleanLiteral(bool),      // `true` or `false`
+    Const(ConstSchema),        // `const`
+    TypeNull,                  // `type: null`
+    Array(ArraySchema),        // `type: array`
+    BooleanSchema,             // `type: boolean`
+    Integer(IntegerSchema),    // `type: integer`
+    Number(NumberSchema),      // `type: number`
+    Object(Box<ObjectSchema>), // `type: object`
+    String(StringSchema),      // `type: string`
+    Enum(EnumSchema),          // `enum`
+    AnyOf(AnyOfSchema),        // `anyOf`
+    OneOf(OneOfSchema),        // `oneOf`
+    Not(NotSchema),            // `not`
 }
 
 impl std::fmt::Display for Schema {

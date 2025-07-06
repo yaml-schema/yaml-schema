@@ -148,20 +148,23 @@ impl ObjectSchema {
             }
             // Finally, we check if it matches property_names
             if let Some(property_names) = &self.property_names {
-                let re = regex::Regex::new(property_names).map_err(|e| {
-                    Error::GenericError(format!("Invalid regular expression pattern: {e}"))
-                })?;
-                debug!("Regex for property names: {}", re.as_str());
-                if !re.is_match(key_string.as_ref()) {
-                    context.add_error(
-                        k,
-                        format!(
-                            "Property name '{}' does not match pattern '{}'",
-                            key_string,
-                            re.as_str()
-                        ),
-                    );
-                    fail_fast!(context)
+                if let Some(re) = &property_names.pattern {
+                    debug!("Regex for property names: {}", re.as_str());
+                    if !re.is_match(key_string.as_ref()) {
+                        context.add_error(
+                            k,
+                            format!(
+                                "Property name '{}' does not match pattern '{}'",
+                                key_string,
+                                re.as_str()
+                            ),
+                        );
+                        fail_fast!(context)
+                    }
+                } else {
+                    return Err(Error::GenericError(
+                        "Expected a pattern for `property_names`".to_string(),
+                    ));
                 }
             }
         }
@@ -237,7 +240,7 @@ mod tests {
             properties: Some(properties),
             ..Default::default()
         };
-        let root_schema = RootSchema::new_with_schema(Schema::Object(object_schema));
+        let root_schema = RootSchema::new_with_schema(Schema::Object(Box::new(object_schema)));
         let value = r#"
             foo: "I'm a string"
             bar: 42

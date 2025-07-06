@@ -33,12 +33,12 @@ pub use string::StringSchema;
 #[derive(Debug, PartialEq)]
 pub enum TypedSchema {
     Null,
-    Array(ArraySchema),     // `type: array`
-    BooleanSchema,          // `type: boolean`
-    Integer(IntegerSchema), // `type: integer`
-    Number(NumberSchema),   // `type: number`
-    Object(ObjectSchema),   // `type: object`
-    String(StringSchema),   // `type: string`
+    Array(ArraySchema),        // `type: array`
+    BooleanSchema,             // `type: boolean`
+    Integer(IntegerSchema),    // `type: integer`
+    Number(NumberSchema),      // `type: number`
+    Object(Box<ObjectSchema>), // `type: object`
+    String(StringSchema),      // `type: string`
 }
 
 /// A type value is either a string or an array of strings
@@ -66,7 +66,7 @@ impl TypedSchema {
             "boolean" => Ok(TypedSchema::BooleanSchema),
             "integer" => Ok(TypedSchema::Integer(IntegerSchema::default())),
             "number" => Ok(TypedSchema::Number(NumberSchema::default())),
-            "object" => Ok(TypedSchema::Object(ObjectSchema::default())),
+            "object" => Ok(TypedSchema::Object(Box::default())),
             "string" => Ok(TypedSchema::String(StringSchema::default())),
             _ => panic!("Unknown type: {type}"),
         }

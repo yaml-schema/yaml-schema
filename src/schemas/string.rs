@@ -46,6 +46,12 @@ impl std::fmt::Display for StringSchema {
 
 pub struct StringSchemaBuilder(StringSchema);
 
+impl Default for StringSchemaBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StringSchemaBuilder {
     pub fn new() -> Self {
         Self(StringSchema::default())

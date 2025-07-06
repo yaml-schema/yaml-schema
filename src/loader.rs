@@ -5,6 +5,7 @@ use std::fs;
 use std::rc::Rc;
 
 use hashlink::LinkedHashMap;
+use regex::Regex;
 use saphyr::LoadableYamlNode;
 
 use crate::utils::{format_scalar, saphyr_yaml_string, try_unwrap_saphyr_scalar};
@@ -317,7 +318,7 @@ impl Constructor<TypedSchema> for TypedSchema {
                         }
                         "object" => {
                             let object_schema = ObjectSchema::construct(mapping)?;
-                            Ok(TypedSchema::Object(object_schema))
+                            Ok(TypedSchema::Object(Box::new(object_schema)))
                         }
                         "string" => {
                             let string_schema = StringSchema::construct(mapping)?;
@@ -526,7 +527,10 @@ impl Constructor<ObjectSchema> for ObjectSchema {
                                 let pattern = load_string_value(
                                     mapping.get(&saphyr_yaml_string("pattern")).unwrap(),
                                 )?;
-                                object_schema.property_names = Some(pattern);
+                                let regex = Regex::new(pattern.as_str())
+                                    .map_err(|_e| Error::InvalidRegularExpression(pattern))?;
+                                object_schema.property_names =
+                                    Some(StringSchema::builder().pattern(regex).build());
                             } else {
                                 return Err(unsupported_type!(
                                     "propertyNames: Expected a mapping, but got: {:?}",
