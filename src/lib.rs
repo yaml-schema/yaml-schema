@@ -1,6 +1,5 @@
 use hashlink::LinkedHashMap;
 use saphyr::LoadableYamlNode;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 pub mod engine;
@@ -30,7 +29,7 @@ pub use schemas::StringSchema;
 pub use validation::Context;
 pub use validation::Validator;
 
-use crate::utils::{hash_map, linked_hash_map};
+use crate::utils::linked_hash_map;
 use schemas::TypedSchema;
 
 // Returns the library version, which reflects the crate version
@@ -99,6 +98,12 @@ impl RootSchema {
 }
 
 pub struct RootSchemaBuilder(RootSchema);
+
+impl Default for RootSchemaBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RootSchemaBuilder {
     /// Construct a RootSchemaBuilder
@@ -398,6 +403,12 @@ impl From<TypedSchema> for Schema {
 }
 
 pub struct YamlSchemaBuilder(YamlSchema);
+
+impl Default for YamlSchemaBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl YamlSchemaBuilder {
     pub fn new() -> Self {

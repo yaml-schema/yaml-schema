@@ -4,7 +4,7 @@ use crate::Result;
 use crate::RootSchema;
 use log::debug;
 
-pub fn generate_code_from_root_schema(root_schema: &RootSchema) -> Result<String> {
+pub fn generate_code_from_root_schema(_root_schema: &RootSchema) -> Result<String> {
     debug!("Generating code from root schema");
     Ok("".into())
 }
@@ -12,31 +12,21 @@ pub fn generate_code_from_root_schema(root_schema: &RootSchema) -> Result<String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Schema::Object;
+
     use crate::{
         ArraySchema, ObjectSchema, OneOfSchema, Reference, Schema, StringSchema, YamlSchema,
     };
     use hashlink::LinkedHashMap;
 
-    use crate::BoolOrTypedSchema::TypedSchema;
-    use saphyr::Yaml;
     use std::collections::HashMap;
-    use std::fs::metadata;
+
     use std::hash::Hash;
-    use std::rc::Rc;
 
     fn vec_of_string(items: Vec<&str>) -> Vec<String> {
         items.into_iter().map(|s| s.to_string()).collect()
     }
 
     fn vec_to_linked_hash_map<K, V>(items: Vec<(K, V)>) -> LinkedHashMap<K, V>
-    where
-        K: Hash + Eq + Clone,
-    {
-        items.into_iter().collect()
-    }
-
-    fn vec_to_hash_map<K, V>(items: Vec<(K, V)>) -> HashMap<K, V>
     where
         K: Hash + Eq + Clone,
     {

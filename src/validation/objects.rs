@@ -1,7 +1,6 @@
 // A module to contain object type validation logic
 use hashlink::LinkedHashMap;
 use log::debug;
-use std::collections::HashMap;
 
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;

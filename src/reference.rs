@@ -4,7 +4,6 @@ use crate::loader::Constructor;
 use crate::utils::saphyr_yaml_string;
 use crate::Result;
 
-
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Reference {
     pub ref_name: String,
