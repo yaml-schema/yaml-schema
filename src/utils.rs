@@ -1,7 +1,18 @@
 // Various utility functions
-use std::borrow::Cow;
-
 use crate::Result;
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::hash::Hash;
+
+/// Create a return a HashMap with a single key & value
+pub fn hash_map<K, V>(key: K, value: V) -> HashMap<K, V>
+where
+    K: Hash + Eq + Clone,
+{
+    let mut hash_map = HashMap::with_capacity(1);
+    hash_map.insert(key, value);
+    hash_map
+}
 
 /// Construct a saphyr::Yaml scalar value from a &str
 pub const fn saphyr_yaml_string(s: &str) -> saphyr::Yaml<'_> {
@@ -77,8 +88,19 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{format_scalar, scalar_to_string};
+    use crate::utils::{format_scalar, hash_map, scalar_to_string};
     use ordered_float::OrderedFloat;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_hash_map() {
+        let expected = vec![("foo".to_string(), "bar".to_string())]
+            .into_iter()
+            .collect::<HashMap<String, String>>();
+
+        let actual = hash_map("foo".to_string(), "bar".to_string());
+        assert_eq!(expected, actual);
+    }
 
     #[test]
     fn test_scalar_to_string() {
