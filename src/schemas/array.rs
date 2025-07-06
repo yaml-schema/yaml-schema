@@ -1,12 +1,12 @@
 use log::debug;
 
-use super::BoolOrTypedSchema;
+use super::{BoolOrTypedSchema, TypedSchema};
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
-use crate::Context;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
+use crate::{Context, Reference};
 
 /// An array schema represents an array
 #[derive(Debug, Default, PartialEq)]
@@ -14,6 +14,22 @@ pub struct ArraySchema {
     pub items: Option<BoolOrTypedSchema>,
     pub prefix_items: Option<Vec<YamlSchema>>,
     pub contains: Option<Box<YamlSchema>>,
+}
+
+impl ArraySchema {
+    pub fn with_items_typed(typed_schema: TypedSchema) -> Self {
+        Self {
+            items: Some(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema))),
+            ..Default::default()
+        }
+    }
+
+    pub fn with_items_ref(reference: Reference) -> Self {
+        Self {
+            items: Some(BoolOrTypedSchema::Reference(reference)),
+            ..Default::default()
+        }
+    }
 }
 
 impl std::fmt::Display for ArraySchema {

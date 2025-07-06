@@ -641,14 +641,14 @@ impl Constructor<OneOfSchema> for OneOfSchema {
     }
 }
 
-fn load_properties(value: &saphyr::Yaml) -> Result<HashMap<String, YamlSchema>> {
+fn load_properties(value: &saphyr::Yaml) -> Result<LinkedHashMap<String, YamlSchema>> {
     if let saphyr::Yaml::Mapping(mapping) = value {
-        let mut properties = HashMap::new();
+        let mut properties = LinkedHashMap::new();
         for (key, value) in mapping.iter() {
             if let Ok(key) = load_string_value(key) {
                 if key.as_str() == "$ref" {
                     let reference = Reference::construct(mapping)?;
-                    properties.insert(key.clone(), YamlSchema::reference(reference));
+                    properties.insert(key.clone(), YamlSchema::builder().r#ref(reference).build());
                 } else if let saphyr::Yaml::Mapping(mapping) = value {
                     let schema = YamlSchema::construct(mapping)?;
                     properties.insert(key.clone(), schema);

@@ -4,6 +4,7 @@ use crate::loader::Constructor;
 use crate::utils::saphyr_yaml_string;
 use crate::Result;
 
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Reference {
     pub ref_name: String,
@@ -16,7 +17,10 @@ impl std::fmt::Display for Reference {
 }
 
 impl Reference {
-    pub fn new<S: Into<String>>(ref_name: S) -> Reference {
+    pub fn new<S>(ref_name: S) -> Reference
+    where
+        S: Into<String>,
+    {
         Reference {
             ref_name: ref_name.into(),
         }

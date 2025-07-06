@@ -1,19 +1,19 @@
-use std::collections::HashMap;
-
 use crate::schemas::TypedSchema;
-use crate::utils::hash_map;
+use crate::utils::{hash_map, linked_hash_map};
 use crate::BoolOrTypedSchema;
 use crate::YamlSchema;
 use crate::{AnyOfSchema, StringSchema};
+use hashlink::LinkedHashMap;
+use std::collections::HashMap;
 
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
 pub struct ObjectSchema {
     pub metadata: Option<HashMap<String, String>>,
-    pub properties: Option<HashMap<String, YamlSchema>>,
+    pub properties: Option<LinkedHashMap<String, YamlSchema>>,
     pub required: Option<Vec<String>>,
     pub additional_properties: Option<BoolOrTypedSchema>,
-    pub pattern_properties: Option<HashMap<String, YamlSchema>>,
+    pub pattern_properties: Option<LinkedHashMap<String, YamlSchema>>,
     pub property_names: Option<StringSchema>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
@@ -66,7 +66,7 @@ impl ObjectSchemaBuilder {
         self
     }
 
-    pub fn properties(&mut self, properties: HashMap<String, YamlSchema>) -> &mut Self {
+    pub fn properties(&mut self, properties: LinkedHashMap<String, YamlSchema>) -> &mut Self {
         self.0.properties = Some(properties);
         self
     }
@@ -79,7 +79,7 @@ impl ObjectSchemaBuilder {
             properties.insert(key.into(), value);
             self
         } else {
-            self.properties(hash_map(key.into(), value))
+            self.properties(linked_hash_map(key.into(), value))
         }
     }
 
@@ -107,7 +107,7 @@ impl ObjectSchemaBuilder {
 
     pub fn pattern_properties(
         &mut self,
-        pattern_properties: HashMap<String, YamlSchema>,
+        pattern_properties: LinkedHashMap<String, YamlSchema>,
     ) -> &mut Self {
         self.0.pattern_properties = Some(pattern_properties);
         self
@@ -121,7 +121,7 @@ impl ObjectSchemaBuilder {
             pattern_properties.insert(key.into(), value);
             self
         } else {
-            self.pattern_properties(hash_map(key.into(), value))
+            self.pattern_properties(linked_hash_map(key.into(), value))
         }
     }
 
@@ -134,7 +134,6 @@ impl ObjectSchemaBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Reference;
 
     #[test]
     fn test_builder_default() {
@@ -157,12 +156,12 @@ mod tests {
     #[test]
     fn test_builder_properties() {
         let schema = ObjectSchema::builder()
-            .property("type", YamlSchema::reference(Reference::new("schema_type")))
+            .property("type", YamlSchema::reference("schema_type"))
             .build();
         assert!(schema.properties.is_some());
         assert_eq!(
             *schema.properties.unwrap().get("type").unwrap(),
-            YamlSchema::reference(Reference::new("schema_type"))
+            YamlSchema::reference("schema_type")
         );
     }
 }

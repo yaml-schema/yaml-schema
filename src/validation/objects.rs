@@ -1,7 +1,7 @@
 // A module to contain object type validation logic
-use std::collections::HashMap;
-
+use hashlink::LinkedHashMap;
 use log::debug;
+use std::collections::HashMap;
 
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
@@ -30,7 +30,7 @@ pub fn try_validate_value_against_properties(
     context: &Context,
     key: &String,
     value: &saphyr::MarkedYaml,
-    properties: &HashMap<String, YamlSchema>,
+    properties: &LinkedHashMap<String, YamlSchema>,
 ) -> Result<bool> {
     let sub_context = context.append_path(key);
     if let Some(schema) = properties.get(key) {
@@ -222,12 +222,13 @@ mod tests {
     use crate::RootSchema;
     use crate::Schema;
     use crate::StringSchema;
+    use hashlink::LinkedHashMap;
 
     use super::*;
 
     #[test]
     fn test_should_validate_properties() {
-        let mut properties = HashMap::new();
+        let mut properties = LinkedHashMap::new();
         properties.insert(
             "foo".to_string(),
             YamlSchema::from(Schema::String(StringSchema::default())),

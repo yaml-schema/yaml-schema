@@ -1,7 +1,7 @@
-use std::rc::Rc;
-
 use hashlink::LinkedHashMap;
 use saphyr::LoadableYamlNode;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 pub mod engine;
 #[macro_use]
@@ -30,6 +30,7 @@ pub use schemas::StringSchema;
 pub use validation::Context;
 pub use validation::Validator;
 
+use crate::utils::{hash_map, linked_hash_map};
 use schemas::TypedSchema;
 
 // Returns the library version, which reflects the crate version
@@ -61,6 +62,11 @@ impl RootSchema {
         }
     }
 
+    /// Builder pattern for RootSchema
+    pub fn builder() -> RootSchemaBuilder {
+        RootSchemaBuilder::new()
+    }
+
     /// Create a new RootSchema with a Schema
     pub fn new_with_schema(schema: Schema) -> RootSchema {
         RootSchema::new(YamlSchema::from(schema))
@@ -89,6 +95,39 @@ impl RootSchema {
             return defs.get(&name.to_owned());
         }
         None
+    }
+}
+
+pub struct RootSchemaBuilder(RootSchema);
+
+impl RootSchemaBuilder {
+    /// Construct a RootSchemaBuilder
+    pub fn new() -> Self {
+        Self(RootSchema::default())
+    }
+
+    pub fn build(&mut self) -> RootSchema {
+        std::mem::take(&mut self.0)
+    }
+
+    pub fn id<S: Into<String>>(&mut self, id: S) -> &mut Self {
+        self.0.id = Some(id.into());
+        self
+    }
+
+    pub fn meta_schema<S: Into<String>>(&mut self, meta_schema: S) -> &mut Self {
+        self.0.meta_schema = Some(meta_schema.into());
+        self
+    }
+
+    pub fn defs(&mut self, defs: LinkedHashMap<String, YamlSchema>) -> &mut Self {
+        self.0.defs = Some(defs);
+        self
+    }
+
+    pub fn schema(&mut self, schema: YamlSchema) -> &mut Self {
+        self.0.schema = Rc::new(schema);
+        self
     }
 }
 
@@ -245,11 +284,32 @@ impl YamlSchema {
         }
     }
 
-    pub fn reference(reference: Reference) -> YamlSchema {
+    pub fn object(object_schema: ObjectSchema) -> YamlSchema {
         YamlSchema {
-            r#ref: Some(reference),
+            schema: Some(Schema::Object(Box::new(object_schema))),
             ..Default::default()
         }
+    }
+
+    pub fn reference<S>(ref_name: S) -> YamlSchema
+    where
+        S: Into<String>,
+    {
+        YamlSchema {
+            r#ref: Some(Reference::new(ref_name)),
+            ..Default::default()
+        }
+    }
+
+    pub fn string() -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::String(StringSchema::default())),
+            ..Default::default()
+        }
+    }
+
+    pub fn builder() -> YamlSchemaBuilder {
+        YamlSchemaBuilder::new()
     }
 }
 
@@ -270,6 +330,12 @@ pub enum Schema {
     AnyOf(AnyOfSchema),        // `anyOf`
     OneOf(OneOfSchema),        // `oneOf`
     Not(NotSchema),            // `not`
+}
+
+impl Schema {
+    pub fn object(schema: ObjectSchema) -> Schema {
+        Schema::Object(Box::new(schema))
+    }
 }
 
 impl std::fmt::Display for Schema {
@@ -328,6 +394,56 @@ impl From<TypedSchema> for Schema {
             TypedSchema::Object(object_schema) => Schema::Object(object_schema),
             TypedSchema::String(string_schema) => Schema::String(string_schema),
         }
+    }
+}
+
+pub struct YamlSchemaBuilder(YamlSchema);
+
+impl YamlSchemaBuilder {
+    pub fn new() -> Self {
+        YamlSchemaBuilder(YamlSchema::default())
+    }
+
+    pub fn metadata<K, V>(&mut self, key: K, value: V) -> &mut Self
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        if let Some(metadata) = self.0.metadata.as_mut() {
+            metadata.insert(key.into(), value.into());
+        } else {
+            self.0.metadata = Some(linked_hash_map(key.into(), value.into()));
+        }
+        self
+    }
+
+    pub fn description<S>(&mut self, description: S) -> &mut Self
+    where
+        S: Into<String>,
+    {
+        self.metadata("description", description)
+    }
+
+    pub fn r#ref(&mut self, r#ref: Reference) -> &mut Self {
+        self.0.r#ref = Some(r#ref);
+        self
+    }
+
+    pub fn schema(&mut self, schema: Schema) -> &mut Self {
+        self.0.schema = Some(schema);
+        self
+    }
+
+    pub fn string_schema(&mut self, string_schema: StringSchema) -> &mut Self {
+        self.schema(Schema::String(string_schema))
+    }
+
+    pub fn object_schema(&mut self, object_schema: ObjectSchema) -> &mut Self {
+        self.schema(Schema::Object(Box::new(object_schema)))
+    }
+
+    pub fn build(&mut self) -> YamlSchema {
+        std::mem::take(&mut self.0)
     }
 }
 

@@ -1,10 +1,11 @@
 // Various utility functions
 use crate::Result;
+use hashlink::linked_hash_map;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::Hash;
 
-/// Create a return a HashMap with a single key & value
+/// Create and return a HashMap with a single key & value
 pub fn hash_map<K, V>(key: K, value: V) -> HashMap<K, V>
 where
     K: Hash + Eq + Clone,
@@ -12,6 +13,16 @@ where
     let mut hash_map = HashMap::with_capacity(1);
     hash_map.insert(key, value);
     hash_map
+}
+
+/// Create and return a LinkedHashMap with a single key & value
+pub fn linked_hash_map<K, V>(key: K, value: V) -> linked_hash_map::LinkedHashMap<K, V>
+where
+    K: Hash + Eq + Clone,
+{
+    let mut linked_hash_map = linked_hash_map::LinkedHashMap::new();
+    linked_hash_map.insert(key, value);
+    linked_hash_map
 }
 
 /// Construct a saphyr::Yaml scalar value from a &str
