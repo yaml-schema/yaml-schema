@@ -178,7 +178,7 @@ impl Validator for ArraySchema {
 
 #[cfg(test)]
 mod tests {
-    use crate::loader::Constructor;
+    use crate::loader::FromSaphyrMapping;
     use crate::NumberSchema;
     use crate::Schema;
     use crate::StringSchema;
@@ -242,7 +242,7 @@ mod tests {
         let s_docs = saphyr::Yaml::load_from_str(schema_string).unwrap();
         let first_schema = s_docs.first().unwrap();
         if let saphyr::Yaml::Mapping(array_schema_hash) = first_schema {
-            let schema = ArraySchema::construct(array_schema_hash).unwrap();
+            let schema = ArraySchema::from_mapping(array_schema_hash).unwrap();
             let docs = saphyr::MarkedYaml::load_from_str(yaml_string).unwrap();
             let value = docs.first().unwrap();
             let context = crate::Context::default();

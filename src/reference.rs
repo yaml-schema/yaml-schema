@@ -1,6 +1,6 @@
 /// A RefSchema is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
-use crate::loader::Constructor;
+use crate::loader::FromSaphyrMapping;
 use crate::utils::saphyr_yaml_string;
 use crate::Result;
 
@@ -26,8 +26,8 @@ impl Reference {
     }
 }
 
-impl Constructor<Reference> for Reference {
-    fn construct(hash: &saphyr::Mapping) -> Result<Reference> {
+impl FromSaphyrMapping<Reference> for Reference {
+    fn from_mapping(hash: &saphyr::Mapping) -> Result<Reference> {
         let ref_key = saphyr_yaml_string("$ref");
         if !hash.contains_key(&ref_key) {
             return Err(generic_error!("Expected a $ref key, but got: {:#?}", hash));
@@ -67,7 +67,7 @@ mod tests {
             saphyr_yaml_string("$ref"),
             saphyr_yaml_string("#/$defs/name"),
         );
-        let reference = Reference::construct(&hash).unwrap();
+        let reference = Reference::from_mapping(&hash).unwrap();
         println!("reference: {reference:#?}");
         assert_eq!("name", reference.ref_name);
     }

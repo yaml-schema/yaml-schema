@@ -132,7 +132,7 @@ impl RootLoader {
                                         yaml_to_string(key, "key must be a string")
                                     {
                                         if let saphyr::Yaml::Mapping(mapping) = value {
-                                            let schema = YamlSchema::construct(mapping)?;
+                                            let schema = YamlSchema::from_mapping(mapping)?;
                                             defs.insert(key_string, schema);
                                         } else {
                                             return Err(generic_error!(
@@ -170,7 +170,7 @@ impl RootLoader {
                 _ => return Err(expected_scalar!("Expected scalar key, but got: {:#?}", key)),
             }
         }
-        self.schema = Some(YamlSchema::construct(&data)?);
+        self.schema = Some(YamlSchema::from_mapping(&data)?);
         Ok(())
     }
 }
@@ -201,29 +201,29 @@ const ONE_OF: saphyr::Yaml = saphyr_yaml_string("oneOf");
 /// "not" key
 const NOT: saphyr::Yaml = saphyr_yaml_string("not");
 
-impl Constructor<Option<Schema>> for Schema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<Option<Schema>> {
+impl FromSaphyrMapping<Option<Schema>> for Schema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<Option<Schema>> {
         if mapping.is_empty() {
             Ok(None)
         } else if mapping.contains_key(&TYPE) {
-            match TypedSchema::construct(mapping) {
+            match TypedSchema::from_mapping(mapping) {
                 Ok(typed_schema) => Ok(Some(typed_schema.into())),
                 Err(e) => Err(e),
             }
         } else if mapping.contains_key(&ENUM) {
-            let enum_schema = EnumSchema::construct(mapping)?;
+            let enum_schema = EnumSchema::from_mapping(mapping)?;
             return Ok(Some(Schema::Enum(enum_schema)));
         } else if mapping.contains_key(&CONST) {
-            let const_schema = ConstSchema::construct(mapping)?;
+            let const_schema = ConstSchema::from_mapping(mapping)?;
             return Ok(Some(Schema::Const(const_schema)));
         } else if mapping.contains_key(&ANY_OF) {
-            let any_of_schema = AnyOfSchema::construct(mapping)?;
+            let any_of_schema = AnyOfSchema::from_mapping(mapping)?;
             return Ok(Some(Schema::AnyOf(any_of_schema)));
         } else if mapping.contains_key(&ONE_OF) {
-            let one_of_schema = OneOfSchema::construct(mapping)?;
+            let one_of_schema = OneOfSchema::from_mapping(mapping)?;
             return Ok(Some(Schema::OneOf(one_of_schema)));
         } else if mapping.contains_key(&NOT) {
-            let not_schema = NotSchema::construct(mapping)?;
+            let not_schema = NotSchema::from_mapping(mapping)?;
             return Ok(Some(Schema::Not(not_schema)));
         } else {
             return Err(generic_error!(
@@ -234,8 +234,8 @@ impl Constructor<Option<Schema>> for Schema {
     }
 }
 
-impl Constructor<YamlSchema> for YamlSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<YamlSchema> {
+impl FromSaphyrMapping<YamlSchema> for YamlSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<YamlSchema> {
         let mut metadata: LinkedHashMap<String, String> = LinkedHashMap::new();
         let mut r#ref: Option<Reference> = None;
         let mut data = saphyr::Mapping::new();
@@ -257,7 +257,7 @@ impl Constructor<YamlSchema> for YamlSchema {
                             );
                         }
                         "$ref" => {
-                            r#ref = Some(Reference::construct(mapping)?);
+                            r#ref = Some(Reference::from_mapping(mapping)?);
                             // TODO: What?
                         }
                         "title" => {
@@ -282,7 +282,7 @@ impl Constructor<YamlSchema> for YamlSchema {
                 }
             }
         }
-        let schema = Schema::construct(&data)?;
+        let schema = Schema::from_mapping(&data)?;
         Ok(YamlSchema {
             metadata: if metadata.is_empty() {
                 None
@@ -295,8 +295,8 @@ impl Constructor<YamlSchema> for YamlSchema {
     }
 }
 
-impl Constructor<TypedSchema> for TypedSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<TypedSchema> {
+impl FromSaphyrMapping<TypedSchema> for TypedSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<TypedSchema> {
         let type_key = saphyr_yaml_string("type");
         if mapping.contains_key(&type_key) {
             let value = mapping.get(&type_key).unwrap();
@@ -304,24 +304,24 @@ impl Constructor<TypedSchema> for TypedSchema {
                 saphyr::Yaml::Value(scalar) => match scalar {
                     saphyr::Scalar::String(s) => match s.as_ref() {
                         "array" => {
-                            let array_schema = ArraySchema::construct(mapping)?;
+                            let array_schema = ArraySchema::from_mapping(mapping)?;
                             Ok(TypedSchema::Array(array_schema))
                         }
                         "boolean" => Ok(TypedSchema::BooleanSchema),
                         "integer" => {
-                            let integer_schema = IntegerSchema::construct(mapping)?;
+                            let integer_schema = IntegerSchema::from_mapping(mapping)?;
                             Ok(TypedSchema::Integer(integer_schema))
                         }
                         "number" => {
-                            let number_schema = NumberSchema::construct(mapping)?;
+                            let number_schema = NumberSchema::from_mapping(mapping)?;
                             Ok(TypedSchema::Number(number_schema))
                         }
                         "object" => {
-                            let object_schema = ObjectSchema::construct(mapping)?;
+                            let object_schema = ObjectSchema::from_mapping(mapping)?;
                             Ok(TypedSchema::Object(Box::new(object_schema)))
                         }
                         "string" => {
-                            let string_schema = StringSchema::construct(mapping)?;
+                            let string_schema = StringSchema::from_mapping(mapping)?;
                             Ok(TypedSchema::String(string_schema))
                         }
                         s => Err(unsupported_type!(s.to_string())),
@@ -344,8 +344,8 @@ impl Constructor<TypedSchema> for TypedSchema {
 }
 
 /// A Constructor constructs an object (a schema) from a saphyr::Mapping
-pub trait Constructor<T> {
-    fn construct(mapping: &saphyr::Mapping) -> Result<T>;
+pub trait FromSaphyrMapping<T> {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<T>;
 }
 
 fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
@@ -360,15 +360,15 @@ fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
     ))
 }
 
-impl Constructor<ArraySchema> for ArraySchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<ArraySchema> {
+impl FromSaphyrMapping<ArraySchema> for ArraySchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<ArraySchema> {
         let mut array_schema = ArraySchema::default();
         for (key, value) in mapping.iter() {
             let s = load_string_value(key)?;
             match s.as_str() {
                 "contains" => {
                     if let saphyr::Yaml::Mapping(mapping) = value {
-                        let yaml_schema = YamlSchema::construct(mapping)?;
+                        let yaml_schema = YamlSchema::from_mapping(mapping)?;
                         array_schema.contains = Some(Box::new(yaml_schema));
                     } else {
                         return Err(generic_error!(
@@ -398,8 +398,8 @@ impl Constructor<ArraySchema> for ArraySchema {
     }
 }
 
-impl Constructor<ConstSchema> for ConstSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<ConstSchema> {
+impl FromSaphyrMapping<ConstSchema> for ConstSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<ConstSchema> {
         let value = mapping.get(&CONST).unwrap();
         match value {
             saphyr::Yaml::Value(scalar) => match scalar {
@@ -425,8 +425,8 @@ impl Constructor<ConstSchema> for ConstSchema {
     }
 }
 
-impl Constructor<IntegerSchema> for IntegerSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<IntegerSchema> {
+impl FromSaphyrMapping<IntegerSchema> for IntegerSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<IntegerSchema> {
         let mut integer_schema = IntegerSchema::default();
         for (key, value) in mapping.iter() {
             if let saphyr::Yaml::Value(scalar) = key {
@@ -470,8 +470,8 @@ impl Constructor<IntegerSchema> for IntegerSchema {
     }
 }
 
-impl Constructor<EnumSchema> for EnumSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<EnumSchema> {
+impl FromSaphyrMapping<EnumSchema> for EnumSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<EnumSchema> {
         if let Some(value) = mapping.get(&ENUM) {
             if let saphyr::Yaml::Sequence(values) = value {
                 let enum_values = load_enum_values(values)?;
@@ -492,8 +492,8 @@ impl Constructor<EnumSchema> for EnumSchema {
 
 const PATTERN: saphyr::Yaml = saphyr_yaml_string("pattern");
 
-impl Constructor<ObjectSchema> for ObjectSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<ObjectSchema> {
+impl FromSaphyrMapping<ObjectSchema> for ObjectSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<ObjectSchema> {
         let mut object_schema = ObjectSchema::default();
         for (key, value) in mapping.iter() {
             if let saphyr::Yaml::Value(scalar) = key {
@@ -598,7 +598,7 @@ fn load_array_of_schemas(value: &saphyr::Yaml) -> Result<Vec<YamlSchema>> {
         values
             .iter()
             .map(|v| match v {
-                saphyr::Yaml::Mapping(mapping) => YamlSchema::construct(mapping),
+                saphyr::Yaml::Mapping(mapping) => YamlSchema::from_mapping(mapping),
                 _ => Err(generic_error!("Expected a mapping, but got: {:?}", v)),
             })
             .collect::<Result<Vec<YamlSchema>>>()
@@ -607,8 +607,8 @@ fn load_array_of_schemas(value: &saphyr::Yaml) -> Result<Vec<YamlSchema>> {
     }
 }
 
-impl Constructor<AnyOfSchema> for AnyOfSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<AnyOfSchema> {
+impl FromSaphyrMapping<AnyOfSchema> for AnyOfSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<AnyOfSchema> {
         let mut any_of_schema = AnyOfSchema::default();
         for (key, value) in mapping.iter() {
             if let Ok(key) = load_string_value(key) {
@@ -624,8 +624,8 @@ impl Constructor<AnyOfSchema> for AnyOfSchema {
     }
 }
 
-impl Constructor<OneOfSchema> for OneOfSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<OneOfSchema> {
+impl FromSaphyrMapping<OneOfSchema> for OneOfSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<OneOfSchema> {
         let mut one_of_schema = OneOfSchema::default();
         for (key, value) in mapping.iter() {
             if let Ok(key) = load_string_value(key) {
@@ -647,10 +647,10 @@ fn load_properties(value: &saphyr::Yaml) -> Result<LinkedHashMap<String, YamlSch
         for (key, value) in mapping.iter() {
             if let Ok(key) = load_string_value(key) {
                 if key.as_str() == "$ref" {
-                    let reference = Reference::construct(mapping)?;
+                    let reference = Reference::from_mapping(mapping)?;
                     properties.insert(key.clone(), YamlSchema::builder().r#ref(reference).build());
                 } else if let saphyr::Yaml::Mapping(mapping) = value {
-                    let schema = YamlSchema::construct(mapping)?;
+                    let schema = YamlSchema::from_mapping(mapping)?;
                     properties.insert(key.clone(), schema);
                 } else {
                     return Err(generic_error!(
@@ -687,9 +687,11 @@ fn load_additional_properties(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema>
         saphyr::Yaml::Mapping(mapping) => {
             let ref_key = saphyr_yaml_string("$ref");
             if mapping.contains_key(&ref_key) {
-                Ok(BoolOrTypedSchema::Reference(Reference::construct(mapping)?))
+                Ok(BoolOrTypedSchema::Reference(Reference::from_mapping(
+                    mapping,
+                )?))
             } else {
-                let schema = TypedSchema::construct(mapping)?;
+                let schema = TypedSchema::from_mapping(mapping)?;
                 Ok(BoolOrTypedSchema::TypedSchema(Box::new(schema)))
             }
         }
@@ -700,15 +702,15 @@ fn load_additional_properties(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema>
     }
 }
 
-impl Constructor<NotSchema> for NotSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<NotSchema> {
+impl FromSaphyrMapping<NotSchema> for NotSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<NotSchema> {
         let mut not_schema = NotSchema::default();
         for (key, value) in mapping.iter() {
             if let Ok(key) = load_string_value(key) {
                 match key.as_str() {
                     "not" => {
                         if let saphyr::Yaml::Mapping(mapping) = value {
-                            let schema = YamlSchema::construct(mapping)?;
+                            let schema = YamlSchema::from_mapping(mapping)?;
                             not_schema.not = Box::new(schema);
                         } else {
                             return Err(generic_error!("Expected a mapping, but got: {:#?}", key));
@@ -745,8 +747,8 @@ fn load_number(value: &saphyr::Yaml) -> Result<Number> {
     }
 }
 
-impl Constructor<NumberSchema> for NumberSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<NumberSchema> {
+impl FromSaphyrMapping<NumberSchema> for NumberSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<NumberSchema> {
         let mut number_schema = NumberSchema::default();
         for (key, value) in mapping.iter() {
             if let Ok(key) = load_string_value(key) {
@@ -786,8 +788,8 @@ impl Constructor<NumberSchema> for NumberSchema {
     }
 }
 
-impl Constructor<StringSchema> for StringSchema {
-    fn construct(mapping: &saphyr::Mapping) -> Result<StringSchema> {
+impl FromSaphyrMapping<StringSchema> for StringSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<StringSchema> {
         let mut string_schema = StringSchema::default();
         for (key, value) in mapping.iter() {
             if let Ok(key) = load_string_value(key) {
@@ -869,10 +871,10 @@ fn load_array_items(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
         }
         saphyr::Yaml::Mapping(mapping) => {
             if mapping.contains_key(&saphyr_yaml_string("$ref")) {
-                let reference = Reference::construct(mapping);
+                let reference = Reference::from_mapping(mapping);
                 Ok(BoolOrTypedSchema::Reference(reference?))
             } else if mapping.contains_key(&saphyr_yaml_string("type")) {
-                let typed_schema = TypedSchema::construct(mapping)?;
+                let typed_schema = TypedSchema::from_mapping(mapping)?;
                 Ok(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema)))
             } else {
                 Err(generic_error!(
@@ -1043,7 +1045,7 @@ mod tests {
             saphyr_yaml_string("items"),
             saphyr::Yaml::Value(saphyr::Scalar::Boolean(true)),
         );
-        let array_schema = ArraySchema::construct(&mapping).unwrap();
+        let array_schema = ArraySchema::from_mapping(&mapping).unwrap();
         assert_eq!(
             array_schema,
             ArraySchema {
