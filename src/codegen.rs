@@ -18,8 +18,6 @@ mod tests {
     };
     use hashlink::LinkedHashMap;
 
-    use std::collections::HashMap;
-
     use std::hash::Hash;
 
     fn vec_of_string(items: Vec<&str>) -> Vec<String> {
