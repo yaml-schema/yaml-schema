@@ -23,6 +23,8 @@ pub enum Error {
     ExpectedScalar(String),
     #[error("Fail fast signal")]
     FailFast,
+    #[error("Invalid regular expression: {0}")]
+    InvalidRegularExpression(String),
 }
 
 #[macro_export]
