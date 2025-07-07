@@ -1,6 +1,6 @@
 use crate::loader::{
     load_array_of_schemas, load_array_of_schemas_marked, load_integer, load_integer_marked,
-    load_string_value, yaml_to_string, FromAnnotatedMapping, FromSaphyrMapping,
+    load_string_value, yaml_to_string, FromSaphyrMapping,
 };
 use crate::utils::{format_marker, hash_map, linked_hash_map, saphyr_yaml_string};
 use crate::Result;
@@ -11,7 +11,7 @@ use crate::{Reference, YamlSchema};
 use hashlink::LinkedHashMap;
 use log::debug;
 use regex::Regex;
-use saphyr::{LoadableYamlNode, MarkedYaml, Scalar, YamlData};
+use saphyr::{MarkedYaml, Scalar, YamlData};
 use std::collections::HashMap;
 
 const PATTERN: saphyr::Yaml = saphyr_yaml_string("pattern");
@@ -40,7 +40,7 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
     type Error = crate::Error;
 
     fn try_from(marked_yaml: &MarkedYaml<'_>) -> Result<Self> {
-        debug!("[ObjectSchema]: TryFrom {:?}", marked_yaml);
+        debug!("[ObjectSchema]: TryFrom {marked_yaml:?}");
         if let YamlData::Mapping(mapping) = &marked_yaml.data {
             let mut object_schema = ObjectSchema::default();
             for (key, value) in mapping.iter() {
@@ -268,7 +268,6 @@ impl FromSaphyrMapping<ObjectSchema> for ObjectSchema {
                             } else {
                                 // TODO! When we can filter out the root schema
                                 // unimplemented!("Unsupported key for type: object: {}", key);
-                                ()
                             }
                         }
                     }
@@ -574,14 +573,14 @@ office_number: 201",
         let yaml = yaml_docs.first().unwrap();
 
         let context = crate::Context::default();
-        let result = schema.validate(&context, &yaml);
+        let result = schema.validate(&context, yaml);
         if result.is_err() {
             println!("{:?}", result.as_ref().unwrap());
             panic!("Validation failed: {:?}", result.as_ref().unwrap());
         }
         assert!(context.has_errors());
         for error in context.errors.as_ref().borrow().iter() {
-            println!("{:?}", error);
+            println!("{error:?}");
         }
     }
 }

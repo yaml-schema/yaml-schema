@@ -1,5 +1,5 @@
-use crate::Validator;
 use crate::Result;
+use crate::Validator;
 /// The schemas defined in the YAML schema language
 use log::debug;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};

@@ -476,16 +476,6 @@ pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> 
     }
 }
 
-fn scalar_to_string(scalar: &saphyr::Scalar) -> String {
-    match scalar {
-        Scalar::String(s) => s.to_string(),
-        Scalar::Integer(i) => i.to_string(),
-        Scalar::FloatingPoint(f) => f.to_string(),
-        Scalar::Boolean(b) => b.to_string(),
-        Scalar::Null => "null".to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use regex::Regex;
