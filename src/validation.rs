@@ -11,7 +11,7 @@ use crate::Result;
 use crate::Schema;
 use crate::YamlSchema;
 pub use context::Context;
-use log::debug;
+use log::{debug, error};
 use saphyr::Marker;
 
 /// A trait for validating a sahpyr::Yaml value against a schema
@@ -94,10 +94,12 @@ impl Validator for YamlSchema {
         if let Some(reference) = &self.r#ref {
             debug!("[YamlSchema] Reference found: {reference}");
             let ref_name = &reference.ref_name;
-            if let Some(root_schema) = &context.root_schema {
+            if let Some(root_schema) = context.root_schema {
                 if let Some(schema) = root_schema.get_def(ref_name) {
+                    debug!("[YamlSchema] Found {ref_name}: {schema}");
                     schema.validate(context, value)?;
                 } else {
+                    error!("[YamlSchema] Cannot find definition: {ref_name}");
                     context.add_error(value, format!("Schema {ref_name} not found"));
                 }
             } else {

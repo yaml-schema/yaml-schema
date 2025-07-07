@@ -1,6 +1,6 @@
 // A module to contain object type validation logic
 use hashlink::LinkedHashMap;
-use log::debug;
+use log::{debug, error};
 
 use crate::schemas::BoolOrTypedSchema;
 use crate::schemas::ObjectSchema;
@@ -19,7 +19,12 @@ impl Validator for ObjectSchema {
         if let saphyr::YamlData::Mapping(mapping) = data {
             self.validate_object_mapping(context, value, mapping)
         } else {
-            context.add_error(value, format!("Expected an object, but got: {data:#?}"));
+            let error_message = format!(
+                "[ObjectSchema] {} Expected an object, but got: {data:#?}",
+                format_marker(&value.span.start)
+            );
+            error!("{}", error_message);
+            context.add_error(value, error_message);
             Ok(())
         }
     }

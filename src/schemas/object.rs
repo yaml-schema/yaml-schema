@@ -9,8 +9,9 @@ use crate::{AnyOfSchema, StringSchema};
 use crate::{BoolOrTypedSchema, Error};
 use crate::{Reference, YamlSchema};
 use hashlink::LinkedHashMap;
+use log::debug;
 use regex::Regex;
-use saphyr::{MarkedYaml, Scalar, YamlData};
+use saphyr::{LoadableYamlNode, MarkedYaml, Scalar, YamlData};
 use std::collections::HashMap;
 
 const PATTERN: saphyr::Yaml = saphyr_yaml_string("pattern");
@@ -38,12 +39,13 @@ impl ObjectSchema {
 impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
     type Error = crate::Error;
 
-    fn try_from(value: &MarkedYaml<'_>) -> Result<Self> {
-        if let YamlData::Mapping(mapping) = &value.data {
+    fn try_from(marked_yaml: &MarkedYaml<'_>) -> Result<Self> {
+        debug!("[ObjectSchema]: TryFrom {:?}", marked_yaml);
+        if let YamlData::Mapping(mapping) = &marked_yaml.data {
             let mut object_schema = ObjectSchema::default();
             for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(key)) = &key.data {
-                    match key.as_ref() {
+                if let YamlData::Value(Scalar::String(s)) = &key.data {
+                    match s.as_ref() {
                         "properties" => {
                             let properties = load_properties_marked(value)?;
                             object_schema.properties = Some(properties);
@@ -135,8 +137,8 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
                             }
                         }
                         _ => {
-                            if key.starts_with("$") {
-                                if let YamlData::Value(Scalar::String(value)) = &value.data {
+                            if s.starts_with("$") {
+                                if let YamlData::Value(Scalar::String(value)) = &key.data {
                                     if object_schema.metadata.is_none() {
                                         object_schema.metadata = Some(HashMap::new());
                                     }
@@ -144,7 +146,7 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
                                         .metadata
                                         .as_mut()
                                         .unwrap()
-                                        .insert(key.to_string(), value.to_string());
+                                        .insert(s.to_string(), value.to_string());
                                 } else {
                                     return Err(generic_error!(
                                         "{} Expected a string value but got {:?}",
@@ -153,7 +155,7 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
                                     ));
                                 }
                             } else {
-                                unimplemented!("Unsupported key for type: object: {}", key);
+                                unimplemented!("Unsupported key for type: object: {}", s);
                             }
                         }
                     }
@@ -168,9 +170,9 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
             Ok(object_schema)
         } else {
             Err(generic_error!(
-                "{} Expected mapping, got {:?}",
-                format_marker(&value.span.start),
-                value
+                "[ObjecSchema] {} Expected mapping, got {:?}",
+                format_marker(&marked_yaml.span.start),
+                marked_yaml
             ))
         }
     }
@@ -264,7 +266,9 @@ impl FromSaphyrMapping<ObjectSchema> for ObjectSchema {
                                     )?,
                                 );
                             } else {
-                                unimplemented!("Unsupported key for type: object: {}", key);
+                                // TODO! When we can filter out the root schema
+                                // unimplemented!("Unsupported key for type: object: {}", key);
+                                ()
                             }
                         }
                     }
@@ -312,7 +316,7 @@ fn load_properties_marked(value: &MarkedYaml) -> Result<LinkedHashMap<String, Ya
     if let YamlData::Mapping(mapping) = &value.data {
         let mut properties = LinkedHashMap::new();
         for (key, value) in mapping.iter() {
-            if let YamlData::Value(Scalar::String(key)) = &value.data {
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
                 if key.as_ref() == "$ref" {
                     let reference: Reference = value.try_into()?;
                     properties.insert(key.to_string(), YamlSchema::reference(reference));
@@ -386,7 +390,7 @@ fn load_additional_properties_marked(value: &MarkedYaml) -> Result<BoolOrTypedSc
             if mapping.contains_key(&ref_key) {
                 Ok(BoolOrTypedSchema::Reference(value.try_into()?))
             } else {
-                let schema: TypedSchema = TypedSchema::from_annotated_mapping(mapping)?;
+                let schema: TypedSchema = value.try_into()?;
                 Ok(BoolOrTypedSchema::TypedSchema(Box::new(schema)))
             }
         }
@@ -505,6 +509,7 @@ impl ObjectSchemaBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Validator;
 
     #[test]
     fn test_builder_default() {
@@ -534,5 +539,49 @@ mod tests {
             *schema.properties.unwrap().get("type").unwrap(),
             YamlSchema::ref_str("schema_type")
         );
+    }
+
+    #[test]
+    fn test_additional_properties_as_schema() {
+        let docs = MarkedYaml::load_from_str(
+            "
+      type: object
+      properties:
+        number:
+          type: number
+        street_name:
+          type: string
+        street_type:
+          enum: [Street, Avenue, Boulevard]
+      additionalProperties:
+        type: string",
+        )
+        .unwrap();
+
+        let doc = docs.first().unwrap();
+
+        let schema: ObjectSchema = doc.try_into().unwrap();
+
+        let yaml_docs = MarkedYaml::load_from_str(
+            "
+number: 1600
+street_name: Pennsylvania
+street_type: Avenue
+office_number: 201",
+        )
+        .unwrap();
+
+        let yaml = yaml_docs.first().unwrap();
+
+        let context = crate::Context::default();
+        let result = schema.validate(&context, &yaml);
+        if result.is_err() {
+            println!("{:?}", result.as_ref().unwrap());
+            panic!("Validation failed: {:?}", result.as_ref().unwrap());
+        }
+        assert!(context.has_errors());
+        for error in context.errors.as_ref().borrow().iter() {
+            println!("{:?}", error);
+        }
     }
 }

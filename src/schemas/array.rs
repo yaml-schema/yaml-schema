@@ -307,7 +307,8 @@ mod tests {
 
     #[test]
     fn test_array_schema_prefix_items_from_yaml() {
-        let schema_string = r#"      type: array
+        let schema_string = "
+      type: array
       prefixItems:
         - type: number
         - type: string
@@ -322,7 +323,7 @@ mod tests {
           - SE
       items:
         type: string
-        "#;
+";
 
         let yaml_string = r#"
         - 1600
@@ -345,6 +346,50 @@ mod tests {
             }
         } else {
             panic!("Expected first_schema to be a Mapping, but got {first_schema:?}");
+        }
+    }
+
+    #[test]
+    fn array_schema_prefix_items_with_additional_items() {
+        let schema_string = "
+      type: array
+      prefixItems:
+        - type: number
+        - type: string
+        - enum:
+          - Street
+          - Avenue
+          - Boulevard
+        - enum:
+          - NW
+          - NE
+          - SW
+          - SE
+      items:
+        type: string
+";
+
+        let yaml_string = r#"
+        - 1600
+        - Pennsylvania
+        - Avenue
+        - NW
+        - 20500
+        "#;
+
+        let docs = MarkedYaml::load_from_str(schema_string).unwrap();
+        let first_doc = docs.first().unwrap();
+        if let YamlData::Mapping(mapping) = &first_doc.data {
+            let schema: ArraySchema = ArraySchema::from_annotated_mapping(mapping).unwrap();
+            let docs = saphyr::MarkedYaml::load_from_str(yaml_string).unwrap();
+            let value = docs.first().unwrap();
+            let context = crate::Context::default();
+            let result = schema.validate(&context, value);
+            if result.is_err() {
+                println!("{}", result.unwrap_err());
+            }
+        } else {
+            panic!("Expected first_doc to be a Mapping, but got {first_doc:?}");
         }
     }
 

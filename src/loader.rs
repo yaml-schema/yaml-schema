@@ -66,7 +66,7 @@ pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
         _ => {
             if doc.data.is_mapping() {
                 debug!("Found mapping: {doc:?}, trying to load as YamlSchema");
-                loader.set_schema(doc.try_into()?);
+                loader.load_root_schema(doc)?;
             } else {
                 return Err(generic_error!("Don't know how to load: {:?}", doc));
             }
@@ -103,15 +103,13 @@ impl RootLoader {
         self.schema = Some(schema);
     }
 
-    fn load_root_schema(&mut self, mapping: &AnnotatedMapping<MarkedYaml>) -> Result<()> {
+    fn load_root_schema(&mut self, marked_yaml: &MarkedYaml<'_>) -> Result<()> {
         // We can't remove the annotations, so we simply construct a new AnnotatedMapping containing
         // the 'data' nodes only
-        let mut data = AnnotatedMapping::new();
-
-        for (key, value) in mapping.iter() {
-            match &key.data {
-                YamlData::Value(scalar) => match scalar {
-                    Scalar::String(s) => match s.as_ref() {
+        if let YamlData::Mapping(mapping) = &marked_yaml.data {
+            for (key, value) in mapping.iter() {
+                match &key.data {
+                    YamlData::Value(Scalar::String(s)) => match s.as_ref() {
                         "$id" => {
                             self.id = Some(marked_yaml_to_string(value, "$id must be a string")?)
                         }
@@ -136,8 +134,8 @@ impl RootLoader {
                                     if let Ok(key_string) =
                                         marked_yaml_to_string(key, "key must be a string")
                                     {
-                                        if let YamlData::Mapping(mapping) = &value.data {
-                                            let schema: YamlSchema = mapping.try_into()?;
+                                        if value.is_mapping() {
+                                            let schema: YamlSchema = value.try_into()?;
                                             defs.insert(key_string, schema);
                                         } else {
                                             return Err(generic_error!(
@@ -165,24 +163,24 @@ impl RootLoader {
                                 ));
                             }
                         }
-                        _ => {
-                            data.insert(key.clone(), value.clone());
-                        }
+                        _ => (),
                     },
                     _ => {
-                        data.insert(key.clone(), value.clone());
+                        return Err(expected_scalar!(
+                            "{} Expected scalar key, but got: {:#?}",
+                            format_marker(&key.span.start),
+                            key
+                        ))
                     }
-                },
-                _ => {
-                    return Err(expected_scalar!(
-                        "{} Expected scalar key, but got: {:#?}",
-                        format_marker(&key.span.start),
-                        key
-                    ))
                 }
             }
+        } else {
+            return Err(generic_error!(
+                "[RootSchema] Expected a mapping, but got: {:#?}",
+                marked_yaml
+            ));
         }
-        let yaml_schema: YamlSchema = (&data).try_into()?;
+        let yaml_schema: YamlSchema = marked_yaml.try_into()?;
         self.schema = Some(yaml_schema);
         Ok(())
     }
@@ -320,15 +318,14 @@ pub trait FromAnnotatedMapping<T> {
 }
 
 pub fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
-    // When RustRover stops complaining about let chains (Rust 1.88), can rewrite the ff.
     if let saphyr::Yaml::Value(Scalar::String(s)) = value {
-        return Ok(s.to_string());
+        Ok(s.to_string())
+    } else {
+        Err(expected_scalar!(
+            "Expected a string value, but got: {:?}",
+            value
+        ))
     }
-
-    Err(expected_scalar!(
-        "Expected a string value, but got: {:?}",
-        value
-    ))
 }
 
 pub fn yaml_to_string<S: Into<String> + Copy>(yaml: &saphyr::Yaml, msg: S) -> Result<String> {
@@ -463,7 +460,7 @@ pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> 
                 let reference = value.try_into()?;
                 Ok(BoolOrTypedSchema::Reference(reference))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
-                let typed_schema = TypedSchema::from_annotated_mapping(mapping)?;
+                let typed_schema: TypedSchema = value.try_into()?;
                 Ok(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema)))
             } else {
                 Err(generic_error!(

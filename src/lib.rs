@@ -380,9 +380,9 @@ impl TryFrom<&MarkedYaml<'_>> for YamlSchema {
                         }
                         "$ref" => match marked_yaml.try_into() {
                             Ok(r) => _ = reference.replace(r),
-                            Err(e) => {
+                            Err(_) => {
                                 return Err(generic_error!(
-                                    "Could not load as Reference: {:?}",
+                                    "[YamlSchema] Could not load as Reference: {:?}",
                                     marked_yaml
                                 ))
                             }

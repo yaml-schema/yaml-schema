@@ -102,14 +102,16 @@ impl TryFrom<&MarkedYaml<'_>> for StringSchema {
                                 ));
                             }
                         }
-                        _ => unimplemented!("Unsupported key for type: string: {}", key),
+                        // TODO: until we can create a markedyaml without the extra keys
+                        // _ => unimplemented!("Unsupported key for type: string: {}", key),
+                        _ => (),
                     }
                 }
             }
             Ok(string_schema)
         } else {
             Err(generic_error!(
-                "{} expected mapping, got {:?}",
+                "[StringSchema] {} expected mapping, got {:?}",
                 format_marker(&value.span.start),
                 value
             ))
