@@ -509,6 +509,7 @@ impl ObjectSchemaBuilder {
 mod tests {
     use super::*;
     use crate::Validator;
+    use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_builder_default() {
