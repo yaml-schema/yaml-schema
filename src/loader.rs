@@ -4,18 +4,15 @@ use std::fs;
 use std::rc::Rc;
 
 use hashlink::LinkedHashMap;
-use regex::Regex;
+use log::debug;
 use saphyr::{AnnotatedMapping, LoadableYamlNode, MarkedYaml, Scalar, YamlData};
 
 use crate::utils::{format_marker, saphyr_yaml_string, try_unwrap_saphyr_scalar};
 use crate::AnyOfSchema;
-use crate::ArraySchema;
 use crate::BoolOrTypedSchema;
 use crate::ConstSchema;
-use crate::ConstValue;
 use crate::EnumSchema;
 use crate::Error;
-use crate::IntegerSchema;
 use crate::NotSchema;
 use crate::Number;
 use crate::OneOfSchema;
@@ -23,7 +20,6 @@ use crate::Reference;
 use crate::Result;
 use crate::RootSchema;
 use crate::Schema;
-use crate::StringSchema;
 use crate::TypedSchema;
 use crate::YamlSchema;
 
@@ -67,17 +63,22 @@ pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
                 ))
             }
         },
-        YamlData::Mapping(mapping) => {
-            loader.load_root_schema(mapping)?;
+        _ => {
+            if doc.data.is_mapping() {
+                debug!("Found mapping: {doc:?}, trying to load as YamlSchema");
+                loader.set_schema(doc.try_into()?);
+            } else {
+                return Err(generic_error!("Don't know how to load: {:?}", doc));
+            }
         }
-        _ => return Err(generic_error!("Don't know how to load: {:?}", doc)),
     }
     Ok(loader.into()) // See From<Loader> for RootSchema below
 }
 
 pub fn load_from_str(s: &str) -> Result<RootSchema> {
     let docs = MarkedYaml::load_from_str(s)?;
-    Ok(load_from_doc(docs.first().unwrap()).unwrap())
+    let first_doc = docs.first().unwrap();
+    Ok(load_from_doc(first_doc).unwrap())
 }
 
 #[derive(Debug, Default)]
@@ -181,7 +182,8 @@ impl RootLoader {
                 }
             }
         }
-        self.schema = Some((&data).try_into()?);
+        let yaml_schema: YamlSchema = (&data).try_into()?;
+        self.schema = Some(yaml_schema);
         Ok(())
     }
 }
@@ -238,7 +240,7 @@ impl FromSaphyrMapping<Option<Schema>> for Schema {
             return Ok(Some(Schema::Not(not_schema)));
         } else {
             return Err(generic_error!(
-                "Don't know how to construct schema: {:#?}",
+                "(FromSaphyrMapping) Don't know how to construct schema: {:#?}",
                 mapping
             ));
         }
@@ -359,9 +361,12 @@ pub fn load_array_of_schemas_marked(value: &MarkedYaml) -> Result<Vec<YamlSchema
     if let YamlData::Sequence(values) = &value.data {
         values
             .iter()
-            .map(|v| match &v.data {
-                YamlData::Mapping(mapping) => mapping.try_into(),
-                _ => Err(generic_error!("Expected a mapping, but got: {:?}", v)),
+            .map(|v| {
+                if v.is_mapping() {
+                    v.try_into()
+                } else {
+                    Err(generic_error!("Expected a mapping, but got: {:?}", v))
+                }
             })
             .collect::<Result<Vec<YamlSchema>>>()
     } else {
@@ -487,6 +492,11 @@ fn scalar_to_string(scalar: &saphyr::Scalar) -> String {
 #[cfg(test)]
 mod tests {
     use regex::Regex;
+
+    use crate::ArraySchema;
+    use crate::ConstValue;
+    use crate::IntegerSchema;
+    use crate::StringSchema;
 
     use super::*;
 

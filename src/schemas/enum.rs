@@ -4,8 +4,8 @@ use crate::utils::{format_vec, saphyr_yaml_string};
 use crate::Error;
 use crate::Result;
 use crate::Validator;
-use crate::{loader, ConstValue};
-use crate::{ConstSchema, Context};
+use crate::ConstValue;
+use crate::Context;
 use log::debug;
 use saphyr::{AnnotatedMapping, AnnotatedSequence, MarkedYaml};
 

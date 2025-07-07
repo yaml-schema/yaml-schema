@@ -360,62 +360,68 @@ impl TryFrom<&MarkedYaml<'_>> for YamlSchema {
     fn try_from(marked_yaml: &MarkedYaml<'_>) -> Result<Self> {
         if let YamlData::Mapping(mapping) = &marked_yaml.data {
             let mut metadata: LinkedHashMap<String, String> = LinkedHashMap::new();
-            let mut r#ref: Option<Reference> = None;
+            let mut reference: Option<Reference> = None;
             let mut data = AnnotatedMapping::new();
 
             for (key, value) in mapping.iter() {
                 match &key.data {
-                    YamlData::Value(Scalar::String(s)) => {
-                        match s.as_ref() {
-                            "$id" => {
-                                metadata.insert(
-                                    s.to_string(),
-                                    marked_yaml_to_string(value, "$id must be a string")?,
-                                );
-                            }
-                            "$schema" => {
-                                metadata.insert(
-                                    s.to_string(),
-                                    marked_yaml_to_string(value, "$schema must be a string")?,
-                                );
-                            }
-                            "$ref" => {
-                                let reference = marked_yaml.try_into()?;
-                                r#ref = Some(reference);
-                                // TODO: What?
-                            }
-                            "title" => {
-                                metadata.insert(
-                                    s.to_string(),
-                                    marked_yaml_to_string(value, "title must be a string")?,
-                                );
-                            }
-                            "description" => {
-                                metadata.insert(
-                                    s.to_string(),
-                                    marked_yaml_to_string(value, "description must be a string")?,
-                                );
-                            }
-                            _ => {
-                                data.insert(key.clone(), value.clone());
-                            }
+                    YamlData::Value(Scalar::String(s)) => match s.as_ref() {
+                        "$id" => {
+                            metadata.insert(
+                                s.to_string(),
+                                marked_yaml_to_string(value, "$id must be a string")?,
+                            );
                         }
-                    }
+                        "$schema" => {
+                            metadata.insert(
+                                s.to_string(),
+                                marked_yaml_to_string(value, "$schema must be a string")?,
+                            );
+                        }
+                        "$ref" => match marked_yaml.try_into() {
+                            Ok(r) => _ = reference.replace(r),
+                            Err(e) => {
+                                return Err(generic_error!(
+                                    "Could not load as Reference: {:?}",
+                                    marked_yaml
+                                ))
+                            }
+                        },
+                        "title" => {
+                            metadata.insert(
+                                s.to_string(),
+                                marked_yaml_to_string(value, "title must be a string")?,
+                            );
+                        }
+                        "description" => {
+                            metadata.insert(
+                                s.to_string(),
+                                marked_yaml_to_string(value, "description must be a string")?,
+                            );
+                        }
+                        _ => {
+                            data.insert(key.clone(), value.clone());
+                        }
+                    },
                     _ => {
                         data.insert(key.clone(), value.clone());
                     }
                 }
             }
-            let schema = Schema::from_annotated_mapping(&data)?;
-            Ok(YamlSchema {
-                metadata: if metadata.is_empty() {
-                    None
-                } else {
-                    Some(metadata)
-                },
-                schema: Some(schema),
-                r#ref,
-            })
+            if let Some(reference) = reference {
+                Ok(YamlSchema::reference(reference))
+            } else {
+                let schema: Schema = marked_yaml.try_into()?;
+                Ok(YamlSchema {
+                    metadata: if metadata.is_empty() {
+                        None
+                    } else {
+                        Some(metadata)
+                    },
+                    schema: Some(schema),
+                    r#ref: None,
+                })
+            }
         } else {
             Err(generic_error!(
                 "{} Expected a mapping, but got: {:?}",
@@ -525,6 +531,47 @@ pub enum Schema {
 impl Schema {
     pub fn object(schema: ObjectSchema) -> Schema {
         Schema::Object(Box::new(schema))
+    }
+}
+
+impl TryFrom<&MarkedYaml<'_>> for Schema {
+    type Error = crate::Error;
+
+    fn try_from(marked_yaml: &MarkedYaml) -> Result<Schema> {
+        if let YamlData::Mapping(mapping) = &marked_yaml.data {
+            if mapping.is_empty() {
+                Err(generic_error!("Empty mapping"))
+            } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
+                let typed_schema: TypedSchema = marked_yaml.try_into()?;
+                Ok(typed_schema.into())
+            } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
+                let enum_schema = EnumSchema::from_annotated_mapping(mapping)?;
+                return Ok(Schema::Enum(enum_schema));
+            } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
+                let const_schema = ConstSchema::from_annotated_mapping(mapping)?;
+                return Ok(Schema::Const(const_schema));
+            } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
+                let any_of_schema = AnyOfSchema::from_annotated_mapping(mapping)?;
+                return Ok(Schema::AnyOf(any_of_schema));
+            } else if mapping.contains_key(&MarkedYaml::value_from_str("oneOf")) {
+                let one_of_schema = marked_yaml.try_into()?;
+                return Ok(Schema::OneOf(one_of_schema));
+            } else if mapping.contains_key(&MarkedYaml::value_from_str("not")) {
+                let not_schema = NotSchema::from_annotated_mapping(mapping)?;
+                return Ok(Schema::Not(not_schema));
+            } else {
+                return Err(generic_error!(
+                    "(Schema) Don't know how to construct schema: {:?}",
+                    mapping
+                ));
+            }
+        } else {
+            Err(generic_error!(
+                "{} expected mapping, got: {:?}",
+                format_marker(&marked_yaml.span.start),
+                marked_yaml
+            ))
+        }
     }
 }
 
@@ -691,13 +738,13 @@ mod tests {
     #[test]
     fn test_scalar_to_constvalue() -> Result<()> {
         let scalars = [
-            saphyr::Scalar::Null,
-            saphyr::Scalar::Boolean(true),
-            saphyr::Scalar::Boolean(false),
-            saphyr::Scalar::Integer(42),
-            saphyr::Scalar::Integer(-1),
-            saphyr::Scalar::FloatingPoint(OrderedFloat::from(3.14)),
-            saphyr::Scalar::String("foo".into()),
+            Scalar::Null,
+            Scalar::Boolean(true),
+            Scalar::Boolean(false),
+            Scalar::Integer(42),
+            Scalar::Integer(-1),
+            Scalar::FloatingPoint(OrderedFloat::from(3.14)),
+            Scalar::String("foo".into()),
         ];
 
         let expected = [
