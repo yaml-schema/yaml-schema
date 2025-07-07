@@ -1,12 +1,13 @@
-use log::debug;
-
-use crate::utils::format_vec;
+use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 use crate::utils::format_yaml_data;
-use crate::ConstValue;
-use crate::Context;
+use crate::utils::{format_vec, saphyr_yaml_string};
 use crate::Error;
 use crate::Result;
 use crate::Validator;
+use crate::{loader, ConstValue};
+use crate::{ConstSchema, Context};
+use log::debug;
+use saphyr::{AnnotatedMapping, AnnotatedSequence, MarkedYaml};
 
 /// An enum schema represents a set of constant values
 #[derive(Debug, Default, PartialEq)]
@@ -18,6 +19,50 @@ impl std::fmt::Display for EnumSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Enum {{ enum: {} }}", format_vec(&self.r#enum))
     }
+}
+
+impl FromSaphyrMapping<EnumSchema> for EnumSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<EnumSchema> {
+        if let Some(value) = mapping.get(&saphyr_yaml_string("enum")) {
+            if let saphyr::Yaml::Sequence(values) = value {
+                let enum_values = values.iter().map(ConstValue::from_saphyr_yaml).collect();
+                Ok(EnumSchema {
+                    r#enum: enum_values,
+                })
+            } else {
+                Err(generic_error!(
+                    "enum: Expected an array, but got: {:#?}",
+                    value
+                ))
+            }
+        } else {
+            Err(generic_error!("No \"enum\" key found!"))
+        }
+    }
+}
+
+impl FromAnnotatedMapping<EnumSchema> for EnumSchema {
+    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<EnumSchema> {
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("enum")) {
+            if let saphyr::YamlData::Sequence(values) = &value.data {
+                let enum_values = load_enum_values(values)?;
+                Ok(EnumSchema {
+                    r#enum: enum_values,
+                })
+            } else {
+                Err(generic_error!(
+                    "enum: Expected an array, but got: {:#?}",
+                    value
+                ))
+            }
+        } else {
+            Err(generic_error!("No \"enum\" key found!"))
+        }
+    }
+}
+
+pub fn load_enum_values(values: &AnnotatedSequence<MarkedYaml>) -> Result<Vec<ConstValue>> {
+    Ok(values.iter().map(|v| v.try_into().unwrap()).collect())
 }
 
 impl Validator for EnumSchema {

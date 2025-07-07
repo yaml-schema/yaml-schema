@@ -1,4 +1,9 @@
+use crate::loader::FromSaphyrMapping;
+use crate::schemas::r#enum::load_enum_values;
+use crate::utils::format_marker;
+use crate::{loader, ConstValue};
 use regex::Regex;
+use saphyr::{MarkedYaml, Scalar, YamlData};
 
 /// A string schema
 #[derive(Debug, Default)]
@@ -20,6 +25,165 @@ impl PartialEq for StringSchema {
         self.min_length == other.min_length
             && self.max_length == other.max_length
             && are_patterns_equivalent(&self.pattern, &other.pattern)
+    }
+}
+
+impl TryFrom<&MarkedYaml<'_>> for StringSchema {
+    type Error = crate::Error;
+
+    fn try_from(value: &MarkedYaml) -> Result<StringSchema, Self::Error> {
+        if let YamlData::Mapping(mapping) = &value.data {
+            let mut string_schema = StringSchema::default();
+            for (key, value) in mapping.iter() {
+                if let YamlData::Value(Scalar::String(key)) = &key.data {
+                    match key.as_ref() {
+                        "minLength" => {
+                            if let Ok(i) = loader::load_integer_marked(value) {
+                                string_schema.min_length = Some(i as usize);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "minLength expected integer, but got: {:?}",
+                                    value
+                                ));
+                            }
+                        }
+                        "maxLength" => {
+                            if let Ok(i) = loader::load_integer_marked(value) {
+                                string_schema.max_length = Some(i as usize);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "maxLength expected integer, but got: {:?}",
+                                    value
+                                ));
+                            }
+                        }
+                        "pattern" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                let regex = regex::Regex::new(s.as_ref())?;
+                                string_schema.pattern = Some(regex);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "pattern expected string, but got: {:?}",
+                                    value
+                                ));
+                            }
+                        }
+                        "type" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                if s != "string" {
+                                    return Err(unsupported_type!(
+                                        "Expected type: string, but got: {}",
+                                        s
+                                    ));
+                                }
+                            } else {
+                                return Err(generic_error!(
+                                    "{} Expected type: string, but got: {:?}",
+                                    format_marker(&value.span.start),
+                                    value
+                                ));
+                            }
+                        }
+                        "enum" => {
+                            if let YamlData::Sequence(sequence) = &value.data {
+                                let enum_values: Vec<ConstValue> = load_enum_values(sequence)?;
+                                let string_enum_values = enum_values
+                                    .iter()
+                                    .map(|v| match v {
+                                        ConstValue::String(s) => Ok(s.clone()),
+                                        _ => Ok(format!("{v}")),
+                                    })
+                                    .collect::<crate::Result<Vec<String>>>()?;
+                                string_schema.r#enum = Some(string_enum_values);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "enum expected array, but got: {:?}",
+                                    value
+                                ));
+                            }
+                        }
+                        _ => unimplemented!("Unsupported key for type: string: {}", key),
+                    }
+                }
+            }
+            Ok(string_schema)
+        } else {
+            Err(generic_error!(
+                "{} expected mapping, got {:?}",
+                format_marker(&value.span.start),
+                value
+            ))
+        }
+    }
+}
+
+impl FromSaphyrMapping<StringSchema> for StringSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> crate::Result<StringSchema> {
+        let mut string_schema = StringSchema::default();
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = loader::load_string_value(key) {
+                match key.as_str() {
+                    "minLength" => {
+                        if let Ok(i) = loader::load_integer(value) {
+                            string_schema.min_length = Some(i as usize);
+                        } else {
+                            return Err(unsupported_type!(
+                                "minLength expected integer, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "maxLength" => {
+                        if let Ok(i) = loader::load_integer(value) {
+                            string_schema.max_length = Some(i as usize);
+                        } else {
+                            return Err(unsupported_type!(
+                                "maxLength expected integer, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "pattern" => {
+                        if let Ok(s) = loader::load_string_value(value) {
+                            let regex = regex::Regex::new(s.as_str())?;
+                            string_schema.pattern = Some(regex);
+                        } else {
+                            return Err(unsupported_type!(
+                                "pattern expected string, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "type" => {
+                        let s = loader::load_string_value(value)?;
+                        if s != "string" {
+                            return Err(unsupported_type!("Expected type: string, but got: {}", s));
+                        }
+                    }
+                    "enum" => {
+                        if let saphyr::Yaml::Sequence(sequence) = value {
+                            let enum_values: Vec<ConstValue> =
+                                sequence.iter().map(ConstValue::from_saphyr_yaml).collect();
+                            let string_enum_values = enum_values
+                                .iter()
+                                .map(|v| match v {
+                                    ConstValue::String(s) => Ok(s.clone()),
+                                    _ => Ok(format!("{v}")),
+                                })
+                                .collect::<crate::Result<Vec<String>>>()?;
+                            string_schema.r#enum = Some(string_enum_values);
+                        } else {
+                            return Err(unsupported_type!(
+                                "enum expected array, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    _ => unimplemented!("Unsupported key for type: string: {}", key),
+                }
+            }
+        }
+        Ok(string_schema)
     }
 }
 

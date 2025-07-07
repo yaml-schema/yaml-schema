@@ -1,12 +1,13 @@
-use log::debug;
-
 use super::{BoolOrTypedSchema, TypedSchema};
-use crate::utils::format_vec;
+use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 use crate::utils::format_yaml_data;
-use crate::Result;
+use crate::utils::{format_marker, format_vec};
 use crate::Validator;
 use crate::YamlSchema;
+use crate::{loader, Result};
 use crate::{Context, Reference};
+use log::debug;
+use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
 /// An array schema represents an array
 #[derive(Debug, Default, PartialEq)]
@@ -32,13 +33,96 @@ impl ArraySchema {
     }
 }
 
-impl std::fmt::Display for ArraySchema {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Array{{ items: {:?}, prefix_items: {:?}, contains: {:?}}}",
-            self.items, self.prefix_items, self.contains
-        )
+impl FromSaphyrMapping<ArraySchema> for ArraySchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<ArraySchema> {
+        let mut array_schema = ArraySchema::default();
+        for (key, value) in mapping.iter() {
+            let s = loader::load_string_value(key)?;
+            match s.as_str() {
+                "contains" => {
+                    if let saphyr::Yaml::Mapping(mapping) = value {
+                        let yaml_schema = YamlSchema::from_mapping(mapping)?;
+                        array_schema.contains = Some(Box::new(yaml_schema));
+                    } else {
+                        return Err(generic_error!(
+                            "contains: expected a mapping, but got: {:#?}",
+                            value
+                        ));
+                    }
+                }
+                "items" => {
+                    let array_items = loader::load_array_items(value)?;
+                    array_schema.items = Some(array_items);
+                }
+                "type" => {
+                    let s = loader::load_string_value(value)?;
+                    if s != "array" {
+                        return Err(unsupported_type!("Expected type: array, but got: {}", s));
+                    }
+                }
+                "prefixItems" => {
+                    let prefix_items = loader::load_array_of_schemas(value)?;
+                    array_schema.prefix_items = Some(prefix_items);
+                }
+                _ => unimplemented!("Unsupported key for ArraySchema: {}", s),
+            }
+        }
+        Ok(array_schema)
+    }
+}
+
+impl FromAnnotatedMapping<ArraySchema> for ArraySchema {
+    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<ArraySchema> {
+        let mut array_schema = ArraySchema::default();
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(s)) = &key.data {
+                match s.as_ref() {
+                    "contains" => {
+                        if value.data.is_mapping() {
+                            let yaml_schema = value.try_into()?;
+                            array_schema.contains = Some(Box::new(yaml_schema));
+                        } else {
+                            return Err(generic_error!(
+                                "contains: expected a mapping, but got: {:#?}",
+                                value
+                            ));
+                        }
+                    }
+                    "items" => {
+                        let array_items = loader::load_array_items_marked(value)?;
+                        array_schema.items = Some(array_items);
+                    }
+                    "type" => {
+                        if let YamlData::Value(Scalar::String(s)) = &value.data {
+                            if s != "array" {
+                                return Err(unsupported_type!(
+                                    "Expected type: array, but got: {}",
+                                    s
+                                ));
+                            }
+                        } else {
+                            return Err(generic_error!(
+                                "{} Expected string value for `type:`, got {:?}",
+                                format_marker(&value.span.start),
+                                value
+                            ));
+                        }
+                    }
+                    "prefixItems" => {
+                        let prefix_items = loader::load_array_of_schemas_marked(value)?;
+                        array_schema.prefix_items = Some(prefix_items);
+                    }
+                    _ => unimplemented!("Unsupported key for ArraySchema: {}", s),
+                }
+            } else {
+                return Err(generic_error!(
+                    "{} Expected scalar key, got: {:?}",
+                    format_marker(&key.span.start),
+                    key
+                ));
+            }
+        }
+        Ok(array_schema)
     }
 }
 
@@ -176,6 +260,15 @@ impl Validator for ArraySchema {
     }
 }
 
+impl std::fmt::Display for ArraySchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Array{{ items: {:?}, prefix_items: {:?}, contains: {:?}}}",
+            self.items, self.prefix_items, self.contains
+        )
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::loader::FromSaphyrMapping;

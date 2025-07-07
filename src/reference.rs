@@ -1,8 +1,9 @@
 /// A RefSchema is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
 use crate::loader::FromSaphyrMapping;
-use crate::utils::saphyr_yaml_string;
+use crate::utils::{format_marker, saphyr_yaml_string};
 use crate::Result;
+use saphyr::{MarkedYaml, YamlData};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Reference {
@@ -22,6 +23,48 @@ impl Reference {
     {
         Reference {
             ref_name: ref_name.into(),
+        }
+    }
+}
+
+impl TryFrom<&MarkedYaml<'_>> for Reference {
+    type Error = crate::Error;
+
+    fn try_from(value: &MarkedYaml<'_>) -> std::result::Result<Self, Self::Error> {
+        if let YamlData::Mapping(mapping) = &value.data {
+            let ref_key = MarkedYaml::value_from_str("$ref");
+            if !mapping.contains_key(&ref_key) {
+                return Err(generic_error!(
+                    "{} Expected a $ref key, but got: {:#?}",
+                    format_marker(&value.span.start),
+                    mapping
+                ));
+            }
+
+            let ref_value = mapping.get(&ref_key).unwrap();
+            match &ref_value.data {
+                YamlData::Value(saphyr::Scalar::String(s)) => {
+                    if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
+                        return Err(generic_error!("Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}", s));
+                    }
+                    let ref_name = match s.strip_prefix("#/$defs/") {
+                        Some(ref_name) => ref_name,
+                        _ => s.strip_prefix("#/definitions/").unwrap(),
+                    };
+
+                    Ok(Reference::new(ref_name))
+                }
+                _ => Err(generic_error!(
+                    "Expected a string value for $ref, but got: {:#?}",
+                    ref_value
+                )),
+            }
+        } else {
+            Err(generic_error!(
+                "{} value is not a mapping: {:?}",
+                format_marker(&value.span.start),
+                value
+            ))
         }
     }
 }

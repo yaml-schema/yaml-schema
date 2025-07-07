@@ -1,9 +1,8 @@
+use crate::{loader, Reference, Validator, YamlSchema};
+use crate::{Result, Schema};
 /// The schemas defined in the YAML schema language
 use log::debug;
-use std::fmt;
-
-use crate::Result;
-use crate::Validator;
+use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
 mod any_of;
 mod array;
@@ -17,6 +16,8 @@ mod object;
 mod one_of;
 mod string;
 
+use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
+use crate::utils::{format_scalar, saphyr_yaml_string};
 pub use any_of::AnyOfSchema;
 pub use array::ArraySchema;
 pub use bool_or_typed::BoolOrTypedSchema;
@@ -73,8 +74,56 @@ impl TypedSchema {
     }
 }
 
-impl fmt::Display for TypedSchema {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl FromAnnotatedMapping<TypedSchema> for TypedSchema {
+    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<Self> {
+        let type_key = MarkedYaml::value_from_str("type");
+        if mapping.contains_key(&type_key) {
+            let value = mapping.get(&type_key).unwrap();
+            match &value.data {
+                YamlData::Value(scalar) => match scalar {
+                    Scalar::String(s) => match s.as_ref() {
+                        "array" => {
+                            let array_schema = ArraySchema::from_annotated_mapping(mapping)?;
+                            Ok(TypedSchema::Array(array_schema))
+                        }
+                        "boolean" => Ok(TypedSchema::BooleanSchema),
+                        "integer" => {
+                            let integer_schema: IntegerSchema = value.try_into()?;
+                            Ok(TypedSchema::Integer(integer_schema))
+                        }
+                        "number" => {
+                            let number_schema: NumberSchema = value.try_into()?;
+                            Ok(TypedSchema::Number(number_schema))
+                        }
+                        "object" => {
+                            let object_schema: ObjectSchema = value.try_into()?;
+                            Ok(TypedSchema::Object(Box::new(object_schema)))
+                        }
+                        "string" => {
+                            let string_schema: StringSchema = value.try_into()?;
+                            Ok(TypedSchema::String(string_schema))
+                        }
+                        s => Err(unsupported_type!(s.to_string())),
+                    },
+                    saphyr::Scalar::Null => Ok(TypedSchema::Null),
+                    v => Err(unsupported_type!(
+                        "Expected a string value for 'type:', but got: {}",
+                        format_scalar(v)
+                    )),
+                },
+                v => Err(expected_scalar!("Expected scalar type, but got: {:#?}", v)),
+            }
+        } else {
+            Err(generic_error!(
+                "No type key found in mapping: {:#?}",
+                mapping
+            ))
+        }
+    }
+}
+
+impl std::fmt::Display for TypedSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TypedSchema::Array(a) => write!(f, "{a}"),
             TypedSchema::BooleanSchema => write!(f, "type: boolean"),
@@ -104,6 +153,54 @@ impl Validator for TypedSchema {
             TypedSchema::Number(n) => n.validate(context, value),
             TypedSchema::Object(o) => o.validate(context, value),
             TypedSchema::String(s) => s.validate(context, value),
+        }
+    }
+}
+
+impl FromSaphyrMapping<TypedSchema> for TypedSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<TypedSchema> {
+        let type_key = saphyr_yaml_string("type");
+        if mapping.contains_key(&type_key) {
+            let value = mapping.get(&type_key).unwrap();
+            match value {
+                saphyr::Yaml::Value(scalar) => match scalar {
+                    saphyr::Scalar::String(s) => match s.as_ref() {
+                        "array" => {
+                            let array_schema = ArraySchema::from_mapping(mapping)?;
+                            Ok(TypedSchema::Array(array_schema))
+                        }
+                        "boolean" => Ok(TypedSchema::BooleanSchema),
+                        "integer" => {
+                            let integer_schema = IntegerSchema::from_mapping(mapping)?;
+                            Ok(TypedSchema::Integer(integer_schema))
+                        }
+                        "number" => {
+                            let number_schema = NumberSchema::from_mapping(mapping)?;
+                            Ok(TypedSchema::Number(number_schema))
+                        }
+                        "object" => {
+                            let object_schema = ObjectSchema::from_mapping(mapping)?;
+                            Ok(TypedSchema::Object(Box::new(object_schema)))
+                        }
+                        "string" => {
+                            let string_schema = StringSchema::from_mapping(mapping)?;
+                            Ok(TypedSchema::String(string_schema))
+                        }
+                        s => Err(unsupported_type!(s.to_string())),
+                    },
+                    saphyr::Scalar::Null => Ok(TypedSchema::Null),
+                    v => Err(unsupported_type!(
+                        "Expected a string value for 'type:', but got: {}",
+                        format_scalar(v)
+                    )),
+                },
+                v => Err(expected_scalar!("Expected scalar type, but got: {:#?}", v)),
+            }
+        } else {
+            Err(generic_error!(
+                "No type key found in mapping: {:#?}",
+                mapping
+            ))
         }
     }
 }

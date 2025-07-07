@@ -51,7 +51,7 @@ mod tests {
 
     fn schema_def() -> YamlSchema {
         let object_schema = ObjectSchema::builder()
-            .property("type", YamlSchema::reference("schema_type"))
+            .property("type", YamlSchema::ref_str("schema_type"))
             .property(
                 "properties",
                 YamlSchema::builder()
@@ -82,7 +82,7 @@ mod tests {
     fn pattern_property_schema_def() -> Schema {
         Schema::object(
             ObjectSchema::builder()
-                .pattern_property("^[a-zA-Z0-9_-]+$", YamlSchema::reference("schema"))
+                .pattern_property("^[a-zA-Z0-9_-]+$", YamlSchema::ref_str("schema"))
                 .build(),
         )
     }
@@ -118,7 +118,7 @@ mod tests {
             .schema(Schema::OneOf(OneOfSchema {
                 one_of: vec![
                     Schema::BooleanSchema.into(),
-                    YamlSchema::reference("array_of_schemas"),
+                    YamlSchema::ref_str("array_of_schemas"),
                 ],
             }))
             .build();

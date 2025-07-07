@@ -1,6 +1,8 @@
+use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
-use crate::{Context, Validator, YamlSchema};
+use crate::{loader, Context, Schema, Validator, YamlSchema};
 use log::debug;
+use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
 #[derive(Debug, Default, PartialEq)]
@@ -11,6 +13,46 @@ pub struct NotSchema {
 impl std::fmt::Display for NotSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "not: {}", self.not)
+    }
+}
+
+impl FromSaphyrMapping<NotSchema> for NotSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> crate::Result<NotSchema> {
+        let mut not_schema = NotSchema::default();
+        for (key, value) in mapping.iter() {
+            if let Ok(key) = loader::load_string_value(key) {
+                match key.as_str() {
+                    "not" => {
+                        if let saphyr::Yaml::Mapping(mapping) = value {
+                            let schema = YamlSchema::from_mapping(mapping)?;
+                            not_schema.not = Box::new(schema);
+                        } else {
+                            return Err(generic_error!("Expected a mapping, but got: {:#?}", key));
+                        }
+                    }
+                    _ => return Err(generic_error!("Unsupported key: {}", key)),
+                }
+            }
+        }
+        Ok(not_schema)
+    }
+}
+
+impl FromAnnotatedMapping<NotSchema> for NotSchema {
+    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> crate::Result<NotSchema> {
+        let mut not_schema = NotSchema::default();
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
+                match key.as_ref() {
+                    "not" => {
+                        let schema: YamlSchema = value.try_into()?;
+                        not_schema.not = Box::new(schema);
+                    }
+                    _ => return Err(generic_error!("Unsupported key: {}", key)),
+                }
+            }
+        }
+        Ok(not_schema)
     }
 }
 
