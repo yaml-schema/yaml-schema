@@ -1,5 +1,5 @@
 use hashlink::LinkedHashMap;
-use saphyr::{AnnotatedMapping, LoadableYamlNode, MarkedYaml, Scalar, YamlData};
+use saphyr::{LoadableYamlNode, MarkedYaml, Scalar, YamlData};
 use std::rc::Rc;
 
 pub mod engine;
@@ -25,14 +25,14 @@ pub use schemas::NotSchema;
 pub use schemas::NumberSchema;
 pub use schemas::ObjectSchema;
 pub use schemas::OneOfSchema;
+pub use schemas::Schema;
 pub use schemas::StringSchema;
+pub use schemas::TypedSchema;
 pub use schemas::YamlSchema;
 pub use validation::Context;
 pub use validation::Validator;
 
-use crate::loader::FromAnnotatedMapping;
 use crate::utils::format_marker;
-use schemas::TypedSchema;
 
 // Returns the library version, which reflects the crate version
 pub fn version() -> String {
@@ -280,148 +280,6 @@ impl std::fmt::Display for ConstValue {
             ConstValue::Null => write!(f, "null"),
             ConstValue::Number(n) => write!(f, "{n} (number)"),
             ConstValue::String(s) => write!(f, "\"{s}\""),
-        }
-    }
-}
-
-#[derive(Debug, Default, PartialEq)]
-pub enum Schema {
-    #[default]
-    Empty, // no value
-    BooleanLiteral(bool),      // `true` or `false`
-    Const(ConstSchema),        // `const`
-    TypeNull,                  // `type: null`
-    Array(ArraySchema),        // `type: array`
-    BooleanSchema,             // `type: boolean`
-    Integer(IntegerSchema),    // `type: integer`
-    Number(NumberSchema),      // `type: number`
-    Object(Box<ObjectSchema>), // `type: object`
-    String(StringSchema),      // `type: string`
-    Enum(EnumSchema),          // `enum`
-    AnyOf(AnyOfSchema),        // `anyOf`
-    OneOf(OneOfSchema),        // `oneOf`
-    Not(NotSchema),            // `not`
-}
-
-impl Schema {
-    pub fn object(schema: ObjectSchema) -> Schema {
-        Schema::Object(Box::new(schema))
-    }
-}
-
-impl TryFrom<&MarkedYaml<'_>> for Schema {
-    type Error = crate::Error;
-
-    fn try_from(marked_yaml: &MarkedYaml) -> Result<Schema> {
-        if let YamlData::Mapping(mapping) = &marked_yaml.data {
-            if mapping.is_empty() {
-                Err(generic_error!("Empty mapping"))
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
-                let typed_schema: TypedSchema = marked_yaml.try_into()?;
-                Ok(typed_schema.into())
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
-                let enum_schema = EnumSchema::from_annotated_mapping(mapping)?;
-                return Ok(Schema::Enum(enum_schema));
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
-                let const_schema = ConstSchema::from_annotated_mapping(mapping)?;
-                return Ok(Schema::Const(const_schema));
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
-                let any_of_schema = AnyOfSchema::from_annotated_mapping(mapping)?;
-                return Ok(Schema::AnyOf(any_of_schema));
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("oneOf")) {
-                let one_of_schema = marked_yaml.try_into()?;
-                return Ok(Schema::OneOf(one_of_schema));
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("not")) {
-                let not_schema = NotSchema::from_annotated_mapping(mapping)?;
-                return Ok(Schema::Not(not_schema));
-            } else {
-                return Err(generic_error!(
-                    "(Schema) Don't know how to construct schema: {:?}",
-                    mapping
-                ));
-            }
-        } else {
-            Err(generic_error!(
-                "{} expected mapping, got: {:?}",
-                format_marker(&marked_yaml.span.start),
-                marked_yaml
-            ))
-        }
-    }
-}
-
-impl FromAnnotatedMapping<Schema> for Schema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<Self> {
-        if mapping.is_empty() {
-            Err(generic_error!("Empty mapping"))
-        } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
-            match TypedSchema::from_annotated_mapping(mapping) {
-                Ok(typed_schema) => Ok(typed_schema.into()),
-                Err(e) => Err(e),
-            }
-        } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
-            let enum_schema = EnumSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::Enum(enum_schema));
-        } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
-            let const_schema = ConstSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::Const(const_schema));
-        } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
-            let any_of_schema = AnyOfSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::AnyOf(any_of_schema));
-        } else if mapping.contains_key(&MarkedYaml::value_from_str("oneOf")) {
-            let one_of_schema = OneOfSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::OneOf(one_of_schema));
-        } else if mapping.contains_key(&MarkedYaml::value_from_str("not")) {
-            let not_schema = NotSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::Not(not_schema));
-        } else {
-            return Err(generic_error!(
-                "Don't know how to construct schema: {:#?}",
-                mapping
-            ));
-        }
-    }
-}
-
-impl std::fmt::Display for Schema {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Schema::Empty => write!(f, "<empty schema>"),
-            Schema::TypeNull => write!(f, "type: null"),
-            Schema::BooleanLiteral(b) => write!(f, "{b}"),
-            Schema::BooleanSchema => write!(f, "type: boolean"),
-            Schema::Const(c) => write!(f, "{c}"),
-            Schema::Enum(e) => write!(f, "{e}"),
-            Schema::Integer(i) => write!(f, "{i}"),
-            Schema::AnyOf(any_of_schema) => {
-                write!(f, "{any_of_schema}")
-            }
-            Schema::OneOf(one_of_schema) => {
-                write!(f, "{one_of_schema}")
-            }
-            Schema::Not(not_schema) => {
-                write!(f, "{not_schema}")
-            }
-            Schema::String(s) => write!(f, "{s}"),
-            Schema::Number(n) => write!(f, "{n}"),
-            Schema::Object(o) => write!(f, "{o}"),
-            Schema::Array(a) => write!(f, "{a}"),
-        }
-    }
-}
-
-/// Converts (upcast) a TypedSchema to a YamlSchema
-/// Since a YamlSchema is a superset of a TypedSchema, this is a lossless conversion
-impl From<TypedSchema> for Schema {
-    fn from(schema: TypedSchema) -> Self {
-        match schema {
-            TypedSchema::Array(array_schema) => Schema::Array(array_schema),
-            TypedSchema::BooleanSchema => Schema::BooleanSchema,
-            TypedSchema::Null => Schema::TypeNull,
-            TypedSchema::Integer(integer_schema) => Schema::Integer(integer_schema),
-            TypedSchema::Number(number_schema) => Schema::Number(number_schema),
-            TypedSchema::Object(object_schema) => Schema::Object(object_schema),
-            TypedSchema::String(string_schema) => Schema::String(string_schema),
         }
     }
 }

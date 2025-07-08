@@ -13,11 +13,10 @@ pub fn generate_code_from_root_schema(_root_schema: &RootSchema) -> Result<Strin
 mod tests {
     use super::*;
 
-    use crate::{
-        ArraySchema, ObjectSchema, OneOfSchema, Reference, Schema, StringSchema, YamlSchema,
-    };
+    use crate::{ArraySchema, ObjectSchema, OneOfSchema, Reference, StringSchema, YamlSchema};
     use hashlink::LinkedHashMap;
 
+    use crate::Schema;
     use std::hash::Hash;
 
     fn vec_of_string(items: Vec<&str>) -> Vec<String> {
