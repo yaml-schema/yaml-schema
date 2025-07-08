@@ -64,16 +64,17 @@ impl<'r> Context<'r> {
         let path = self.path();
         self.push_error(ValidationError {
             path,
-            line_col: None,
+            marker: None,
             error: error.into(),
         });
     }
 
+    /// Adds an error message to the current context, with the current path and with location marker
     pub fn add_error<V: Into<String>>(&self, marked_yaml: &saphyr::MarkedYaml, error: V) {
         let path = self.path();
         self.push_error(ValidationError {
             path,
-            line_col: Some(marked_yaml.into()),
+            marker: Some(marked_yaml.span.start),
             error: error.into(),
         });
     }

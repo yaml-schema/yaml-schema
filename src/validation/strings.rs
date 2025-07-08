@@ -1,10 +1,9 @@
 use regex::Regex;
 
+use super::Validator;
 use crate::Context;
 use crate::Result;
 use crate::StringSchema;
-
-use super::Validator;
 
 impl Validator for StringSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {

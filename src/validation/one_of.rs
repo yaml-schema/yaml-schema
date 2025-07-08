@@ -1,11 +1,11 @@
 use log::{debug, error};
 
 use super::Validator;
+
 use crate::Context;
 use crate::Error;
 use crate::Result;
 use crate::YamlSchema;
-
 impl Validator for crate::schemas::OneOfSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let one_of_is_valid = validate_one_of(context, &self.one_of, value)?;
@@ -25,13 +25,16 @@ pub fn validate_one_of(
 ) -> Result<bool> {
     let mut one_of_is_valid = false;
     for schema in schemas {
-        debug!("OneOf: Validating value: {value:?} against schema: {schema}");
+        debug!(
+            "[OneOf] Validating value: {:?} against schema: {}",
+            &value.data, schema
+        );
         let sub_context = context.get_sub_context();
         let sub_result = schema.validate(&sub_context, value);
         match sub_result {
             Ok(()) | Err(Error::FailFast) => {
                 debug!(
-                    "OneOf: sub_context.errors: {}",
+                    "[OneOf] sub_context.errors: {}",
                     sub_context.errors.borrow().len()
                 );
                 if sub_context.has_errors() {
@@ -39,7 +42,7 @@ pub fn validate_one_of(
                 }
 
                 if one_of_is_valid {
-                    error!("OneOf: Value matched multiple schemas in `oneOf`!");
+                    error!("[OneOf] Value matched multiple schemas in `oneOf`!");
                     context.add_error(value, "Value matched multiple schemas in `oneOf`!");
                     fail_fast!(context);
                 } else {

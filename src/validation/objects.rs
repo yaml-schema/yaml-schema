@@ -1,16 +1,15 @@
 // A module to contain object type validation logic
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
+use log::{debug, error};
 
-use log::debug;
-
-use crate::schemas::BoolOrTypedSchema;
-use crate::schemas::ObjectSchema;
+use crate::utils::{format_marker, format_yaml_data, scalar_to_string};
 use crate::validation::Context;
+use crate::BoolOrTypedSchema;
 use crate::Error;
+use crate::ObjectSchema;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
-use crate::{format_marker, format_yaml_data};
 
 impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules
@@ -20,7 +19,12 @@ impl Validator for ObjectSchema {
         if let saphyr::YamlData::Mapping(mapping) = data {
             self.validate_object_mapping(context, value, mapping)
         } else {
-            context.add_error(value, format!("Expected an object, but got: {data:#?}"));
+            let error_message = format!(
+                "[ObjectSchema] {} Expected an object, but got: {data:#?}",
+                format_marker(&value.span.start)
+            );
+            error!("{error_message}");
+            context.add_error(value, error_message);
             Ok(())
         }
     }
@@ -30,7 +34,7 @@ pub fn try_validate_value_against_properties(
     context: &Context,
     key: &String,
     value: &saphyr::MarkedYaml,
-    properties: &HashMap<String, YamlSchema>,
+    properties: &LinkedHashMap<String, YamlSchema>,
 ) -> Result<bool> {
     let sub_context = context.append_path(key);
     if let Some(schema) = properties.get(key) {
@@ -103,13 +107,7 @@ impl ObjectSchema {
     ) -> Result<()> {
         for (k, value) in mapping {
             let key_string = match &k.data {
-                saphyr::YamlData::Value(scalar) => match scalar {
-                    saphyr::Scalar::String(s) => s.to_string(),
-                    saphyr::Scalar::Boolean(b) => b.to_string(),
-                    saphyr::Scalar::Integer(i) => i.to_string(),
-                    saphyr::Scalar::FloatingPoint(o) => o.to_string(),
-                    saphyr::Scalar::Null => "null".to_string(),
-                },
+                saphyr::YamlData::Value(scalar) => scalar_to_string(scalar),
                 v => return Err(expected_scalar!("Expected a scalar key, got: {:?}", v)),
             };
             let span = &k.span;
@@ -154,20 +152,23 @@ impl ObjectSchema {
             }
             // Finally, we check if it matches property_names
             if let Some(property_names) = &self.property_names {
-                let re = regex::Regex::new(property_names).map_err(|e| {
-                    Error::GenericError(format!("Invalid regular expression pattern: {e}"))
-                })?;
-                debug!("Regex for property names: {}", re.as_str());
-                if !re.is_match(key_string.as_ref()) {
-                    context.add_error(
-                        k,
-                        format!(
-                            "Property name '{}' does not match pattern '{}'",
-                            key_string,
-                            re.as_str()
-                        ),
-                    );
-                    fail_fast!(context)
+                if let Some(re) = &property_names.pattern {
+                    debug!("Regex for property names: {}", re.as_str());
+                    if !re.is_match(key_string.as_ref()) {
+                        context.add_error(
+                            k,
+                            format!(
+                                "Property name '{}' does not match pattern '{}'",
+                                key_string,
+                                re.as_str()
+                            ),
+                        );
+                        fail_fast!(context)
+                    }
+                } else {
+                    return Err(Error::GenericError(
+                        "Expected a pattern for `property_names`".to_string(),
+                    ));
                 }
             }
         }
@@ -225,12 +226,13 @@ mod tests {
     use crate::RootSchema;
     use crate::Schema;
     use crate::StringSchema;
+    use hashlink::LinkedHashMap;
 
     use super::*;
 
     #[test]
     fn test_should_validate_properties() {
-        let mut properties = HashMap::new();
+        let mut properties = LinkedHashMap::new();
         properties.insert(
             "foo".to_string(),
             YamlSchema::from(Schema::String(StringSchema::default())),
@@ -243,7 +245,7 @@ mod tests {
             properties: Some(properties),
             ..Default::default()
         };
-        let root_schema = RootSchema::new_with_schema(Schema::Object(object_schema));
+        let root_schema = RootSchema::new_with_schema(Schema::Object(Box::new(object_schema)));
         let value = r#"
             foo: "I'm a string"
             bar: 42
