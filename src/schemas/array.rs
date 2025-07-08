@@ -1,11 +1,11 @@
 use super::{BoolOrTypedSchema, TypedSchema};
 use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
+
 use crate::utils::format_yaml_data;
 use crate::utils::{format_marker, format_vec};
-use crate::Validator;
-use crate::YamlSchema;
 use crate::{loader, Result};
 use crate::{Context, Reference};
+use crate::{Validator, YamlSchema};
 use log::debug;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 

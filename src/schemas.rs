@@ -15,6 +15,7 @@ mod number;
 mod object;
 mod one_of;
 mod string;
+mod yaml_schema;
 
 use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 use crate::utils::{format_marker, format_scalar, saphyr_yaml_string};
@@ -29,6 +30,7 @@ pub use one_of::OneOfSchema;
 pub use r#const::ConstSchema;
 pub use r#enum::EnumSchema;
 pub use string::StringSchema;
+pub use yaml_schema::YamlSchema;
 
 /// A TypedSchema is a subset of YamlSchema that has a `type:`
 #[derive(Debug, PartialEq)]

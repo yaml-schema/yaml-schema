@@ -102,9 +102,7 @@ impl TryFrom<&MarkedYaml<'_>> for StringSchema {
                                 ));
                             }
                         }
-                        // TODO: until we can create a markedyaml without the extra keys
-                        // _ => unimplemented!("Unsupported key for type: string: {}", key),
-                        _ => (),
+                        _ => unimplemented!("Unsupported key for type: string: {}", key),
                     }
                 }
             }

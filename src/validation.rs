@@ -1,5 +1,4 @@
 pub mod any_of;
-/// Validation engine for YamlSchema
 mod context;
 mod objects;
 mod one_of;
@@ -9,9 +8,8 @@ use crate::utils::format_yaml_data;
 use crate::Number;
 use crate::Result;
 use crate::Schema;
-use crate::YamlSchema;
 pub use context::Context;
-use log::{debug, error};
+use log::debug;
 use saphyr::Marker;
 
 /// A trait for validating a sahpyr::Yaml value against a schema
@@ -84,36 +82,6 @@ impl Validator for Schema {
     }
 }
 
-impl Validator for YamlSchema {
-    fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[YamlSchema] self: {self}");
-        debug!(
-            "[YamlSchema] Validating value: {}",
-            format_yaml_data(&value.data)
-        );
-        if let Some(reference) = &self.r#ref {
-            debug!("[YamlSchema] Reference found: {reference}");
-            let ref_name = &reference.ref_name;
-            if let Some(root_schema) = context.root_schema {
-                if let Some(schema) = root_schema.get_def(ref_name) {
-                    debug!("[YamlSchema] Found {ref_name}: {schema}");
-                    schema.validate(context, value)?;
-                } else {
-                    error!("[YamlSchema] Cannot find definition: {ref_name}");
-                    context.add_error(value, format!("Schema {ref_name} not found"));
-                }
-            } else {
-                return Err(generic_error!(
-                    "YamlSchema has a reference, but no root schema was provided!"
-                ));
-            }
-        } else if let Some(schema) = &self.schema {
-            schema.validate(context, value)?;
-        }
-        Ok(())
-    }
-}
-
 fn validate_boolean_schema(context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
     if !value.data.is_boolean() {
         context.add_error(value, format!("Expected: boolean, found: {value:?}"));
@@ -175,9 +143,9 @@ pub fn validate_integer(
 
 #[cfg(test)]
 mod tests {
-    use saphyr::LoadableYamlNode;
-
     use super::*;
+    use crate::YamlSchema;
+    use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_validate_empty_schema() {

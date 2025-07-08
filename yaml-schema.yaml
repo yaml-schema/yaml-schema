@@ -22,7 +22,7 @@ $defs:
   schema:
     description: >-
       A meta schema for a YAML object schema
-    type: 42
+    type: object
     properties:
       type:
         $ref: "#/$defs/schema_type"

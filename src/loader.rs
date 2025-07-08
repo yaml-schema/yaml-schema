@@ -1,6 +1,5 @@
 // The loader module loads the YAML schema from a file into the in-memory model
 
-use std::fs;
 use std::rc::Rc;
 
 use hashlink::LinkedHashMap;
@@ -25,11 +24,11 @@ use crate::YamlSchema;
 
 pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
     let path_s = path.into();
-    let fs_metadata = fs::metadata(&path_s)?;
+    let fs_metadata = std::fs::metadata(&path_s)?;
     if !fs_metadata.is_file() {
         return Err(Error::FileNotFound(path_s.clone()));
     }
-    let s = fs::read_to_string(&path_s)?;
+    let s = std::fs::read_to_string(&path_s)?;
     let docs = MarkedYaml::load_from_str(&s)?;
     if docs.is_empty() {
         return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
@@ -245,69 +244,6 @@ impl FromSaphyrMapping<Option<Schema>> for Schema {
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for YamlSchema {
-    type Error = Error;
-
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> Result<Self> {
-        let mut metadata: LinkedHashMap<String, String> = LinkedHashMap::new();
-        let mut r#ref: Option<Reference> = None;
-        let mut data = AnnotatedMapping::new();
-
-        for (key, value) in mapping.iter() {
-            match &key.data {
-                YamlData::Value(Scalar::String(s)) => {
-                    match s.as_ref() {
-                        "$id" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "$id must be a string")?,
-                            );
-                        }
-                        "$schema" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "$schema must be a string")?,
-                            );
-                        }
-                        "$ref" => {
-                            r#ref = Some(value.try_into()?);
-                            // TODO: What?
-                        }
-                        "title" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "title must be a string")?,
-                            );
-                        }
-                        "description" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "description must be a string")?,
-                            );
-                        }
-                        _ => {
-                            data.insert(key.clone(), value.clone());
-                        }
-                    }
-                }
-                _ => {
-                    data.insert(key.clone(), value.clone());
-                }
-            }
-        }
-        let schema = Some(Schema::from_annotated_mapping(&data)?);
-        Ok(YamlSchema {
-            metadata: if metadata.is_empty() {
-                None
-            } else {
-                Some(metadata)
-            },
-            schema,
-            r#ref,
-        })
-    }
-}
-
 /// Try to convert a saphyr::Mapping into the desired (schema) type
 pub trait FromSaphyrMapping<T> {
     fn from_mapping(mapping: &saphyr::Mapping) -> Result<T>;
@@ -480,10 +416,10 @@ pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> 
 mod tests {
     use regex::Regex;
 
-    use crate::ArraySchema;
     use crate::ConstValue;
     use crate::IntegerSchema;
     use crate::StringSchema;
+    use crate::{ArraySchema, Engine};
 
     use super::*;
 
@@ -728,5 +664,30 @@ mod tests {
             println!("error: {error:#?}");
         }
         assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_self_validate() -> Result<()> {
+        let schema_filename = "yaml-schema.yaml";
+        let root_schema = match RootSchema::load_file(schema_filename) {
+            Ok(schema) => schema,
+            Err(e) => {
+                eprintln!("Failed to read YAML schema file: {schema_filename}");
+                log::error!("{e}");
+                return Err(e);
+            }
+        };
+
+        let yaml_contents = std::fs::read_to_string(schema_filename)?;
+
+        let context = Engine::evaluate(&root_schema, &yaml_contents, true)?;
+        if context.has_errors() {
+            for error in context.errors.borrow().iter() {
+                eprintln!("{error}");
+            }
+            assert!(false)
+        }
+
+        Ok(())
     }
 }

@@ -1,5 +1,7 @@
 use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
+
+/// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
 use crate::{loader, Context, Validator, YamlSchema};
 use log::debug;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};

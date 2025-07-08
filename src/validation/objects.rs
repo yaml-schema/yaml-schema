@@ -2,11 +2,11 @@
 use hashlink::LinkedHashMap;
 use log::{debug, error};
 
-use crate::schemas::BoolOrTypedSchema;
-use crate::schemas::ObjectSchema;
 use crate::utils::{format_marker, format_yaml_data, scalar_to_string};
 use crate::validation::Context;
+use crate::BoolOrTypedSchema;
 use crate::Error;
+use crate::ObjectSchema;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;

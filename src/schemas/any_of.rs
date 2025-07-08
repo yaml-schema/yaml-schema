@@ -1,9 +1,10 @@
 use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
+use crate::{loader, YamlSchema};
+
 /// The `anyOf` schema is a schema that matches if any of the schemas in the `anyOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
 /// to the context.
 use crate::utils::format_vec;
-use crate::{loader, YamlSchema};
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
 /// The `anyOf` schema is a schema that matches if any of the schemas in the `anyOf` array match.

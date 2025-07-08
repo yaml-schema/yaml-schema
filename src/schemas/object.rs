@@ -2,6 +2,7 @@ use crate::loader::{
     load_array_of_schemas, load_array_of_schemas_marked, load_integer, load_integer_marked,
     load_string_value, yaml_to_string, FromSaphyrMapping,
 };
+
 use crate::utils::{format_marker, hash_map, linked_hash_map, saphyr_yaml_string};
 use crate::Result;
 use crate::TypedSchema;
@@ -266,8 +267,7 @@ impl FromSaphyrMapping<ObjectSchema> for ObjectSchema {
                                     )?,
                                 );
                             } else {
-                                // TODO! When we can filter out the root schema
-                                // unimplemented!("Unsupported key for type: object: {}", key);
+                                unimplemented!("Unsupported key for type: object: {}", key);
                             }
                         }
                     }
