@@ -1,11 +1,11 @@
-use std::rc::Rc;
-
 use hashlink::LinkedHashMap;
-use saphyr::LoadableYamlNode;
+use saphyr::{LoadableYamlNode, MarkedYaml, Scalar, YamlData};
+use std::rc::Rc;
 
 pub mod engine;
 #[macro_use]
 pub mod error;
+pub mod codegen;
 pub mod loader;
 pub mod reference;
 pub mod schemas;
@@ -25,11 +25,14 @@ pub use schemas::NotSchema;
 pub use schemas::NumberSchema;
 pub use schemas::ObjectSchema;
 pub use schemas::OneOfSchema;
+pub use schemas::Schema;
 pub use schemas::StringSchema;
+pub use schemas::TypedSchema;
+pub use schemas::YamlSchema;
 pub use validation::Context;
 pub use validation::Validator;
 
-use schemas::TypedSchema;
+use crate::utils::format_marker;
 
 // Returns the library version, which reflects the crate version
 pub fn version() -> String {
@@ -39,8 +42,9 @@ pub fn version() -> String {
 // Alias for std::result::Result<T, yaml_schema::Error>
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// A RootSchema is a YamlSchema document
-#[derive(Debug, Default)]
+/// A RootSchema represents the root document in a schema file, and can include additional
+/// fields not present in the 'base' YamlSchema
+#[derive(Debug, Default, PartialEq)]
 pub struct RootSchema {
     pub id: Option<String>,
     pub meta_schema: Option<String>,
@@ -59,6 +63,11 @@ impl RootSchema {
         }
     }
 
+    /// Builder pattern for RootSchema
+    pub fn builder() -> RootSchemaBuilder {
+        RootSchemaBuilder::new()
+    }
+
     /// Create a new RootSchema with a Schema
     pub fn new_with_schema(schema: Schema) -> RootSchema {
         RootSchema::new(YamlSchema::from(schema))
@@ -70,14 +79,14 @@ impl RootSchema {
     }
 
     pub fn load_from_str(schema: &str) -> Result<RootSchema> {
-        let docs = saphyr::Yaml::load_from_str(schema)?;
+        let docs = MarkedYaml::load_from_str(schema)?;
         if docs.is_empty() {
             return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
         }
         loader::load_from_doc(docs.first().unwrap())
     }
 
-    pub fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
+    pub fn validate(&self, context: &Context, value: &MarkedYaml) -> Result<()> {
         self.schema.validate(context, value)?;
         Ok(())
     }
@@ -87,6 +96,45 @@ impl RootSchema {
             return defs.get(&name.to_owned());
         }
         None
+    }
+}
+
+pub struct RootSchemaBuilder(RootSchema);
+
+impl Default for RootSchemaBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RootSchemaBuilder {
+    /// Construct a RootSchemaBuilder
+    pub fn new() -> Self {
+        Self(RootSchema::default())
+    }
+
+    pub fn build(&mut self) -> RootSchema {
+        std::mem::take(&mut self.0)
+    }
+
+    pub fn id<S: Into<String>>(&mut self, id: S) -> &mut Self {
+        self.0.id = Some(id.into());
+        self
+    }
+
+    pub fn meta_schema<S: Into<String>>(&mut self, meta_schema: S) -> &mut Self {
+        self.0.meta_schema = Some(meta_schema.into());
+        self
+    }
+
+    pub fn defs(&mut self, defs: LinkedHashMap<String, YamlSchema>) -> &mut Self {
+        self.0.defs = Some(defs);
+        self
+    }
+
+    pub fn schema(&mut self, schema: YamlSchema) -> &mut Self {
+        self.0.schema = Rc::new(schema);
+        self
     }
 }
 
@@ -109,6 +157,29 @@ impl Number {
     }
 }
 
+impl TryFrom<&MarkedYaml<'_>> for Number {
+    type Error = Error;
+    fn try_from(value: &MarkedYaml) -> Result<Number> {
+        if let YamlData::Value(scalar) = &value.data {
+            match scalar {
+                Scalar::Integer(i) => Ok(Number::integer(*i)),
+                Scalar::FloatingPoint(o) => Ok(Number::float(o.into_inner())),
+                _ => Err(generic_error!(
+                    "{} Expected type: integer or float, but got: {:?}",
+                    format_marker(&value.span.start),
+                    value
+                )),
+            }
+        } else {
+            Err(generic_error!(
+                "{} Expected scalar, but got: {:?}",
+                format_marker(&value.span.start),
+                value
+            ))
+        }
+    }
+}
+
 impl std::fmt::Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -118,6 +189,8 @@ impl std::fmt::Display for Number {
     }
 }
 
+/// A ConstValue is similar to a saphyr::Scalar, but for validating "number" types
+/// we treat integers and floating point values as 'fungible'
 #[derive(Debug, PartialEq)]
 pub enum ConstValue {
     Boolean(bool),
@@ -147,23 +220,40 @@ impl ConstValue {
     }
 }
 
-impl<'a> TryFrom<&saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>> for ConstValue {
+impl TryFrom<&Scalar<'_>> for ConstValue {
     type Error = crate::Error;
 
-    fn try_from(value: &saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>) -> Result<Self> {
+    fn try_from(scalar: &Scalar) -> std::result::Result<ConstValue, Self::Error> {
+        match scalar {
+            Scalar::Null => Ok(ConstValue::Null),
+            Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
+            Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
+            Scalar::FloatingPoint(o) => Ok(ConstValue::Number(Number::float(o.into_inner()))),
+            Scalar::String(s) => Ok(ConstValue::String(s.to_string())),
+        }
+    }
+}
+
+impl<'a> TryFrom<&YamlData<'a, MarkedYaml<'a>>> for ConstValue {
+    type Error = crate::Error;
+
+    fn try_from(value: &YamlData<'a, MarkedYaml<'a>>) -> Result<Self> {
         match value {
-            saphyr::YamlData::Value(scalar) => match scalar {
-                saphyr::Scalar::String(s) => Ok(ConstValue::String(s.to_string())),
-                saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
-                saphyr::Scalar::FloatingPoint(o) => {
-                    Ok(ConstValue::Number(Number::float(o.into_inner())))
-                }
-                saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
-                saphyr::Scalar::Null => Ok(ConstValue::Null),
-            },
-            v => Err(unsupported_type!(
-                "Expected a scalar value, but got: {:?}",
-                v
+            YamlData::Value(scalar) => scalar.try_into(),
+            v => Err(generic_error!("Expected a scalar value, but got: {:?}", v)),
+        }
+    }
+}
+
+impl<'a> TryFrom<&MarkedYaml<'a>> for ConstValue {
+    type Error = crate::Error;
+    fn try_from(value: &MarkedYaml<'a>) -> Result<ConstValue> {
+        match (&value.data).try_into() {
+            Ok(r) => Ok(r),
+            _ => Err(generic_error!(
+                "{} Expected a scalar value, but got: {:?}",
+                format_marker(&value.span.start),
+                value
             )),
         }
     }
@@ -174,15 +264,7 @@ impl TryFrom<&saphyr::Yaml<'_>> for ConstValue {
 
     fn try_from(value: &saphyr::Yaml) -> Result<Self> {
         match value {
-            saphyr::Yaml::Value(scalar) => match scalar {
-                saphyr::Scalar::Boolean(b) => Ok(ConstValue::Boolean(*b)),
-                saphyr::Scalar::Integer(i) => Ok(ConstValue::Number(Number::integer(*i))),
-                saphyr::Scalar::FloatingPoint(o) => {
-                    Ok(ConstValue::Number(Number::float(o.into_inner())))
-                }
-                saphyr::Scalar::String(s) => Ok(ConstValue::String(s.to_string())),
-                saphyr::Scalar::Null => Ok(ConstValue::Null),
-            },
+            saphyr::Yaml::Value(scalar) => scalar.try_into(),
             v => Err(unsupported_type!(
                 "Expected a constant value, but got: {:?}",
                 v
@@ -202,175 +284,6 @@ impl std::fmt::Display for ConstValue {
     }
 }
 
-/// YamlSchema is the core of the validation model
-#[derive(Debug, Default, PartialEq)]
-pub struct YamlSchema {
-    pub metadata: Option<LinkedHashMap<String, String>>,
-    pub r#ref: Option<Reference>,
-    pub schema: Option<Schema>,
-}
-
-impl From<Schema> for YamlSchema {
-    fn from(schema: Schema) -> Self {
-        YamlSchema {
-            schema: Some(schema),
-            ..Default::default()
-        }
-    }
-}
-
-impl YamlSchema {
-    pub fn empty() -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::Empty),
-            ..Default::default()
-        }
-    }
-
-    pub fn null() -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::TypeNull),
-            ..Default::default()
-        }
-    }
-
-    pub fn boolean_literal(value: bool) -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::BooleanLiteral(value)),
-            ..Default::default()
-        }
-    }
-
-    pub fn reference(reference: Reference) -> YamlSchema {
-        YamlSchema {
-            r#ref: Some(reference),
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Default, PartialEq)]
-pub enum Schema {
-    #[default]
-    Empty, // no value
-    BooleanLiteral(bool),   // `true` or `false`
-    Const(ConstSchema),     // `const`
-    TypeNull,               // `type: null`
-    Array(ArraySchema),     // `type: array`
-    BooleanSchema,          // `type: boolean`
-    Integer(IntegerSchema), // `type: integer`
-    Number(NumberSchema),   // `type: number`
-    Object(ObjectSchema),   // `type: object`
-    String(StringSchema),   // `type: string`
-    Enum(EnumSchema),       // `enum`
-    AnyOf(AnyOfSchema),     // `anyOf`
-    OneOf(OneOfSchema),     // `oneOf`
-    Not(NotSchema),         // `not`
-}
-
-impl std::fmt::Display for Schema {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Schema::Empty => write!(f, "<empty schema>"),
-            Schema::TypeNull => write!(f, "type: null"),
-            Schema::BooleanLiteral(b) => write!(f, "{b}"),
-            Schema::BooleanSchema => write!(f, "type: boolean"),
-            Schema::Const(c) => write!(f, "{c}"),
-            Schema::Enum(e) => write!(f, "{e}"),
-            Schema::Integer(i) => write!(f, "{i}"),
-            Schema::AnyOf(any_of_schema) => {
-                write!(f, "{any_of_schema}")
-            }
-            Schema::OneOf(one_of_schema) => {
-                write!(f, "{one_of_schema}")
-            }
-            Schema::Not(not_schema) => {
-                write!(f, "{not_schema}")
-            }
-            Schema::String(s) => write!(f, "{s}"),
-            Schema::Number(n) => write!(f, "{n}"),
-            Schema::Object(o) => write!(f, "{o}"),
-            Schema::Array(a) => write!(f, "{a}"),
-        }
-    }
-}
-
-impl std::fmt::Display for YamlSchema {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{")?;
-        if let Some(metadata) = &self.metadata {
-            write!(f, "metadata: {metadata:?}, ")?;
-        }
-        if let Some(r#ref) = &self.r#ref {
-            r#ref.fmt(f)?;
-        }
-        if let Some(schema) = &self.schema {
-            write!(f, "schema: {schema}")?;
-        }
-        write!(f, "}}")
-    }
-}
-
-/// Converts (upcast) a TypedSchema to a YamlSchema
-/// Since a YamlSchema is a superset of a TypedSchema, this is a lossless conversion
-impl From<TypedSchema> for Schema {
-    fn from(schema: TypedSchema) -> Self {
-        match schema {
-            TypedSchema::Array(array_schema) => Schema::Array(array_schema),
-            TypedSchema::BooleanSchema => Schema::BooleanSchema,
-            TypedSchema::Null => Schema::TypeNull,
-            TypedSchema::Integer(integer_schema) => Schema::Integer(integer_schema),
-            TypedSchema::Number(number_schema) => Schema::Number(number_schema),
-            TypedSchema::Object(object_schema) => Schema::Object(object_schema),
-            TypedSchema::String(string_schema) => Schema::String(string_schema),
-        }
-    }
-}
-
-/// Formats a vector of values as a string, by joining them with commas
-fn format_vec<V>(vec: &[V]) -> String
-where
-    V: std::fmt::Display,
-{
-    let items: Vec<String> = vec.iter().map(|v| format!("{v}")).collect();
-    format!("[{}]", items.join(", "))
-}
-
-/// Formats a saphyr::YamlData as a string
-fn format_yaml_data<'a>(data: &saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>) -> String {
-    match data {
-        saphyr::YamlData::Value(scalar) => match scalar {
-            saphyr::Scalar::Null => "null".to_string(),
-            saphyr::Scalar::Boolean(b) => b.to_string(),
-            saphyr::Scalar::Integer(i) => i.to_string(),
-            saphyr::Scalar::FloatingPoint(o) => o.to_string(),
-            saphyr::Scalar::String(s) => format!("\"{s}\""),
-        },
-        saphyr::YamlData::Sequence(seq) => {
-            let items: Vec<String> = seq.iter().map(|v| format_yaml_data(&v.data)).collect();
-            format!("[{}]", items.join(", "))
-        }
-        saphyr::YamlData::Mapping(mapping) => {
-            let items: Vec<String> = mapping
-                .iter()
-                .map(|(k, v)| {
-                    format!(
-                        "{}: {}",
-                        format_yaml_data(&k.data),
-                        format_yaml_data(&v.data)
-                    )
-                })
-                .collect();
-            format!("[{}]", items.join(", "))
-        }
-        _ => format!("<unsupported type: {data:?}>"),
-    }
-}
-
-fn format_marker(marker: &saphyr::Marker) -> String {
-    format!("[{}, {}]", marker.line(), marker.col())
-}
-
 /// Use the ctor crate to initialize the logger for tests
 #[cfg(test)]
 #[ctor::ctor]
@@ -386,6 +299,7 @@ fn init() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ordered_float::OrderedFloat;
 
     #[test]
     fn test_const_equality() {
@@ -396,5 +310,35 @@ mod tests {
         let s1 = ConstValue::string("NW");
         let s2 = ConstValue::string("NW");
         assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn test_scalar_to_constvalue() -> Result<()> {
+        let scalars = [
+            Scalar::Null,
+            Scalar::Boolean(true),
+            Scalar::Boolean(false),
+            Scalar::Integer(42),
+            Scalar::Integer(-1),
+            Scalar::FloatingPoint(OrderedFloat::from(3.14)),
+            Scalar::String("foo".into()),
+        ];
+
+        let expected = [
+            ConstValue::Null,
+            ConstValue::Boolean(true),
+            ConstValue::Boolean(false),
+            ConstValue::Number(Number::Integer(42)),
+            ConstValue::Number(Number::Integer(-1)),
+            ConstValue::Number(Number::Float(3.14)),
+            ConstValue::String("foo".to_string()),
+        ];
+
+        for (scalar, expected) in scalars.iter().zip(expected.iter()) {
+            let actual: ConstValue = scalar.try_into()?;
+            assert_eq!(*expected, actual);
+        }
+
+        Ok(())
     }
 }

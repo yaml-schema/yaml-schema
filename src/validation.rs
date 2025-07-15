@@ -1,35 +1,20 @@
 pub mod any_of;
-/// Validation engine for YamlSchema
 mod context;
 mod objects;
 mod one_of;
 mod strings;
 
+use crate::utils::format_yaml_data;
+use crate::Number;
 use crate::Result;
 use crate::Schema;
-use crate::YamlSchema;
-use crate::{format_yaml_data, Number};
 pub use context::Context;
 use log::debug;
+use saphyr::Marker;
 
 /// A trait for validating a sahpyr::Yaml value against a schema
 pub trait Validator {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()>;
-}
-
-#[derive(Debug)]
-pub struct LineCol {
-    pub line: usize,
-    pub col: usize,
-}
-
-impl From<&saphyr::MarkedYaml<'_>> for LineCol {
-    fn from(value: &saphyr::MarkedYaml) -> Self {
-        LineCol {
-            line: value.span.start.line(),
-            col: value.span.start.col() + 1, // contrary to the documentation, columns are 0-indexed
-        }
-    }
 }
 
 /// A validation error simply contains a path and an error message
@@ -38,7 +23,7 @@ pub struct ValidationError {
     /// The path to the value that caused the error
     pub path: String,
     /// The line and column of the value that caused the error
-    pub line_col: Option<LineCol>,
+    pub marker: Option<Marker>,
     /// The error message
     pub error: String,
 }
@@ -46,11 +31,14 @@ pub struct ValidationError {
 /// Display this ValidationErrors as "{path}: {error}"
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(line_col) = &self.line_col {
+        if let Some(marker) = &self.marker {
             write!(
                 f,
                 "[{}:{}] .{}: {}",
-                line_col.line, line_col.col, self.path, self.error
+                marker.line(),
+                marker.col() + 1, // contrary to the documentation, columns are 0-indexed
+                self.path,
+                self.error
             )
         } else {
             write!(f, ".{}: {}", self.path, self.error)
@@ -91,34 +79,6 @@ impl Validator for Schema {
             Schema::OneOf(one_of_schema) => one_of_schema.validate(context, value),
             Schema::Not(not_schema) => not_schema.validate(context, value),
         }
-    }
-}
-
-impl Validator for YamlSchema {
-    fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[YamlSchema] self: {self}");
-        debug!(
-            "[YamlSchema] Validating value: {}",
-            format_yaml_data(&value.data)
-        );
-        if let Some(reference) = &self.r#ref {
-            debug!("[YamlSchema] Reference found: {reference}");
-            let ref_name = &reference.ref_name;
-            if let Some(root_schema) = &context.root_schema {
-                if let Some(schema) = root_schema.get_def(ref_name) {
-                    schema.validate(context, value)?;
-                } else {
-                    context.add_error(value, format!("Schema {ref_name} not found"));
-                }
-            } else {
-                return Err(generic_error!(
-                    "YamlSchema has a reference, but no root schema was provided!"
-                ));
-            }
-        } else if let Some(schema) = &self.schema {
-            schema.validate(context, value)?;
-        }
-        Ok(())
     }
 }
 
@@ -183,9 +143,9 @@ pub fn validate_integer(
 
 #[cfg(test)]
 mod tests {
-    use saphyr::LoadableYamlNode;
-
     use super::*;
+    use crate::YamlSchema;
+    use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_validate_empty_schema() {

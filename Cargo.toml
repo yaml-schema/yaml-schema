@@ -5,6 +5,12 @@ edition = "2021"
 description = "A YAML schema validator"
 license = "MIT"
 repository = "https://github.com/yaml-schema/yaml-schema"
+documentation = "https://docs.rs/yaml-schema"
+readme = "README.md"
+homepage = "https://github.com/yaml-schema/yaml-schema"
+exclude = [
+    ".github/*"
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,7 +18,7 @@ repository = "https://github.com/yaml-schema/yaml-schema"
 clap = { version = "4.5.4", features = ["cargo", "derive"] }
 env_logger = "0.11.3"
 eyre = "0.6.8"
-hashlink = "0.8.4"
+hashlink = "0.10.0"
 log = "0.4.21"
 ordered-float = "5.0.0"
 regex = "1.10.4"
@@ -20,7 +26,7 @@ saphyr = "0.0.6"
 thiserror = "2.0"
 
 [dev-dependencies]
-ctor = "0.3.6"
+ctor = "0.4.2"
 cucumber = "0.21.0"
 tokio = { version = "1.43.1", features = ["full"] }
 

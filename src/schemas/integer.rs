@@ -1,7 +1,10 @@
+use crate::loader::FromSaphyrMapping;
+use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use crate::Number;
 use crate::Result;
+use crate::{loader, Number};
+use saphyr::{MarkedYaml, Scalar, YamlData};
 
 /// A number schema
 #[derive(Debug, Default, PartialEq)]
@@ -11,6 +14,113 @@ pub struct IntegerSchema {
     pub exclusive_minimum: Option<Number>,
     pub exclusive_maximum: Option<Number>,
     pub multiple_of: Option<Number>,
+}
+
+impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
+    type Error = crate::Error;
+
+    fn try_from(value: &MarkedYaml) -> Result<IntegerSchema> {
+        if let YamlData::Mapping(mapping) = &value.data {
+            let mut integer_schema = IntegerSchema::default();
+            for (key, value) in mapping.iter() {
+                if let YamlData::Value(Scalar::String(key)) = &key.data {
+                    match key.as_ref() {
+                        "minimum" => {
+                            integer_schema.minimum = Some(value.try_into()?);
+                        }
+                        "maximum" => {
+                            integer_schema.maximum = Some(value.try_into()?);
+                        }
+                        "exclusiveMinimum" => {
+                            integer_schema.exclusive_minimum = Some(value.try_into()?);
+                        }
+                        "exclusiveMaximum" => {
+                            integer_schema.exclusive_maximum = Some(value.try_into()?);
+                        }
+                        "multipleOf" => {
+                            integer_schema.multiple_of = Some(value.try_into()?);
+                        }
+                        "type" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                if s != "integer" {
+                                    return Err(unsupported_type!(
+                                        "{} Expected type: integer, but got: {}",
+                                        format_marker(&value.span.start),
+                                        s
+                                    ));
+                                }
+                            } else {
+                                return Err(generic_error!(
+                                    "{} Expected string value for `type:`, got {:?}",
+                                    format_marker(&value.span.start),
+                                    value
+                                ));
+                            }
+                        }
+                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
+                    }
+                } else {
+                    return Err(generic_error!(
+                        "{} Expected string key, got {:?}",
+                        format_marker(&key.span.start),
+                        key
+                    ));
+                }
+            }
+            Ok(integer_schema)
+        } else {
+            Err(generic_error!(
+                "{} Expected mapping, got {:?}",
+                format_marker(&value.span.start),
+                value
+            ))
+        }
+    }
+}
+
+impl FromSaphyrMapping<IntegerSchema> for IntegerSchema {
+    fn from_mapping(mapping: &saphyr::Mapping) -> Result<IntegerSchema> {
+        let mut integer_schema = IntegerSchema::default();
+        for (key, value) in mapping.iter() {
+            if let saphyr::Yaml::Value(scalar) = key {
+                if let saphyr::Scalar::String(key) = scalar {
+                    match key.as_ref() {
+                        "minimum" => {
+                            integer_schema.minimum = Some(loader::load_number(value)?);
+                        }
+                        "maximum" => {
+                            integer_schema.maximum = Some(loader::load_number(value)?);
+                        }
+                        "exclusiveMinimum" => {
+                            integer_schema.exclusive_minimum = Some(loader::load_number(value)?);
+                        }
+                        "exclusiveMaximum" => {
+                            integer_schema.exclusive_maximum = Some(loader::load_number(value)?);
+                        }
+                        "multipleOf" => {
+                            integer_schema.multiple_of = Some(loader::load_number(value)?);
+                        }
+                        "type" => {
+                            let s = loader::load_string_value(value)?;
+                            if s != "integer" {
+                                return Err(unsupported_type!(
+                                    "Expected type: integer, but got: {}",
+                                    s
+                                ));
+                            }
+                        }
+                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
+                    }
+                }
+            } else {
+                return Err(expected_scalar!(
+                    "Expected a scalar value for the key, got: {:#?}",
+                    key
+                ));
+            }
+        }
+        Ok(integer_schema)
+    }
 }
 
 impl std::fmt::Display for IntegerSchema {
