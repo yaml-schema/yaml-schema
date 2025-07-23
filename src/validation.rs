@@ -1,3 +1,8 @@
+use log::debug;
+use std::cmp::Ordering;
+
+use saphyr::Marker;
+
 pub mod any_of;
 mod context;
 mod objects;
@@ -8,9 +13,8 @@ use crate::utils::format_yaml_data;
 use crate::Number;
 use crate::Result;
 use crate::Schema;
+
 pub use context::Context;
-use log::debug;
-use saphyr::Marker;
 
 /// A trait for validating a sahpyr::Yaml value against a schema
 pub trait Validator {
@@ -93,38 +97,88 @@ pub fn validate_integer(
     context: &Context,
     minimum: &Option<Number>,
     maximum: &Option<Number>,
+    exclusive_minimum: &Option<Number>,
+    exclusive_maximum: &Option<Number>,
     multiple_of: &Option<Number>,
     value: &saphyr::MarkedYaml,
     i: i64,
 ) {
-    if let Some(minimum) = minimum {
+    if let Some(exclusive_min) = exclusive_minimum {
+        match exclusive_min {
+            Number::Integer(exclusive_min) => {
+                if i <= *exclusive_min {
+                    context.add_error(
+                        value,
+                        format!("Number must be greater than {exclusive_min}"),
+                    );
+                }
+            }
+            Number::Float(exclusive_min) => {
+                if (i as f64).partial_cmp(exclusive_min) != Some(Ordering::Greater) {
+                    context.add_error(
+                        value,
+                        format!("Number must be greater than {exclusive_min}"),
+                    );
+                }
+            }
+        }
+    } else if let Some(minimum) = minimum {
         match minimum {
             Number::Integer(min) => {
-                if i < *min {
-                    context.add_error(value, "Number is too small!".to_string());
+                if i <= *min {
+                    context.add_error(
+                        value,
+                        format!("Number must be greater than or equal to {min}"),
+                    );
                 }
             }
             Number::Float(min) => {
-                if (i as f64) < *min {
-                    context.add_error(value, "Number is too small!".to_string());
+                let cmp = (i as f64).partial_cmp(min);
+                if cmp != Some(Ordering::Less) && cmp != Some(Ordering::Equal) {
+                    context.add_error(
+                        value,
+                        format!("Number must be greater than or equal to {min}"),
+                    );
                 }
             }
         }
     }
-    if let Some(maximum) = maximum {
+
+    if let Some(exclusive_max) = exclusive_maximum {
+        match exclusive_max {
+            Number::Integer(exclusive_max) => {
+                if i >= *exclusive_max {
+                    context.add_error(
+                        value,
+                        format!("Number must be less than than {exclusive_max}"),
+                    );
+                }
+            }
+            Number::Float(exclusive_max) => {
+                if (i as f64).partial_cmp(exclusive_max) != Some(Ordering::Less) {
+                    context.add_error(
+                        value,
+                        format!("Number must be less than than {exclusive_max}"),
+                    );
+                }
+            }
+        }
+    } else if let Some(maximum) = maximum {
         match maximum {
             Number::Integer(max) => {
-                if i > *max {
-                    context.add_error(value, "Number is too big!".to_string());
+                if i >= *max {
+                    context.add_error(value, format!("Number must be less than or equal to {max}"));
                 }
             }
             Number::Float(max) => {
-                if (i as f64) > *max {
-                    context.add_error(value, "Number is too big!".to_string());
+                let cmp = (i as f64).partial_cmp(max);
+                if cmp != Some(Ordering::Greater) && cmp != Some(Ordering::Equal) {
+                    context.add_error(value, format!("Number must be less than or equal to {max}"));
                 }
             }
         }
     }
+
     if let Some(multiple_of) = &multiple_of {
         match multiple_of {
             Number::Integer(multiple) => {

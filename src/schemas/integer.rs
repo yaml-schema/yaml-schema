@@ -6,7 +6,7 @@ use crate::Result;
 use crate::{loader, Number};
 use saphyr::{MarkedYaml, Scalar, YamlData};
 
-/// A number schema
+/// An integer schema
 #[derive(Debug, Default, PartialEq)]
 pub struct IntegerSchema {
     pub minimum: Option<Number>,
@@ -138,6 +138,8 @@ impl Validator for IntegerSchema {
                     context,
                     &self.minimum,
                     &self.maximum,
+                    &self.exclusive_minimum,
+                    &self.exclusive_maximum,
                     &self.multiple_of,
                     value,
                     *i,
@@ -149,6 +151,8 @@ impl Validator for IntegerSchema {
                         context,
                         &self.minimum,
                         &self.maximum,
+                        &self.exclusive_minimum,
+                        &self.exclusive_maximum,
                         &self.multiple_of,
                         value,
                         f as i64,
