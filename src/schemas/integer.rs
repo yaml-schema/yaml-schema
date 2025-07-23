@@ -5,6 +5,7 @@ use crate::validation::Validator;
 use crate::Result;
 use crate::{loader, Number};
 use saphyr::{MarkedYaml, Scalar, YamlData};
+use std::cmp::Ordering;
 
 /// An integer schema
 #[derive(Debug, Default, PartialEq)]
@@ -134,29 +135,11 @@ impl Validator for IntegerSchema {
         let data = &value.data;
         if let saphyr::YamlData::Value(scalar) = data {
             if let saphyr::Scalar::Integer(i) = scalar {
-                crate::validation::validate_integer(
-                    context,
-                    &self.minimum,
-                    &self.maximum,
-                    &self.exclusive_minimum,
-                    &self.exclusive_maximum,
-                    &self.multiple_of,
-                    value,
-                    *i,
-                )
+                self.validate_integer(context, value, *i);
             } else if let saphyr::Scalar::FloatingPoint(o) = scalar {
                 let f = o.into_inner();
                 if f.fract() == 0.0 {
-                    crate::validation::validate_integer(
-                        context,
-                        &self.minimum,
-                        &self.maximum,
-                        &self.exclusive_minimum,
-                        &self.exclusive_maximum,
-                        &self.multiple_of,
-                        value,
-                        f as i64,
-                    )
+                    self.validate_integer(context, value, f as i64);
                 } else {
                     context.add_error(value, format!("Expected an integer, but got: {data:?}"));
                 }
@@ -170,6 +153,109 @@ impl Validator for IntegerSchema {
             fail_fast!(context)
         }
         Ok(())
+    }
+}
+
+impl IntegerSchema {
+    fn validate_integer(&self, context: &Context, value: &MarkedYaml, i: i64) {
+        if let Some(exclusive_min) = self.exclusive_minimum {
+            match exclusive_min {
+                Number::Integer(exclusive_min) => {
+                    if i <= exclusive_min {
+                        context.add_error(
+                            value,
+                            format!("Number must be greater than {exclusive_min}"),
+                        );
+                    }
+                }
+                Number::Float(exclusive_min) => {
+                    if (i as f64).partial_cmp(&exclusive_min) != Some(Ordering::Greater) {
+                        context.add_error(
+                            value,
+                            format!("Number must be greater than {exclusive_min}"),
+                        );
+                    }
+                }
+            }
+        } else if let Some(minimum) = self.minimum {
+            match minimum {
+                Number::Integer(min) => {
+                    if i <= min {
+                        context.add_error(
+                            value,
+                            format!("Number must be greater than or equal to {min}"),
+                        );
+                    }
+                }
+                Number::Float(min) => {
+                    let cmp = (i as f64).partial_cmp(&min);
+                    if cmp != Some(Ordering::Less) && cmp != Some(Ordering::Equal) {
+                        context.add_error(
+                            value,
+                            format!("Number must be greater than or equal to {min}"),
+                        );
+                    }
+                }
+            }
+        }
+
+        if let Some(exclusive_max) = self.exclusive_maximum {
+            match exclusive_max {
+                Number::Integer(exclusive_max) => {
+                    if i >= exclusive_max {
+                        context.add_error(
+                            value,
+                            format!("Number must be less than than {exclusive_max}"),
+                        );
+                    }
+                }
+                Number::Float(exclusive_max) => {
+                    if (i as f64).partial_cmp(&exclusive_max) != Some(Ordering::Less) {
+                        context.add_error(
+                            value,
+                            format!("Number must be less than than {exclusive_max}"),
+                        );
+                    }
+                }
+            }
+        } else if let Some(maximum) = self.maximum {
+            match maximum {
+                Number::Integer(max) => {
+                    if i >= max {
+                        context.add_error(
+                            value,
+                            format!("Number must be less than or equal to {max}"),
+                        );
+                    }
+                }
+                Number::Float(max) => {
+                    let cmp = (i as f64).partial_cmp(&max);
+                    if cmp != Some(Ordering::Greater) && cmp != Some(Ordering::Equal) {
+                        context.add_error(
+                            value,
+                            format!("Number must be less than or equal to {max}"),
+                        );
+                    }
+                }
+            }
+        }
+
+        if let Some(multiple_of) = self.multiple_of {
+            match multiple_of {
+                Number::Integer(multiple) => {
+                    if i % multiple != 0 {
+                        context
+                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
+                    }
+                }
+                Number::Float(multiple) => {
+                    if (i as f64) % multiple != 0.0 {
+                        context
+                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
+                    }
+                }
+            }
+        }
     }
 }
 

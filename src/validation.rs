@@ -1,5 +1,4 @@
 use log::debug;
-use std::cmp::Ordering;
 
 use saphyr::Marker;
 
@@ -10,7 +9,6 @@ mod one_of;
 mod strings;
 
 use crate::utils::format_yaml_data;
-use crate::Number;
 use crate::Result;
 use crate::Schema;
 
@@ -32,7 +30,7 @@ pub struct ValidationError {
     pub error: String,
 }
 
-/// Display this ValidationErrors as "{path}: {error}"
+/// Display these ValidationErrors as "{path}: {error}"
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(marker) = &self.marker {
@@ -91,108 +89,6 @@ fn validate_boolean_schema(context: &Context, value: &saphyr::MarkedYaml) -> Res
         context.add_error(value, format!("Expected: boolean, found: {value:?}"));
     }
     Ok(())
-}
-
-pub fn validate_integer(
-    context: &Context,
-    minimum: &Option<Number>,
-    maximum: &Option<Number>,
-    exclusive_minimum: &Option<Number>,
-    exclusive_maximum: &Option<Number>,
-    multiple_of: &Option<Number>,
-    value: &saphyr::MarkedYaml,
-    i: i64,
-) {
-    if let Some(exclusive_min) = exclusive_minimum {
-        match exclusive_min {
-            Number::Integer(exclusive_min) => {
-                if i <= *exclusive_min {
-                    context.add_error(
-                        value,
-                        format!("Number must be greater than {exclusive_min}"),
-                    );
-                }
-            }
-            Number::Float(exclusive_min) => {
-                if (i as f64).partial_cmp(exclusive_min) != Some(Ordering::Greater) {
-                    context.add_error(
-                        value,
-                        format!("Number must be greater than {exclusive_min}"),
-                    );
-                }
-            }
-        }
-    } else if let Some(minimum) = minimum {
-        match minimum {
-            Number::Integer(min) => {
-                if i <= *min {
-                    context.add_error(
-                        value,
-                        format!("Number must be greater than or equal to {min}"),
-                    );
-                }
-            }
-            Number::Float(min) => {
-                let cmp = (i as f64).partial_cmp(min);
-                if cmp != Some(Ordering::Less) && cmp != Some(Ordering::Equal) {
-                    context.add_error(
-                        value,
-                        format!("Number must be greater than or equal to {min}"),
-                    );
-                }
-            }
-        }
-    }
-
-    if let Some(exclusive_max) = exclusive_maximum {
-        match exclusive_max {
-            Number::Integer(exclusive_max) => {
-                if i >= *exclusive_max {
-                    context.add_error(
-                        value,
-                        format!("Number must be less than than {exclusive_max}"),
-                    );
-                }
-            }
-            Number::Float(exclusive_max) => {
-                if (i as f64).partial_cmp(exclusive_max) != Some(Ordering::Less) {
-                    context.add_error(
-                        value,
-                        format!("Number must be less than than {exclusive_max}"),
-                    );
-                }
-            }
-        }
-    } else if let Some(maximum) = maximum {
-        match maximum {
-            Number::Integer(max) => {
-                if i >= *max {
-                    context.add_error(value, format!("Number must be less than or equal to {max}"));
-                }
-            }
-            Number::Float(max) => {
-                let cmp = (i as f64).partial_cmp(max);
-                if cmp != Some(Ordering::Greater) && cmp != Some(Ordering::Equal) {
-                    context.add_error(value, format!("Number must be less than or equal to {max}"));
-                }
-            }
-        }
-    }
-
-    if let Some(multiple_of) = &multiple_of {
-        match multiple_of {
-            Number::Integer(multiple) => {
-                if i % *multiple != 0 {
-                    context.add_error(value, format!("Number is not a multiple of {multiple}!"));
-                }
-            }
-            Number::Float(multiple) => {
-                if (i as f64) % *multiple != 0.0 {
-                    context.add_error(value, format!("Number is not a multiple of {multiple}!"));
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
