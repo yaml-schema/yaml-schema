@@ -685,8 +685,8 @@ mod tests {
             for error in context.errors.borrow().iter() {
                 eprintln!("{error}");
             }
-            assert!(false)
         }
+        assert!(!context.has_errors());
 
         Ok(())
     }

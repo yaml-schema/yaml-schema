@@ -1,3 +1,7 @@
+use log::debug;
+
+use saphyr::Marker;
+
 pub mod any_of;
 mod context;
 mod objects;
@@ -5,12 +9,10 @@ mod one_of;
 mod strings;
 
 use crate::utils::format_yaml_data;
-use crate::Number;
 use crate::Result;
 use crate::Schema;
+
 pub use context::Context;
-use log::debug;
-use saphyr::Marker;
 
 /// A trait for validating a sahpyr::Yaml value against a schema
 pub trait Validator {
@@ -28,7 +30,7 @@ pub struct ValidationError {
     pub error: String,
 }
 
-/// Display this ValidationErrors as "{path}: {error}"
+/// Display these ValidationErrors as "{path}: {error}"
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(marker) = &self.marker {
@@ -87,58 +89,6 @@ fn validate_boolean_schema(context: &Context, value: &saphyr::MarkedYaml) -> Res
         context.add_error(value, format!("Expected: boolean, found: {value:?}"));
     }
     Ok(())
-}
-
-pub fn validate_integer(
-    context: &Context,
-    minimum: &Option<Number>,
-    maximum: &Option<Number>,
-    multiple_of: &Option<Number>,
-    value: &saphyr::MarkedYaml,
-    i: i64,
-) {
-    if let Some(minimum) = minimum {
-        match minimum {
-            Number::Integer(min) => {
-                if i < *min {
-                    context.add_error(value, "Number is too small!".to_string());
-                }
-            }
-            Number::Float(min) => {
-                if (i as f64) < *min {
-                    context.add_error(value, "Number is too small!".to_string());
-                }
-            }
-        }
-    }
-    if let Some(maximum) = maximum {
-        match maximum {
-            Number::Integer(max) => {
-                if i > *max {
-                    context.add_error(value, "Number is too big!".to_string());
-                }
-            }
-            Number::Float(max) => {
-                if (i as f64) > *max {
-                    context.add_error(value, "Number is too big!".to_string());
-                }
-            }
-        }
-    }
-    if let Some(multiple_of) = &multiple_of {
-        match multiple_of {
-            Number::Integer(multiple) => {
-                if i % *multiple != 0 {
-                    context.add_error(value, format!("Number is not a multiple of {multiple}!"));
-                }
-            }
-            Number::Float(multiple) => {
-                if (i as f64) % *multiple != 0.0 {
-                    context.add_error(value, format!("Number is not a multiple of {multiple}!"));
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
