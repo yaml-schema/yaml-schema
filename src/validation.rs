@@ -77,6 +77,7 @@ impl Validator for Schema {
             Schema::Number(number_schema) => number_schema.validate(context, value),
             Schema::Object(object_schema) => object_schema.validate(context, value),
             Schema::Array(array_schema) => array_schema.validate(context, value),
+            Schema::AllOf(all_of_schema) => all_of_schema.validate(context, value),
             Schema::AnyOf(any_of_schema) => any_of_schema.validate(context, value),
             Schema::OneOf(one_of_schema) => one_of_schema.validate(context, value),
             Schema::Not(not_schema) => not_schema.validate(context, value),

@@ -1,7 +1,7 @@
 use crate::loader::FromSaphyrMapping;
 use crate::schemas::r#enum::load_enum_values;
 use crate::utils::format_marker;
-use crate::{loader, ConstValue};
+use crate::{loader, ConstValue, Schema, YamlSchema};
 use regex::Regex;
 use saphyr::{MarkedYaml, Scalar, YamlData};
 
@@ -25,6 +25,15 @@ impl PartialEq for StringSchema {
         self.min_length == other.min_length
             && self.max_length == other.max_length
             && are_patterns_equivalent(&self.pattern, &other.pattern)
+    }
+}
+
+impl From<StringSchema> for YamlSchema {
+    fn from(value: StringSchema) -> Self {
+        YamlSchema {
+            schema: Some(Schema::String(value)),
+            ..Default::default()
+        }
     }
 }
 

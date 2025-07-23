@@ -1,5 +1,27 @@
 Feature: Schema Composition
 
+  Scenario: allOf
+    Given a YAML schema:
+      ```
+      allOf:
+        - type: string
+          minLength: 1
+        - type: string
+          maxLength: 5
+      ```
+    Then it should accept:
+      ```
+      "short"
+      ```
+    But it should not accept:
+      ```
+      ""
+      ```
+    And it should not accept:
+      ```
+      "too long"
+      ```
+
   Scenario: anyOf
     Given a YAML schema:
       ```

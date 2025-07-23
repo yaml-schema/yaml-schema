@@ -1,9 +1,13 @@
-use crate::Result;
-use crate::Validator;
-/// The schemas defined in the YAML schema language
+// The schemas defined in the YAML schema language
+
 use log::debug;
+
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
+use crate::Result;
+use crate::Validator;
+
+mod all_of;
 mod any_of;
 mod array;
 mod bool_or_typed;
@@ -19,6 +23,8 @@ mod yaml_schema;
 
 use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 use crate::utils::{format_marker, format_scalar, saphyr_yaml_string};
+
+pub use all_of::AllOfSchema;
 pub use any_of::AnyOfSchema;
 pub use array::ArraySchema;
 pub use bool_or_typed::BoolOrTypedSchema;
@@ -279,6 +285,7 @@ pub enum Schema {
     Object(Box<ObjectSchema>), // `type: object`
     String(StringSchema),      // `type: string`
     Enum(EnumSchema),          // `enum`
+    AllOf(AllOfSchema),        // `allOf`
     AnyOf(AnyOfSchema),        // `anyOf`
     OneOf(OneOfSchema),        // `oneOf`
     Not(NotSchema),            // `not`
@@ -346,6 +353,9 @@ impl FromAnnotatedMapping<Schema> for Schema {
         } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
             let const_schema = ConstSchema::from_annotated_mapping(mapping)?;
             return Ok(Schema::Const(const_schema));
+        } else if mapping.contains_key(&MarkedYaml::value_from_str("allOf")) {
+            let all_of_schema = AllOfSchema::from_annotated_mapping(mapping)?;
+            return Ok(Schema::AllOf(all_of_schema));
         } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
             let any_of_schema = AnyOfSchema::from_annotated_mapping(mapping)?;
             return Ok(Schema::AnyOf(any_of_schema));
@@ -374,15 +384,10 @@ impl std::fmt::Display for Schema {
             Schema::Const(c) => write!(f, "{c}"),
             Schema::Enum(e) => write!(f, "{e}"),
             Schema::Integer(i) => write!(f, "{i}"),
-            Schema::AnyOf(any_of_schema) => {
-                write!(f, "{any_of_schema}")
-            }
-            Schema::OneOf(one_of_schema) => {
-                write!(f, "{one_of_schema}")
-            }
-            Schema::Not(not_schema) => {
-                write!(f, "{not_schema}")
-            }
+            Schema::AllOf(all_of_schema) => write!(f, "{all_of_schema}"),
+            Schema::AnyOf(any_of_schema) => write!(f, "{any_of_schema}"),
+            Schema::OneOf(one_of_schema) => write!(f, "{one_of_schema}"),
+            Schema::Not(not_schema) => write!(f, "{not_schema}"),
             Schema::String(s) => write!(f, "{s}"),
             Schema::Number(n) => write!(f, "{n}"),
             Schema::Object(o) => write!(f, "{o}"),
