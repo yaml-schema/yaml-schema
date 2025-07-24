@@ -9,16 +9,20 @@ $defs:
       The type of the schema
     type: string
     enum:
-      - object
-      - string
-      - number
-      - integer
+      # Scalars
       - boolean
-      - enum
+      - integer
+      - number
+      - string
+      # Complex Types
       - array
-      - oneOf
+      - enum
+      - object
+      # Composition Types
+      - allOf
       - anyOf
       - not
+      - oneOf
   schema:
     description: >-
       A meta schema for a YAML object schema
