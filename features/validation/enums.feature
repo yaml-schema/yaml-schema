@@ -49,3 +49,22 @@ Feature: Enumerated values
       ```
       0
       ```
+
+  @enum
+  Scenario: enum of other types
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        version:
+          type: integer
+          enum: [1]
+      ```
+    Then it should accept:
+      ```
+      version: 1
+      ```
+    But it should NOT accept:
+      ```
+      version: 2
+      ```
