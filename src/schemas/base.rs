@@ -7,7 +7,7 @@ use crate::utils::format_marker;
 use crate::ConstValue;
 
 /// A `SchemaTypeValue` is either a string or an array of strings
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SchemaTypeValue {
     Single(String),
     Multiple(Vec<String>),
@@ -31,7 +31,32 @@ impl TryFrom<&MarkedYaml<'_>> for BaseSchema {
                 if let YamlData::Value(Scalar::String(key)) = &key.data {
                     match key.as_ref() {
                         "type" => {
-                            unimplemented!();
+                            if let YamlData::Value(Scalar::String(value)) = &value.data {
+                                base_schema.r#type =
+                                    Some(SchemaTypeValue::Single(value.to_string()));
+                            } else if let YamlData::Sequence(values) = &value.data {
+                                let values = values
+                                    .iter()
+                                    .map(|v| {
+                                        if let YamlData::Value(Scalar::String(value)) = &v.data {
+                                            Ok(value.to_string())
+                                        } else {
+                                            Err(generic_error!(
+                                                "{} Expected a string value for type, got {:?}",
+                                                format_marker(&v.span.start),
+                                                v
+                                            ))
+                                        }
+                                    })
+                                    .collect::<Result<Vec<String>, crate::Error>>()?;
+                                base_schema.r#type = Some(SchemaTypeValue::Multiple(values));
+                            } else {
+                                return Err(generic_error!(
+                                    "{} Expected string or array for type, got {:?}",
+                                    format_marker(&value.span.start),
+                                    value
+                                ));
+                            }
                         }
                         "enum" => {
                             if let YamlData::Sequence(values) = &value.data {
@@ -70,5 +95,58 @@ impl TryFrom<&MarkedYaml<'_>> for BaseSchema {
         } else {
             Err(expected_mapping!(value))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use saphyr::LoadableYamlNode as _;
+
+    use super::*;
+
+    #[test]
+    fn test_single_type_with_enum() {
+        let yaml = r#"
+        type: string
+        enum:
+            - "foo"
+            - "bar"
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let marked_yaml = doc.first().unwrap();
+        let base_schema = BaseSchema::try_from(marked_yaml).unwrap();
+        assert_eq!(
+            base_schema.r#type,
+            Some(SchemaTypeValue::Single("string".to_string()))
+        );
+        assert_eq!(
+            base_schema.r#enum,
+            Some(vec![
+                ConstValue::String("foo".to_string()),
+                ConstValue::String("bar".to_string())
+            ])
+        );
+        assert_eq!(base_schema.r#const, None);
+    }
+
+    #[test]
+    fn test_multiple_types() {
+        let yaml = r#"
+        type:
+            - string
+            - number
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let marked_yaml = doc.first().unwrap();
+        let base_schema = BaseSchema::try_from(marked_yaml).unwrap();
+        assert_eq!(
+            base_schema.r#type,
+            Some(SchemaTypeValue::Multiple(vec![
+                "string".to_string(),
+                "number".to_string()
+            ]))
+        );
+        assert_eq!(base_schema.r#enum, None);
+        assert_eq!(base_schema.r#const, None);
     }
 }
