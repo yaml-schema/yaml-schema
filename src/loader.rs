@@ -287,24 +287,24 @@ impl FromSaphyrMapping<Option<Schema>> for Schema {
             }
         } else if mapping.contains_key(&ENUM) {
             let enum_schema = EnumSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::Enum(enum_schema)));
+            Ok(Some(Schema::Enum(enum_schema)))
         } else if mapping.contains_key(&CONST) {
             let const_schema = ConstSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::Const(const_schema)));
+            Ok(Some(Schema::Const(const_schema)))
         } else if mapping.contains_key(&ANY_OF) {
             let any_of_schema = AnyOfSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::AnyOf(any_of_schema)));
+            Ok(Some(Schema::AnyOf(any_of_schema)))
         } else if mapping.contains_key(&ONE_OF) {
             let one_of_schema = OneOfSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::OneOf(one_of_schema)));
+            Ok(Some(Schema::OneOf(one_of_schema)))
         } else if mapping.contains_key(&NOT) {
             let not_schema = NotSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::Not(not_schema)));
+            Ok(Some(Schema::Not(not_schema)))
         } else {
-            return Err(generic_error!(
+            Err(generic_error!(
                 "(FromSaphyrMapping) Don't know how to construct schema: {:#?}",
                 mapping
-            ));
+            ))
         }
     }
 }

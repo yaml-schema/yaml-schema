@@ -117,11 +117,7 @@ impl TryFrom<&MarkedYaml<'_>> for StringSchema {
             }
             Ok(string_schema)
         } else {
-            Err(generic_error!(
-                "[StringSchema] {} expected mapping, got {:?}",
-                format_marker(&value.span.start),
-                value
-            ))
+            Err(expected_mapping!(value))
         }
     }
 }

@@ -108,7 +108,13 @@ impl ObjectSchema {
         for (k, value) in mapping {
             let key_string = match &k.data {
                 saphyr::YamlData::Value(scalar) => scalar_to_string(scalar),
-                v => return Err(expected_scalar!("Expected a scalar key, got: {:?}", v)),
+                v => {
+                    return Err(expected_scalar!(
+                        "[{}] Expected a scalar key, got: {:?}",
+                        format_marker(&k.span.start),
+                        v
+                    ))
+                }
             };
             let span = &k.span;
             debug!("validate_object_mapping: key: \"{key_string}\"");

@@ -21,8 +21,10 @@ mod one_of;
 mod string;
 mod yaml_schema;
 
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::utils::{format_marker, format_scalar, saphyr_yaml_string};
+use crate::loader::FromAnnotatedMapping;
+use crate::loader::FromSaphyrMapping;
+use crate::utils::format_scalar;
+use crate::utils::saphyr_yaml_string;
 
 pub use all_of::AllOfSchema;
 pub use any_of::AnyOfSchema;
@@ -131,11 +133,7 @@ impl TryFrom<&MarkedYaml<'_>> for TypedSchema {
                 ))
             }
         } else {
-            Err(generic_error!(
-                "{} expected mapping, got: {:?}",
-                format_marker(&marked_yaml.span.start),
-                marked_yaml
-            ))
+            Err(expected_mapping!(marked_yaml))
         }
     }
 }
@@ -309,31 +307,27 @@ impl TryFrom<&MarkedYaml<'_>> for Schema {
                 Ok(typed_schema.into())
             } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
                 let enum_schema = EnumSchema::from_annotated_mapping(mapping)?;
-                return Ok(Schema::Enum(enum_schema));
+                Ok(Schema::Enum(enum_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
                 let const_schema = ConstSchema::from_annotated_mapping(mapping)?;
-                return Ok(Schema::Const(const_schema));
+                Ok(Schema::Const(const_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
                 let any_of_schema = AnyOfSchema::from_annotated_mapping(mapping)?;
-                return Ok(Schema::AnyOf(any_of_schema));
+                Ok(Schema::AnyOf(any_of_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("oneOf")) {
                 let one_of_schema = marked_yaml.try_into()?;
-                return Ok(Schema::OneOf(one_of_schema));
+                Ok(Schema::OneOf(one_of_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("not")) {
                 let not_schema = NotSchema::from_annotated_mapping(mapping)?;
-                return Ok(Schema::Not(not_schema));
+                Ok(Schema::Not(not_schema))
             } else {
-                return Err(generic_error!(
+                Err(generic_error!(
                     "(Schema) Don't know how to construct schema: {:?}",
                     mapping
-                ));
+                ))
             }
         } else {
-            Err(generic_error!(
-                "{} expected mapping, got: {:?}",
-                format_marker(&marked_yaml.span.start),
-                marked_yaml
-            ))
+            Err(expected_mapping!(marked_yaml))
         }
     }
 }
@@ -349,27 +343,27 @@ impl FromAnnotatedMapping<Schema> for Schema {
             }
         } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
             let enum_schema = EnumSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::Enum(enum_schema));
+            Ok(Schema::Enum(enum_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
             let const_schema = ConstSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::Const(const_schema));
+            Ok(Schema::Const(const_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("allOf")) {
             let all_of_schema = AllOfSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::AllOf(all_of_schema));
+            Ok(Schema::AllOf(all_of_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
             let any_of_schema = AnyOfSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::AnyOf(any_of_schema));
+            Ok(Schema::AnyOf(any_of_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("oneOf")) {
             let one_of_schema = OneOfSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::OneOf(one_of_schema));
+            Ok(Schema::OneOf(one_of_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("not")) {
             let not_schema = NotSchema::from_annotated_mapping(mapping)?;
-            return Ok(Schema::Not(not_schema));
+            Ok(Schema::Not(not_schema))
         } else {
-            return Err(generic_error!(
+            Err(generic_error!(
                 "Don't know how to construct schema: {:#?}",
                 mapping
-            ));
+            ))
         }
     }
 }

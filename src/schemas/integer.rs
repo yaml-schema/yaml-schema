@@ -70,11 +70,7 @@ impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
             }
             Ok(integer_schema)
         } else {
-            Err(generic_error!(
-                "{} Expected mapping, got {:?}",
-                format_marker(&value.span.start),
-                value
-            ))
+            Err(expected_mapping!(value))
         }
     }
 }

@@ -170,11 +170,7 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
             }
             Ok(object_schema)
         } else {
-            Err(generic_error!(
-                "[ObjecSchema] {} Expected mapping, got {:?}",
-                format_marker(&marked_yaml.span.start),
-                marked_yaml
-            ))
+            Err(expected_mapping!(marked_yaml))
         }
     }
 }
