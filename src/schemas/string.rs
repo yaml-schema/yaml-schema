@@ -1,7 +1,7 @@
 use crate::loader::FromSaphyrMapping;
 use crate::schemas::r#enum::load_enum_values;
 use crate::utils::format_marker;
-use crate::{loader, ConstValue, Schema, YamlSchema};
+use crate::{ConstValue, Schema, YamlSchema, loader};
 use regex::Regex;
 use saphyr::{MarkedYaml, Scalar, YamlData};
 

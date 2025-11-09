@@ -1,9 +1,9 @@
+use crate::Result;
 use crate::loader::FromSaphyrMapping;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use crate::Result;
-use crate::{loader, Number};
+use crate::{Number, loader};
 use saphyr::{MarkedYaml, Scalar, YamlData};
 use std::cmp::Ordering;
 

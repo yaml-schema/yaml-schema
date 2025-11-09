@@ -2,13 +2,13 @@ use log::{debug, error};
 
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::utils::format_vec;
 use crate::Context;
 use crate::Error;
 use crate::Result;
 use crate::YamlSchema;
-use crate::{loader, Validator};
+use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
+use crate::utils::format_vec;
+use crate::{Validator, loader};
 
 /// The `allOf` schema is a schema that matches if all of the schemas in the `allOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added

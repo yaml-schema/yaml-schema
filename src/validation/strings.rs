@@ -40,28 +40,28 @@ pub fn validate_string(
             return errors;
         }
     };
-    if let Some(min_length) = min_length {
-        if str_value.len() < min_length {
-            errors.push(format!("String is too short! (min length: {min_length})"));
-        }
+    if let Some(min_length) = min_length
+        && str_value.len() < min_length
+    {
+        errors.push(format!("String is too short! (min length: {min_length})"));
     }
-    if let Some(max_length) = max_length {
-        if str_value.len() > max_length {
-            errors.push(format!("String is too long! (max length: {max_length})"));
-        }
+    if let Some(max_length) = max_length
+        && str_value.len() > max_length
+    {
+        errors.push(format!("String is too long! (max length: {max_length})"));
     }
-    if let Some(regex) = pattern {
-        if !regex.is_match(str_value) {
-            errors.push(format!(
-                "String does not match regular expression {}!",
-                regex.as_str()
-            ));
-        }
+    if let Some(regex) = pattern
+        && !regex.is_match(str_value)
+    {
+        errors.push(format!(
+            "String does not match regular expression {}!",
+            regex.as_str()
+        ));
     }
-    if let Some(enum_values) = r#enum {
-        if !enum_values.contains(&str_value.to_string()) {
-            errors.push(format!("String is not in enum: {enum_values:?}"));
-        }
+    if let Some(enum_values) = r#enum
+        && !enum_values.contains(&str_value.to_string())
+    {
+        errors.push(format!("String is not in enum: {enum_values:?}"));
     }
     errors
 }

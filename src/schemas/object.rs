@@ -1,11 +1,11 @@
 use crate::loader::{
-    load_array_of_schemas, load_array_of_schemas_marked, load_integer, load_integer_marked,
-    load_string_value, yaml_to_string, FromSaphyrMapping,
+    FromSaphyrMapping, load_array_of_schemas, load_array_of_schemas_marked, load_integer,
+    load_integer_marked, load_string_value, yaml_to_string,
 };
 
-use crate::utils::{format_marker, hash_map, linked_hash_map, saphyr_yaml_string};
 use crate::Result;
 use crate::TypedSchema;
+use crate::utils::{format_marker, hash_map, linked_hash_map, saphyr_yaml_string};
 use crate::{AnyOfSchema, StringSchema};
 use crate::{BoolOrTypedSchema, Error};
 use crate::{Reference, YamlSchema};

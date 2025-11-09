@@ -1,5 +1,5 @@
 use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::{loader, Context, Validator, YamlSchema};
+use crate::{Context, Validator, YamlSchema, loader};
 use log::debug;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 

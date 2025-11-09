@@ -2,9 +2,9 @@ use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
 
+use crate::ConstValue;
 use crate::schemas::r#enum::load_enum_values;
 use crate::utils::format_marker;
-use crate::ConstValue;
 
 /// A `SchemaTypeValue` is either a string or an array of strings
 #[derive(Debug, PartialEq)]

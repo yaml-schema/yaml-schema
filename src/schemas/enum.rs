@@ -2,14 +2,14 @@ use log::debug;
 
 use saphyr::{AnnotatedMapping, AnnotatedSequence, MarkedYaml};
 
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::utils::format_yaml_data;
-use crate::utils::{format_vec, saphyr_yaml_string};
 use crate::ConstValue;
 use crate::Context;
 use crate::Error;
 use crate::Result;
 use crate::Validator;
+use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
+use crate::utils::format_yaml_data;
+use crate::utils::{format_vec, saphyr_yaml_string};
 
 /// An enum schema represents a set of constant values
 #[derive(Debug, Default, PartialEq)]

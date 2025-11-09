@@ -1,5 +1,5 @@
 use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::{loader, YamlSchema};
+use crate::{YamlSchema, loader};
 
 /// The `anyOf` schema is a schema that matches if any of the schemas in the `anyOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added

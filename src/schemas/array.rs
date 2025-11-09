@@ -3,8 +3,8 @@ use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 
 use crate::utils::format_yaml_data;
 use crate::utils::{format_marker, format_vec};
-use crate::{loader, Result};
 use crate::{Context, Reference};
+use crate::{Result, loader};
 use crate::{Validator, YamlSchema};
 use log::debug;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
@@ -271,11 +271,11 @@ impl std::fmt::Display for ArraySchema {
 }
 #[cfg(test)]
 mod tests {
-    use crate::loader::FromSaphyrMapping;
     use crate::NumberSchema;
     use crate::Schema;
     use crate::StringSchema;
     use crate::TypedSchema;
+    use crate::loader::FromSaphyrMapping;
     use saphyr::LoadableYamlNode;
 
     use super::*;

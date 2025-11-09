@@ -1,5 +1,5 @@
-use crate::reference::Reference;
 use crate::TypedSchema;
+use crate::reference::Reference;
 
 #[derive(Debug, PartialEq)]
 pub enum BoolOrTypedSchema {

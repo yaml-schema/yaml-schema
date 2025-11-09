@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::validation::ValidationError;
 use crate::RootSchema;
 use crate::YamlSchema;
+use crate::validation::ValidationError;
 
 /// The validation context
 #[derive(Debug, Default)]

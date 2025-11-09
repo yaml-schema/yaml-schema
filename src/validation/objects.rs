@@ -2,14 +2,14 @@
 use hashlink::LinkedHashMap;
 use log::{debug, error};
 
-use crate::utils::{format_marker, format_yaml_data, scalar_to_string};
-use crate::validation::Context;
 use crate::BoolOrTypedSchema;
 use crate::Error;
 use crate::ObjectSchema;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
+use crate::utils::{format_marker, format_yaml_data, scalar_to_string};
+use crate::validation::Context;
 
 impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules
@@ -113,7 +113,7 @@ impl ObjectSchema {
                         "[{}] Expected a scalar key, got: {:?}",
                         format_marker(&k.span.start),
                         v
-                    ))
+                    ));
                 }
             };
             let span = &k.span;
@@ -127,10 +127,10 @@ impl ObjectSchema {
                 format_marker(&span.end)
             );
             // First, we check the explicitly defined properties, and validate against it if found
-            if let Some(properties) = &self.properties {
-                if try_validate_value_against_properties(context, &key_string, value, properties)? {
-                    continue;
-                }
+            if let Some(properties) = &self.properties
+                && try_validate_value_against_properties(context, &key_string, value, properties)?
+            {
+                continue;
             }
 
             // Then, we check if additional properties are allowed or not
@@ -201,24 +201,24 @@ impl ObjectSchema {
         }
 
         // Validate minProperties
-        if let Some(min_properties) = &self.min_properties {
-            if mapping.len() < *min_properties {
-                context.add_error(
-                    object,
-                    format!("Object has too few properties! Minimum is {min_properties}!"),
-                );
-                fail_fast!(context)
-            }
+        if let Some(min_properties) = &self.min_properties
+            && mapping.len() < *min_properties
+        {
+            context.add_error(
+                object,
+                format!("Object has too few properties! Minimum is {min_properties}!"),
+            );
+            fail_fast!(context)
         }
         // Validate maxProperties
-        if let Some(max_properties) = &self.max_properties {
-            if mapping.len() > *max_properties {
-                context.add_error(
-                    object,
-                    format!("Object has too many properties! Maximum is {max_properties}!"),
-                );
-                fail_fast!(context)
-            }
+        if let Some(max_properties) = &self.max_properties
+            && mapping.len() > *max_properties
+        {
+            context.add_error(
+                object,
+                format!("Object has too many properties! Maximum is {max_properties}!"),
+            );
+            fail_fast!(context)
         }
 
         Ok(())
@@ -227,11 +227,11 @@ impl ObjectSchema {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine;
     use crate::NumberSchema;
     use crate::RootSchema;
     use crate::Schema;
     use crate::StringSchema;
+    use crate::engine;
     use hashlink::LinkedHashMap;
 
     use super::*;

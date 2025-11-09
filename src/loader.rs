@@ -5,11 +5,10 @@ use std::time::Duration;
 
 use hashlink::LinkedHashMap;
 use log::debug;
-use reqwest::blocking::Client;
 use reqwest::Url;
+use reqwest::blocking::Client;
 use saphyr::{AnnotatedMapping, LoadableYamlNode, MarkedYaml, Scalar, YamlData};
 
-use crate::utils::{format_marker, saphyr_yaml_string, try_unwrap_saphyr_scalar};
 use crate::AnyOfSchema;
 use crate::BoolOrTypedSchema;
 use crate::ConstSchema;
@@ -24,6 +23,7 @@ use crate::RootSchema;
 use crate::Schema;
 use crate::TypedSchema;
 use crate::YamlSchema;
+use crate::utils::{format_marker, saphyr_yaml_string, try_unwrap_saphyr_scalar};
 
 pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
     let path_s = path.into();
@@ -124,7 +124,7 @@ pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
                 return Err(generic_error!(
                     "Don't know how to a handle scalar: {:?}",
                     scalar
-                ))
+                ));
             }
         },
         _ => {
@@ -234,7 +234,7 @@ impl RootLoader {
                             "{} Expected scalar key, but got: {:#?}",
                             format_marker(&key.span.start),
                             key
-                        ))
+                        ));
                     }
                 }
             }

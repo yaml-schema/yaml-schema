@@ -32,13 +32,13 @@ pub use any_of::AnyOfSchema;
 pub use array::ArraySchema;
 pub use base::BaseSchema;
 pub use bool_or_typed::BoolOrTypedSchema;
+pub use r#const::ConstSchema;
+pub use r#enum::EnumSchema;
 pub use integer::IntegerSchema;
 pub use not::NotSchema;
 pub use number::NumberSchema;
 pub use object::ObjectSchema;
 pub use one_of::OneOfSchema;
-pub use r#const::ConstSchema;
-pub use r#enum::EnumSchema;
 pub use string::StringSchema;
 pub use yaml_schema::YamlSchema;
 
