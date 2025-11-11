@@ -89,7 +89,7 @@ impl TypedSchema {
 impl TryFrom<&MarkedYaml<'_>> for TypedSchema {
     type Error = crate::Error;
 
-    fn try_from(marked_yaml: &MarkedYaml<'_>) -> std::result::Result<Self, Self::Error> {
+    fn try_from(marked_yaml: &MarkedYaml<'_>) -> crate::Result<Self> {
         if let YamlData::Mapping(mapping) = &marked_yaml.data {
             let type_key = MarkedYaml::value_from_str("type");
             if mapping.contains_key(&type_key) {
@@ -140,8 +140,10 @@ impl TryFrom<&MarkedYaml<'_>> for TypedSchema {
     }
 }
 
-impl FromAnnotatedMapping<TypedSchema> for TypedSchema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<Self> {
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for TypedSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let type_key = MarkedYaml::value_from_str("type");
         if mapping.contains_key(&type_key) {
             let value = mapping.get(&type_key).unwrap();
@@ -339,10 +341,8 @@ impl FromAnnotatedMapping<Schema> for Schema {
         if mapping.is_empty() {
             Err(generic_error!("Empty mapping"))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
-            match TypedSchema::from_annotated_mapping(mapping) {
-                Ok(typed_schema) => Ok(typed_schema.into()),
-                Err(e) => Err(e),
-            }
+            let typed_schema: TypedSchema = mapping.try_into()?;
+            Ok(typed_schema.into())
         } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
             let enum_schema = EnumSchema::from_annotated_mapping(mapping)?;
             Ok(Schema::Enum(enum_schema))
