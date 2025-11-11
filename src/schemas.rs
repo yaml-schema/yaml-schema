@@ -54,13 +54,6 @@ pub enum TypedSchema {
     String(StringSchema),      // `type: string`
 }
 
-/// A type value is either a string or an array of strings
-#[derive(Debug, PartialEq)]
-pub enum TypeValue<'a> {
-    Single(saphyr::Yaml<'a>),
-    Array(Vec<String>),
-}
-
 impl TypedSchema {
     pub fn for_yaml_value(value: &saphyr::Yaml) -> Result<TypedSchema> {
         match value {
