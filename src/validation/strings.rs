@@ -1,19 +1,15 @@
+use log::debug;
 use regex::Regex;
 
-use super::Validator;
+use crate::ConstValue;
 use crate::Context;
 use crate::Result;
 use crate::StringSchema;
+use crate::Validator;
 
 impl Validator for StringSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        let errors = validate_string(
-            self.min_length,
-            self.max_length,
-            self.pattern.as_ref(),
-            self.r#enum.as_ref(),
-            value,
-        );
+        let errors = self.do_validate(value);
         if !errors.is_empty() {
             for error in errors {
                 context.add_error(value, error);
@@ -23,23 +19,51 @@ impl Validator for StringSchema {
     }
 }
 
+impl StringSchema {
+    fn do_validate(&self, value: &saphyr::MarkedYaml) -> Vec<String> {
+        let mut errors = Vec::new();
+        let data = &value.data;
+        let str_value = match data.as_str() {
+            Some(s) => s,
+            None => {
+                errors.push(format!("Expected a string, but got: {data:?}"));
+                return errors;
+            }
+        };
+        let enum_strings = self.base.r#enum.as_ref().map(|enum_values| {
+            enum_values
+                .iter()
+                .filter_map(|v| {
+                    if let ConstValue::String(s) = v {
+                        Some(s.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        });
+        debug!("enum_strings: {enum_strings:?}");
+        validate_string(
+            &mut errors,
+            self.min_length,
+            self.max_length,
+            self.pattern.as_ref(),
+            enum_strings.as_ref(),
+            str_value,
+        );
+        errors
+    }
+}
+
 /// Just trying to isolate the actual validation into a function that doesn't take a context
 pub fn validate_string(
+    errors: &mut Vec<String>,
     min_length: Option<usize>,
     max_length: Option<usize>,
     pattern: Option<&Regex>,
     r#enum: Option<&Vec<String>>,
-    value: &saphyr::MarkedYaml,
-) -> Vec<String> {
-    let mut errors = Vec::new();
-    let data = &value.data;
-    let str_value = match data.as_str() {
-        Some(s) => s,
-        None => {
-            errors.push(format!("Expected a string, but got: {data:?}"));
-            return errors;
-        }
-    };
+    str_value: &str,
+) {
     if let Some(min_length) = min_length
         && str_value.len() < min_length
     {
@@ -63,7 +87,6 @@ pub fn validate_string(
     {
         errors.push(format!("String is not in enum: {enum_values:?}"));
     }
-    errors
 }
 
 #[cfg(test)]
@@ -98,22 +121,22 @@ mod tests {
 
     #[test]
     fn test_validate_string() {
-        let docs = saphyr::MarkedYaml::load_from_str("hello").unwrap();
-        let value = docs.first().unwrap();
-        let errors = validate_string(None, None, None, None, value);
+        let mut errors = Vec::new();
+        validate_string(&mut errors, None, None, None, None, "hello");
         assert!(errors.is_empty());
     }
 
     #[test]
     fn test_validate_string_with_min_length() {
-        let docs = saphyr::MarkedYaml::load_from_str("hello").unwrap();
-        let errors = validate_string(Some(5), None, None, None, docs.first().unwrap());
+        let mut errors = Vec::new();
+        validate_string(&mut errors, Some(5), None, None, None, "hello");
         assert!(errors.is_empty());
-        let docs = saphyr::MarkedYaml::load_from_str("hell").unwrap();
-        let errors = validate_string(Some(5), None, None, None, docs.first().unwrap());
+        validate_string(&mut errors, Some(5), None, None, None, "hell");
         assert!(!errors.is_empty());
-        let first = errors.first().unwrap();
-        assert_eq!(first, "String is too short! (min length: 5)");
+        assert_eq!(
+            errors.first().unwrap(),
+            "String is too short! (min length: 5)"
+        );
     }
 
     #[test]

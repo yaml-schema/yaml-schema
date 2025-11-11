@@ -1,5 +1,7 @@
+use crate::ConstValue;
 use crate::Result;
 use crate::loader::FromSaphyrMapping;
+use crate::schemas::BaseSchema;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
@@ -8,8 +10,9 @@ use saphyr::{MarkedYaml, Scalar, YamlData};
 use std::cmp::Ordering;
 
 /// An integer schema
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct IntegerSchema {
+    pub base: BaseSchema,
     pub minimum: Option<Number>,
     pub maximum: Option<Number>,
     pub exclusive_minimum: Option<Number>,
@@ -17,12 +20,25 @@ pub struct IntegerSchema {
     pub multiple_of: Option<Number>,
 }
 
+impl Default for IntegerSchema {
+    fn default() -> Self {
+        Self {
+            base: BaseSchema::type_integer(),
+            minimum: None,
+            maximum: None,
+            exclusive_minimum: None,
+            exclusive_maximum: None,
+            multiple_of: None,
+        }
+    }
+}
+
 impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
     type Error = crate::Error;
 
     fn try_from(value: &MarkedYaml) -> Result<IntegerSchema> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut integer_schema = IntegerSchema::default();
+            let mut integer_schema = IntegerSchema::from_base(BaseSchema::try_from(value)?);
             for (key, value) in mapping.iter() {
                 if let YamlData::Value(Scalar::String(key)) = &key.data {
                     match key.as_ref() {
@@ -41,23 +57,10 @@ impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
                         "multipleOf" => {
                             integer_schema.multiple_of = Some(value.try_into()?);
                         }
-                        "type" => {
-                            if let YamlData::Value(Scalar::String(s)) = &value.data {
-                                if s != "integer" {
-                                    return Err(unsupported_type!(
-                                        "{} Expected type: integer, but got: {}",
-                                        format_marker(&value.span.start),
-                                        s
-                                    ));
-                                }
-                            } else {
-                                return Err(generic_error!(
-                                    "{} Expected string value for `type:`, got {:?}",
-                                    format_marker(&value.span.start),
-                                    value
-                                ));
-                            }
-                        }
+                        // These should've been handled by the base schema
+                        "type" => (),
+                        "const" => (),
+                        "enum" => (),
                         _ => unimplemented!("Unsupported key for type: integer: {}", key),
                     }
                 } else {
@@ -129,13 +132,25 @@ impl std::fmt::Display for IntegerSchema {
 impl Validator for IntegerSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
+        let enum_values = self.base.r#enum.as_ref().map(|r#enum| {
+            r#enum
+                .iter()
+                .filter_map(|v| {
+                    if let ConstValue::Number(Number::Integer(i)) = v {
+                        Some(*i)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<i64>>()
+        });
         if let saphyr::YamlData::Value(scalar) = data {
             if let saphyr::Scalar::Integer(i) = scalar {
-                self.validate_integer(context, value, *i);
+                self.validate_integer(context, &enum_values, value, *i);
             } else if let saphyr::Scalar::FloatingPoint(o) = scalar {
                 let f = o.into_inner();
                 if f.fract() == 0.0 {
-                    self.validate_integer(context, value, f as i64);
+                    self.validate_integer(context, &enum_values, value, f as i64);
                 } else {
                     context.add_error(value, format!("Expected an integer, but got: {data:?}"));
                 }
@@ -153,7 +168,20 @@ impl Validator for IntegerSchema {
 }
 
 impl IntegerSchema {
-    fn validate_integer(&self, context: &Context, value: &MarkedYaml, i: i64) {
+    pub fn from_base(base: BaseSchema) -> Self {
+        Self {
+            base,
+            ..Default::default()
+        }
+    }
+
+    fn validate_integer(
+        &self,
+        context: &Context,
+        enum_values: &Option<Vec<i64>>,
+        value: &MarkedYaml,
+        i: i64,
+    ) {
         if let Some(exclusive_min) = self.exclusive_minimum {
             match exclusive_min {
                 Number::Integer(exclusive_min) => {
@@ -251,6 +279,11 @@ impl IntegerSchema {
                     }
                 }
             }
+        }
+        if let Some(enum_values) = enum_values
+            && !enum_values.contains(&i)
+        {
+            context.add_error(value, format!("Number is not in enum: {enum_values:?}"));
         }
     }
 }

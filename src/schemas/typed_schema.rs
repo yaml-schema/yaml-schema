@@ -19,13 +19,20 @@ use crate::utils::saphyr_yaml_string;
 /// A TypedSchema is a subset of YamlSchema that has a `type:`
 #[derive(Debug, PartialEq)]
 pub enum TypedSchema {
+    /// `type: null`
     Null,
-    Array(ArraySchema),        // `type: array`
-    BooleanSchema,             // `type: boolean`
-    Integer(IntegerSchema),    // `type: integer`
-    Number(NumberSchema),      // `type: number`
-    Object(Box<ObjectSchema>), // `type: object`
-    String(StringSchema),      // `type: string`
+    /// `type: array`
+    Array(ArraySchema),
+    /// `type: boolean`
+    BooleanSchema,
+    /// `type: integer`
+    Integer(IntegerSchema),
+    /// `type: number`
+    Number(NumberSchema),
+    /// `type: object`
+    Object(Box<ObjectSchema>),
+    /// `type: string`
+    String(StringSchema),
 }
 
 impl TypedSchema {
@@ -237,5 +244,70 @@ impl FromSaphyrMapping<TypedSchema> for TypedSchema {
                 mapping
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use saphyr::LoadableYamlNode;
+
+    use crate::{ConstValue, Context};
+
+    use super::*;
+
+    #[test]
+    fn test_typed_schema_try_from_type_null() {
+        let doc = MarkedYaml::load_from_str("type: null").unwrap();
+        let mapping = doc.first().unwrap();
+        let typed_schema: TypedSchema = mapping.try_into().unwrap();
+        assert_eq!(typed_schema, TypedSchema::Null);
+    }
+
+    #[test]
+    fn test_typed_schema_try_from_type_string() {
+        let doc = MarkedYaml::load_from_str("type: string").unwrap();
+        let mapping = doc.first().unwrap();
+        let typed_schema: TypedSchema = mapping.try_into().unwrap();
+        assert_eq!(typed_schema, TypedSchema::String(StringSchema::default()));
+    }
+
+    #[test]
+    fn test_typed_schema_with_enum() {
+        let yaml = r#"
+        type: string
+        enum:
+            - "foo"
+            - "bar"
+        "#;
+        println!("yaml: {yaml}");
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let mapping = doc.first().unwrap();
+        let typed_schema: TypedSchema = mapping.try_into().unwrap();
+        println!("typed_schema: {typed_schema:?}");
+        assert!(matches!(typed_schema, TypedSchema::String(_)));
+        let TypedSchema::String(string_schema) = typed_schema else {
+            panic!("Expected TypedSchema::String, but got: {typed_schema:?}");
+        };
+        assert_eq!(
+            string_schema.base.r#enum,
+            Some(vec![ConstValue::string("foo"), ConstValue::string("bar"),])
+        );
+        let context = Context::default();
+        string_schema
+            .validate(&context, &MarkedYaml::value_from_str("foo"))
+            .expect("Expected no errors");
+        println!("context: {context:#?}");
+        assert!(!context.has_errors());
+        string_schema
+            .validate(&context, &MarkedYaml::value_from_str("baz"))
+            .expect("Expected no errors");
+        assert!(context.has_errors());
+        let errors = context.errors.borrow();
+        println!("errors: {errors:?}");
+        assert_eq!(errors.len(), 1);
+        assert_eq!(
+            errors.first().unwrap().error,
+            "String is not in enum: [\"foo\", \"bar\"]"
+        );
     }
 }

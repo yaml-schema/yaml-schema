@@ -14,11 +14,27 @@ pub enum SchemaTypeValue {
 }
 
 /// The `BaseSchema` contains common fields for all schemas.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct BaseSchema {
     pub r#type: Option<SchemaTypeValue>,
     pub r#enum: Option<Vec<ConstValue>>,
     pub r#const: Option<ConstValue>,
+}
+
+impl BaseSchema {
+    pub fn type_integer() -> Self {
+        Self {
+            r#type: Some(SchemaTypeValue::Single("integer".to_string())),
+            ..Default::default()
+        }
+    }
+
+    pub fn type_number() -> Self {
+        Self {
+            r#type: Some(SchemaTypeValue::Single("number".to_string())),
+            ..Default::default()
+        }
+    }
 }
 
 impl TryFrom<&MarkedYaml<'_>> for BaseSchema {
@@ -148,5 +164,29 @@ mod tests {
         );
         assert_eq!(base_schema.r#enum, None);
         assert_eq!(base_schema.r#const, None);
+    }
+
+    #[test]
+    fn test_base_schema_with_enum() {
+        let yaml = r#"
+        type: string
+        enum:
+            - "foo"
+            - "bar"
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let marked_yaml = doc.first().unwrap();
+        let base_schema = BaseSchema::try_from(marked_yaml).unwrap();
+        assert_eq!(
+            base_schema.r#type,
+            Some(SchemaTypeValue::Single("string".to_string()))
+        );
+        assert_eq!(
+            base_schema.r#enum,
+            Some(vec![
+                ConstValue::String("foo".to_string()),
+                ConstValue::String("bar".to_string())
+            ])
+        );
     }
 }
