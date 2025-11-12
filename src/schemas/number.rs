@@ -1,20 +1,36 @@
+use crate::ConstValue;
+use crate::Result;
 use crate::loader::FromSaphyrMapping;
+use crate::schemas::BaseSchema;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use crate::Result;
-use crate::{loader, Number};
+use crate::{Number, loader};
 use saphyr::{MarkedYaml, Scalar, YamlData};
 use std::cmp::Ordering;
 
 /// A number schema
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct NumberSchema {
+    pub base: BaseSchema,
     pub minimum: Option<Number>,
     pub maximum: Option<Number>,
     pub exclusive_minimum: Option<Number>,
     pub exclusive_maximum: Option<Number>,
     pub multiple_of: Option<Number>,
+}
+
+impl Default for NumberSchema {
+    fn default() -> Self {
+        Self {
+            base: BaseSchema::type_number(),
+            minimum: None,
+            maximum: None,
+            exclusive_minimum: None,
+            exclusive_maximum: None,
+            multiple_of: None,
+        }
+    }
 }
 
 impl std::fmt::Display for NumberSchema {
@@ -28,9 +44,33 @@ impl Validator for NumberSchema {
         let data = &value.data;
         if let YamlData::Value(scalar) = data {
             if let Scalar::Integer(i) = scalar {
-                self.validate_number_i64(context, value, *i)
+                let enum_values = self.base.r#enum.as_ref().map(|r#enum| {
+                    r#enum
+                        .iter()
+                        .filter_map(|v| {
+                            if let ConstValue::Number(Number::Integer(i)) = v {
+                                Some(*i)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<i64>>()
+                });
+                self.validate_number_i64(context, &enum_values, value, *i)
             } else if let Scalar::FloatingPoint(o) = scalar {
-                self.validate_number_f64(context, value, o.into_inner())
+                let enum_values = self.base.r#enum.as_ref().map(|r#enum| {
+                    r#enum
+                        .iter()
+                        .filter_map(|v| {
+                            if let ConstValue::Number(Number::Float(f)) = v {
+                                Some(*f)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<f64>>()
+                });
+                self.validate_number_f64(context, &enum_values, value, o.into_inner())
             } else {
                 context.add_error(value, format!("Expected a number, but got: {data:?}"));
             }
@@ -45,8 +85,21 @@ impl Validator for NumberSchema {
 }
 
 impl NumberSchema {
+    pub fn from_base(base: BaseSchema) -> Self {
+        Self {
+            base,
+            ..Default::default()
+        }
+    }
+
     // TODO: This duplicates IntegerSchema::validate_integer(), so, find a neat way to dedupe this
-    fn validate_number_i64(&self, context: &Context, value: &MarkedYaml, i: i64) {
+    fn validate_number_i64(
+        &self,
+        context: &Context,
+        enum_values: &Option<Vec<i64>>,
+        value: &MarkedYaml,
+        i: i64,
+    ) {
         if let Some(exclusive_min) = self.exclusive_minimum {
             match exclusive_min {
                 Number::Integer(exclusive_min) => {
@@ -145,9 +198,20 @@ impl NumberSchema {
                 }
             }
         }
+        if let Some(enum_values) = enum_values
+            && !enum_values.contains(&i)
+        {
+            context.add_error(value, format!("Number is not in enum: {enum_values:?}"));
+        }
     }
 
-    fn validate_number_f64(&self, context: &Context, value: &saphyr::MarkedYaml, f: f64) {
+    fn validate_number_f64(
+        &self,
+        context: &Context,
+        enum_values: &Option<Vec<f64>>,
+        value: &MarkedYaml,
+        f: f64,
+    ) {
         if let Some(minimum) = &self.minimum {
             match minimum {
                 Number::Integer(min) => {
@@ -176,6 +240,11 @@ impl NumberSchema {
                 }
             }
         }
+        if let Some(enum_values) = enum_values
+            && !enum_values.contains(&f)
+        {
+            context.add_error(value, format!("Number is not in enum: {enum_values:?}"));
+        }
     }
 }
 
@@ -183,7 +252,7 @@ impl TryFrom<&MarkedYaml<'_>> for NumberSchema {
     type Error = crate::Error;
     fn try_from(value: &MarkedYaml) -> Result<NumberSchema> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut number_schema = NumberSchema::default();
+            let mut number_schema = NumberSchema::from_base(BaseSchema::try_from(value)?);
             for (key, value) in mapping.iter() {
                 if let YamlData::Value(Scalar::String(key)) = &key.data {
                     match key.as_ref() {
@@ -202,23 +271,10 @@ impl TryFrom<&MarkedYaml<'_>> for NumberSchema {
                         "multipleOf" => {
                             number_schema.multiple_of = Some(value.try_into()?);
                         }
-                        "type" => {
-                            if let YamlData::Value(Scalar::String(s)) = &value.data {
-                                if s != "number" {
-                                    return Err(unsupported_type!(
-                                        "{} Expected type: number, but got: {}",
-                                        format_marker(&value.span.start),
-                                        s
-                                    ));
-                                }
-                            } else {
-                                return Err(generic_error!(
-                                    "{} Expected string value for `type:`, got {:?}",
-                                    format_marker(&value.span.start),
-                                    value
-                                ));
-                            }
-                        }
+                        // These should've been handled by the base schema
+                        "type" => (),
+                        "enum" => (),
+                        "const" => (),
                         _ => unimplemented!(),
                     }
                 } else {
@@ -231,11 +287,7 @@ impl TryFrom<&MarkedYaml<'_>> for NumberSchema {
             }
             Ok(number_schema)
         } else {
-            Err(generic_error!(
-                "{} Expected mapping, got {:?}",
-                format_marker(&value.span.start),
-                value
-            ))
+            Err(expected_mapping!(value))
         }
     }
 }

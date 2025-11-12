@@ -1,10 +1,10 @@
+use crate::YamlSchema;
 use crate::loader;
 use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 /// The `oneOf` schema is a schema that matches if one, and only one of the schemas in the `oneOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
 /// to the context.
-use crate::utils::{format_marker, format_vec};
-use crate::YamlSchema;
+use crate::utils::format_vec;
 use saphyr::{AnnotatedMapping, MarkedYaml, YamlData};
 
 /// The `oneOf` schema is a schema that matches if one, and only one of the schemas in the `oneOf` array match.
@@ -28,11 +28,7 @@ impl TryFrom<&MarkedYaml<'_>> for OneOfSchema {
         if let YamlData::Mapping(mapping) = &value.data {
             Self::from_annotated_mapping(mapping)
         } else {
-            Err(generic_error!(
-                "{} expected mapping, got {:?}",
-                format_marker(&value.span.start),
-                value
-            ))
+            Err(expected_mapping!(value))
         }
     }
 }

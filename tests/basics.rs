@@ -1,4 +1,4 @@
-use cucumber::{gherkin::Step, given, then, World};
+use cucumber::{World, gherkin::Step, given, then};
 use log::{debug, error};
 use std::cell::RefCell;
 use std::rc::Rc;

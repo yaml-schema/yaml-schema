@@ -1,12 +1,14 @@
 // The loader module loads the YAML schema from a file into the in-memory model
 
 use std::rc::Rc;
+use std::time::Duration;
 
 use hashlink::LinkedHashMap;
 use log::debug;
+use reqwest::Url;
+use reqwest::blocking::Client;
 use saphyr::{AnnotatedMapping, LoadableYamlNode, MarkedYaml, Scalar, YamlData};
 
-use crate::utils::{format_marker, saphyr_yaml_string, try_unwrap_saphyr_scalar};
 use crate::AnyOfSchema;
 use crate::BoolOrTypedSchema;
 use crate::ConstSchema;
@@ -21,6 +23,7 @@ use crate::RootSchema;
 use crate::Schema;
 use crate::TypedSchema;
 use crate::YamlSchema;
+use crate::utils::{format_marker, saphyr_yaml_string, try_unwrap_saphyr_scalar};
 
 pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
     let path_s = path.into();
@@ -34,6 +37,68 @@ pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
         return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
     }
     load_from_doc(docs.first().unwrap())
+}
+
+/// Error type for URL loading operations
+#[derive(thiserror::Error, Debug)]
+pub enum UrlLoadError {
+    #[error("Failed to download from URL: {0}")]
+    DownloadError(#[from] reqwest::Error),
+
+    #[error("Failed to parse YAML: {0}")]
+    ParseError(#[from] saphyr::ScanError),
+
+    #[error("No YAML documents found in the downloaded content")]
+    NoDocuments,
+}
+
+/// Downloads a YAML schema from a URL and parses it into a RootSchema
+///
+/// # Arguments
+/// * `url` - The URL to download the YAML schema from
+/// * `timeout_seconds` - Optional timeout in seconds for the HTTP request (default: 30 seconds)
+///
+/// # Returns
+/// A `Result` containing the parsed `RootSchema` if successful, or an error if the download or parsing fails.
+///
+/// # Example
+/// ```no_run
+/// use yaml_schema::loader::download_from_url;
+///
+/// let schema = download_from_url("https://example.com/schema.yaml", None).unwrap();
+/// ```
+pub fn download_from_url(
+    url_string: &str,
+    timeout_seconds: Option<u64>,
+) -> std::result::Result<RootSchema, Box<dyn std::error::Error>> {
+    // Create a new HTTP client with a custom timeout
+    let timeout = Duration::from_secs(timeout_seconds.unwrap_or(30));
+    let client = Client::builder()
+        .timeout(timeout)
+        .use_native_tls()
+        .build()?;
+
+    let url = Url::parse(url_string)?;
+
+    // Download the YAML content
+    let response = client.get(url).send()?;
+    if !response.status().is_success() {
+        return Err(Box::new(UrlLoadError::DownloadError(
+            response.error_for_status().unwrap_err(),
+        )));
+    }
+
+    let yaml_content = response.text()?;
+
+    // Parse the YAML content
+    let docs = MarkedYaml::load_from_str(&yaml_content).map_err(UrlLoadError::ParseError)?;
+
+    if docs.is_empty() {
+        return Err(Box::new(UrlLoadError::NoDocuments));
+    }
+
+    // Load the schema from the first document
+    load_from_doc(docs.first().unwrap()).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
@@ -59,7 +124,7 @@ pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
                 return Err(generic_error!(
                     "Don't know how to a handle scalar: {:?}",
                     scalar
-                ))
+                ));
             }
         },
         _ => {
@@ -169,7 +234,7 @@ impl RootLoader {
                             "{} Expected scalar key, but got: {:#?}",
                             format_marker(&key.span.start),
                             key
-                        ))
+                        ));
                     }
                 }
             }
@@ -222,24 +287,24 @@ impl FromSaphyrMapping<Option<Schema>> for Schema {
             }
         } else if mapping.contains_key(&ENUM) {
             let enum_schema = EnumSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::Enum(enum_schema)));
+            Ok(Some(Schema::Enum(enum_schema)))
         } else if mapping.contains_key(&CONST) {
             let const_schema = ConstSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::Const(const_schema)));
+            Ok(Some(Schema::Const(const_schema)))
         } else if mapping.contains_key(&ANY_OF) {
             let any_of_schema = AnyOfSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::AnyOf(any_of_schema)));
+            Ok(Some(Schema::AnyOf(any_of_schema)))
         } else if mapping.contains_key(&ONE_OF) {
             let one_of_schema = OneOfSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::OneOf(one_of_schema)));
+            Ok(Some(Schema::OneOf(one_of_schema)))
         } else if mapping.contains_key(&NOT) {
             let not_schema = NotSchema::from_mapping(mapping)?;
-            return Ok(Some(Schema::Not(not_schema)));
+            Ok(Some(Schema::Not(not_schema)))
         } else {
-            return Err(generic_error!(
+            Err(generic_error!(
                 "(FromSaphyrMapping) Don't know how to construct schema: {:#?}",
                 mapping
-            ));
+            ))
         }
     }
 }
@@ -689,5 +754,55 @@ mod tests {
         assert!(!context.has_errors());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_download_from_url() {
+        // This is an integration test that requires internet access
+        if std::env::var("CI").is_ok() {
+            // Skip in CI environments if needed
+            return;
+        }
+
+        let result = std::panic::catch_unwind(|| {
+            let url = "https://yaml-schema.github.io/yaml-schema.yaml";
+            let result = download_from_url(url, Some(10));
+
+            // Verify the download and parse was successful
+            let root_schema = result.expect("Failed to download and parse YAML schema from URL");
+
+            // Verify we got a valid schema with expected properties
+            let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
+            assert!(matches!(*root_schema_schema, Schema::Object(_)));
+
+            // Verify the local schema is valid against the downloaded schema
+            if let Ok(local_schema) = std::fs::read_to_string("yaml-schema.yaml") {
+                let context = Engine::evaluate(&root_schema, &local_schema, true);
+                if let Ok(ctx) = context {
+                    if ctx.has_errors() {
+                        for error in ctx.errors.borrow().iter() {
+                            eprintln!("Validation error: {}", error);
+                        }
+                        panic!("Downloaded schema failed validation against local schema");
+                    }
+                } else if let Err(e) = context {
+                    panic!("Failed to validate downloaded schema: {}", e);
+                }
+            }
+        });
+
+        if let Err(e) = result {
+            // If the test fails due to network issues, mark it as passed with a warning
+            if let Some(s) = e.downcast_ref::<String>() {
+                if s.contains("Network is unreachable")
+                    || s.contains("failed to lookup address information")
+                {
+                    eprintln!("Warning: Network unreachable, skipping download test");
+                    return;
+                }
+            }
+            // Re-panic if the failure wasn't network-related
+            std::panic::resume_unwind(e);
+        }
     }
 }

@@ -8,9 +8,9 @@ mod objects;
 mod one_of;
 mod strings;
 
-use crate::utils::format_yaml_data;
 use crate::Result;
 use crate::Schema;
+use crate::utils::format_yaml_data;
 
 pub use context::Context;
 

@@ -1,6 +1,10 @@
-use hashlink::LinkedHashMap;
-use saphyr::{LoadableYamlNode, MarkedYaml, Scalar, YamlData};
 use std::rc::Rc;
+
+use hashlink::LinkedHashMap;
+use saphyr::LoadableYamlNode;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 
 pub mod engine;
 #[macro_use]

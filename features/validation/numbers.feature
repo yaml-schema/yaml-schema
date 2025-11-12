@@ -84,3 +84,49 @@ Feature: Numeric types
       ```
       101
       ```
+
+  Scenario: integer with enum
+    Given a YAML schema:
+      ```
+      type: integer
+      enum: [1, 10, 100]
+      ```
+    Then it should accept:
+      ```
+      1
+      ```
+    And it should accept:
+      ```
+      10
+      ```
+    And it should accept:
+      ```
+      100
+      ```
+    But it should NOT accept:
+      ```
+      101
+      ```
+
+  Scenario: number with enum
+    Given a YAML schema:
+      ```
+      type: number
+      enum: [-1.0, 0.0, 1.0]
+      ```
+    Then it should accept:
+      ```
+      -1.0
+      ```
+    And it should accept:
+      ```
+      0.0
+      ```
+    And it should accept:
+      ```
+      1.0
+      ```
+    But it should NOT accept:
+      ```
+      3.14
+      ```

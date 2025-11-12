@@ -19,6 +19,8 @@ pub enum Error {
     UnsupportedType(String),
     #[error("Generic YAML schema error: {0}")]
     GenericError(String),
+    #[error("[{0}] Expected mapping, but got: {1}")]
+    ExpectedMapping(String, String),
     #[error("Expected YAML scalar: {0}")]
     ExpectedScalar(String),
     #[error("Fail fast signal")]
@@ -53,6 +55,16 @@ macro_rules! generic_error {
     };
     ($s:literal) => {
         $crate::Error::GenericError($s.to_string())
+    };
+}
+
+#[macro_export]
+macro_rules! expected_mapping {
+    ($marked_yaml:expr) => {
+        $crate::Error::ExpectedMapping(
+            $crate::utils::format_marker(&$marked_yaml.span.start),
+            format!("{:?}", $marked_yaml.data),
+        )
     };
 }
 

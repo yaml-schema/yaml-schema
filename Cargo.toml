@@ -1,7 +1,7 @@
 [package]
 name = "yaml-schema"
-version = "0.7.0"
-edition = "2021"
+version = "0.7.1"
+edition = "2024"
 description = "A YAML schema validator"
 license = "MIT"
 repository = "https://github.com/yaml-schema/yaml-schema"
@@ -15,15 +15,19 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.4", features = ["cargo", "derive"] }
+clap = { version = "4.5.42", features = ["cargo", "derive"] }
 env_logger = "0.11.3"
 eyre = "0.6.8"
 hashlink = "0.10.0"
 log = "0.4.21"
 ordered-float = "5.0.0"
 regex = "1.10.4"
+reqwest = { version = "0.12.22", features = ["blocking", "json", "native-tls"], default-features = false }
 saphyr = "0.0.6"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
 thiserror = "2.0"
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 
 [dev-dependencies]
 ctor = "0.4.2"

@@ -1,11 +1,12 @@
 use core::panic;
-use cucumber::{gherkin::Step, given, then, when, World};
+use cucumber::{World, gherkin::Step, given, then, when};
 use log::{debug, info};
 use std::process::Command;
 
 #[derive(Debug, Default, World)]
 pub struct CliWorld {
     command_output: Option<String>,
+    command_stderr: Option<String>,
 }
 
 #[when(regex = "the following command is run:")]
@@ -29,6 +30,9 @@ async fn run_command(world: &mut CliWorld, step: &Step) {
             let output_str = String::from_utf8(output.stdout).unwrap();
             debug!("Output: {output_str}");
             world.command_output = Some(output_str);
+            let stderr_output = String::from_utf8(output.stderr).unwrap();
+            debug!("stderr: {stderr_output}");
+            world.command_stderr = Some(stderr_output);
         }
         Err(e) => {
             panic!("Failed to run command: {}", e);
@@ -55,6 +59,15 @@ async fn it_should_output(world: &mut CliWorld, step: &Step) {
     let expected_output = step.docstring().unwrap().strip_prefix('\n').unwrap();
     let actual_output = world.command_output.as_ref().unwrap();
     assert_eq!(expected_output, actual_output);
+}
+
+#[then(expr = "stderr output should end with:")]
+async fn stderr_output_should_end_with(world: &mut CliWorld, step: &Step) {
+    assert!(world.command_stderr.is_some());
+    // For some reason, the output docstring has a leading newline
+    let expected_output = step.docstring().unwrap().strip_prefix('\n').unwrap();
+    let actual_output = world.command_stderr.as_ref().unwrap();
+    assert!(actual_output.ends_with(expected_output));
 }
 
 #[tokio::main]

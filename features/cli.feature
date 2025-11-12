@@ -8,7 +8,7 @@ Feature: CLI usage
     Then it should exit with status code 0
     And it should output:
       ```
-      ys 0.7.0
+      ys 0.7.1
       ```
 
   Scenario: Basic validation with a valid file
@@ -24,3 +24,8 @@ Feature: CLI usage
       ys -f tests/fixtures/schema.yaml tests/fixtures/invalid.yaml
       ```
     Then it should exit with status code 1
+    And stderr output should end with:
+      ```
+      [1:6] .foo: Expected a string, but got: Value(Integer(42))
+      [2:6] .bar: Expected a number, but got: Value(String("I'm a string"))
+      ```

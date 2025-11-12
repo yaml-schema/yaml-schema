@@ -1,5 +1,5 @@
-$schema: https://yaml-schema.net/draft/2020-12/schema
-$id: https://yaml-schema.net/draft/2020-12/meta-schema
+$schema: https://yaml-schema.github.io/yaml-schema.yaml
+$id: https://yaml-schema.github.io/draft/2025-08/meta-schema
 title: YAML Schema meta-schema
 description: Meta-schema for YAML Schema, based on JSON Schema meta-schema
 type: object
@@ -9,16 +9,20 @@ $defs:
       The type of the schema
     type: string
     enum:
-      - object
-      - string
-      - number
-      - integer
+      # Scalars
       - boolean
-      - enum
+      - integer
+      - number
+      - string
+      # Complex Types
       - array
-      - oneOf
+      - enum
+      - object
+      # Composition Types
+      - allOf
       - anyOf
       - not
+      - oneOf
   schema:
     description: >-
       A meta schema for a YAML object schema

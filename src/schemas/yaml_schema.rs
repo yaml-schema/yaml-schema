@@ -3,9 +3,6 @@ use log::{debug, error};
 use hashlink::LinkedHashMap;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
-use crate::loader;
-use crate::loader::{marked_yaml_to_string, FromAnnotatedMapping, FromSaphyrMapping};
-use crate::utils::{format_marker, format_yaml_data, linked_hash_map};
 use crate::Context;
 use crate::Error;
 use crate::ObjectSchema;
@@ -13,6 +10,9 @@ use crate::Reference;
 use crate::Schema;
 use crate::StringSchema;
 use crate::Validator;
+use crate::loader;
+use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping, marked_yaml_to_string};
+use crate::utils::{format_marker, format_yaml_data, linked_hash_map};
 
 /// YamlSchema is the core of the validation model
 #[derive(Debug, Default, PartialEq)]
@@ -115,7 +115,7 @@ impl TryFrom<&MarkedYaml<'_>> for YamlSchema {
                                 return Err(generic_error!(
                                     "[YamlSchema] Could not load as Reference: {:?}",
                                     marked_yaml
-                                ))
+                                ));
                             }
                         },
                         "title" => {

@@ -2,11 +2,11 @@ use saphyr::LoadableYamlNode;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::validation::Context;
 use crate::Error;
 use crate::Result;
 use crate::RootSchema;
 use crate::Schema;
+use crate::validation::Context;
 
 #[derive(Debug)]
 pub struct Engine<'a> {

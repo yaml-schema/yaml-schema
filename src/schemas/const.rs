@@ -1,10 +1,10 @@
 use super::Validator;
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::utils::{format_marker, saphyr_yaml_string};
 use crate::ConstValue;
 use crate::Context;
 use crate::Number;
 use crate::Result;
+use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
+use crate::utils::{format_marker, saphyr_yaml_string};
 use log::debug;
 use saphyr::{AnnotatedMapping, MarkedYaml};
 
@@ -105,37 +105,37 @@ impl Validator for ConstSchema {
                         context.add_error(value, error);
                     }
                 }
-                ConstValue::Number(n) => {
-                    match n {
-                        Number::Integer(i) => {
-                            if let saphyr::Scalar::Integer(x) = scalar {
-                                if x != i {
-                                    let error =
-                                        format!("Const validation failed, expected: {i}, got: {x}");
-                                    context.add_error(value, error);
-                                }
-                            } else {
+                ConstValue::Number(n) => match n {
+                    Number::Integer(i) => {
+                        if let saphyr::Scalar::Integer(x) = scalar {
+                            if x != i {
                                 let error =
-                                format!("Const validation failed, expected integer value, got: {data:?}");
+                                    format!("Const validation failed, expected: {i}, got: {x}");
                                 context.add_error(value, error);
                             }
-                        }
-                        Number::Float(f) => {
-                            if let saphyr::Scalar::FloatingPoint(o) = scalar {
-                                if o.into_inner() != *f {
-                                    let error = format!(
-                                        "Const validation failed, expected: {f:?}, got: {data:?}"
-                                    );
-                                    context.add_error(value, error);
-                                }
-                            } else {
-                                let error =
-                                format!("Const validation failed, expecte floating point, got: {data:?}");
-                                context.add_error(value, error);
-                            }
+                        } else {
+                            let error = format!(
+                                "Const validation failed, expected integer value, got: {data:?}"
+                            );
+                            context.add_error(value, error);
                         }
                     }
-                }
+                    Number::Float(f) => {
+                        if let saphyr::Scalar::FloatingPoint(o) = scalar {
+                            if o.into_inner() != *f {
+                                let error = format!(
+                                    "Const validation failed, expected: {f:?}, got: {data:?}"
+                                );
+                                context.add_error(value, error);
+                            }
+                        } else {
+                            let error = format!(
+                                "Const validation failed, expecte floating point, got: {data:?}"
+                            );
+                            context.add_error(value, error);
+                        }
+                    }
+                },
                 ConstValue::String(s) => {
                     if data.as_str() != Some(s) {
                         let error =

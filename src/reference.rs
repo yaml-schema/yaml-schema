@@ -1,8 +1,8 @@
+use crate::Result;
 /// A RefSchema is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
 use crate::loader::FromSaphyrMapping;
 use crate::utils::{format_marker, saphyr_yaml_string};
-use crate::Result;
 use saphyr::{MarkedYaml, YamlData};
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -45,7 +45,10 @@ impl TryFrom<&MarkedYaml<'_>> for Reference {
             match &ref_value.data {
                 YamlData::Value(saphyr::Scalar::String(s)) => {
                     if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
-                        return Err(generic_error!("Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}", s));
+                        return Err(generic_error!(
+                            "Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}",
+                            s
+                        ));
                     }
                     let ref_name = match s.strip_prefix("#/$defs/") {
                         Some(ref_name) => ref_name,
@@ -80,7 +83,10 @@ impl FromSaphyrMapping<Reference> for Reference {
         match ref_value {
             saphyr::Yaml::Value(saphyr::Scalar::String(s)) => {
                 if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
-                    return Err(generic_error!("Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}", s));
+                    return Err(generic_error!(
+                        "Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}",
+                        s
+                    ));
                 }
                 let ref_name = match s.strip_prefix("#/$defs/") {
                     Some(ref_name) => ref_name,

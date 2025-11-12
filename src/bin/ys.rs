@@ -3,9 +3,9 @@ use clap::Subcommand;
 use eyre::Context;
 use eyre::Result;
 
-use yaml_schema::version;
 use yaml_schema::Engine;
 use yaml_schema::RootSchema;
+use yaml_schema::version;
 
 #[derive(Parser, Debug, Default)]
 #[command(name = "ys")]
