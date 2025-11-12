@@ -7,7 +7,7 @@ on:
 
 env:
   # We use environment variables to specify the Rust version and other settings once
-  RUST_TOOLCHAIN: 1.82.0
+  RUST_TOOLCHAIN: 1.91.1
   CARGO_TERM_COLOR: always
 
 permissions:
