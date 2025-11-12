@@ -11,12 +11,23 @@ use crate::loader::FromSaphyrMapping;
 use crate::schemas::base::BaseSchema;
 
 /// A string schema
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StringSchema {
     pub base: BaseSchema,
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub pattern: Option<Regex>,
+}
+
+impl Default for StringSchema {
+    fn default() -> Self {
+        Self {
+            base: BaseSchema::type_string(),
+            min_length: None,
+            max_length: None,
+            pattern: None,
+        }
+    }
 }
 
 impl StringSchema {

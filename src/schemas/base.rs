@@ -35,6 +35,13 @@ impl BaseSchema {
             ..Default::default()
         }
     }
+
+    pub fn type_string() -> Self {
+        Self {
+            r#type: Some(SchemaTypeValue::Single("string".to_string())),
+            ..Default::default()
+        }
+    }
 }
 
 impl TryFrom<&MarkedYaml<'_>> for BaseSchema {
