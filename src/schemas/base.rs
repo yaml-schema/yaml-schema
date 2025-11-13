@@ -35,10 +35,16 @@ impl BaseSchema {
             ..Default::default()
         }
     }
-
-    pub fn type_string() -> Self {
+  pub fn type_string() -> Self {
         Self {
             r#type: Some(SchemaTypeValue::Single("string".to_string())),
+            ..Default::default()
+        }
+    }
+
+    pub fn type_object() -> Self {
+        Self {
+          r#type: Some(SchemaTypeValue::Single("object".to_string())),
             ..Default::default()
         }
     }

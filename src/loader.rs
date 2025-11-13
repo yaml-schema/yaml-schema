@@ -612,6 +612,23 @@ mod tests {
         assert_eq!(root_schema_schema, &Schema::String(expected));
     }
 
+    // REVIEW: Somehow, it just works
+    #[test]
+    fn test_type_string_with_description() {
+        let root_schema = load_from_str(
+            r#"
+        type: string
+        description: "First name"
+        "#,
+        )
+        .unwrap();
+        let expected = StringSchema {
+            ..Default::default()
+        };
+        let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
+        assert_eq!(root_schema_schema, &Schema::String(expected));
+    }
+
     #[test]
     fn test_array_constructor_items_true() {
         let mut mapping = saphyr::Mapping::new();
