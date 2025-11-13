@@ -68,3 +68,27 @@ Feature: String validation
       ```
       "(800)FLOWERS"
       ```
+
+  # REVIEW: Why is this succeeding
+  Scenario: ignores unused fields
+    Given a YAML schema:
+      ```
+      type: string
+      description: "First name"
+      ```
+    Then it should accept:
+      ```
+      "John Doe"
+      ```
+    And it should accept:
+      ```
+      "Marie"
+      ```
+    But it should NOT accept:
+      ```
+      1
+      ```
+    And it should NOT accept:
+      ```
+      true
+      ```
