@@ -15,11 +15,14 @@ use regex::Regex;
 use saphyr::{MarkedYaml, Scalar, YamlData};
 use std::collections::HashMap;
 
+use super::BaseSchema;
+
 const PATTERN: saphyr::Yaml = saphyr_yaml_string("pattern");
 
 /// An object schema
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ObjectSchema {
+    pub base: BaseSchema,
     pub metadata: Option<HashMap<String, String>>,
     pub properties: Option<LinkedHashMap<String, YamlSchema>>,
     pub required: Option<Vec<String>>,
@@ -31,7 +34,31 @@ pub struct ObjectSchema {
     pub any_of: Option<AnyOfSchema>,
 }
 
+impl Default for ObjectSchema {
+    fn default() -> Self {
+        Self {
+            base: BaseSchema::type_object(),
+            metadata: None,
+            additional_properties: None,
+            any_of: None,
+            max_properties: None,
+            min_properties: None,
+            pattern_properties: None,
+            properties: None,
+            property_names: None,
+            required: None
+        }
+    }
+}
+
 impl ObjectSchema {
+    pub fn from_base(base: BaseSchema) -> Self {
+        Self {
+            base,
+            ..Default::default()
+        }
+    }
+
     pub fn builder() -> ObjectSchemaBuilder {
         ObjectSchemaBuilder::new()
     }
@@ -43,7 +70,7 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
     fn try_from(marked_yaml: &MarkedYaml<'_>) -> Result<Self> {
         debug!("[ObjectSchema]: TryFrom {marked_yaml:?}");
         if let YamlData::Mapping(mapping) = &marked_yaml.data {
-            let mut object_schema = ObjectSchema::default();
+            let mut object_schema = ObjectSchema::from_base(BaseSchema::try_from(marked_yaml)?);
             for (key, value) in mapping.iter() {
                 if let YamlData::Value(Scalar::String(s)) = &key.data {
                     match s.as_ref() {
