@@ -10,8 +10,7 @@ use crate::Reference;
 use crate::Schema;
 use crate::StringSchema;
 use crate::Validator;
-use crate::loader;
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping, marked_yaml_to_string};
+use crate::loader::{FromAnnotatedMapping, marked_yaml_to_string};
 use crate::utils::{format_marker, format_yaml_data, linked_hash_map};
 
 /// YamlSchema is the core of the validation model
@@ -164,67 +163,6 @@ impl TryFrom<&MarkedYaml<'_>> for YamlSchema {
                 marked_yaml
             ))
         }
-    }
-}
-
-impl FromSaphyrMapping<YamlSchema> for YamlSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> crate::Result<YamlSchema> {
-        let mut metadata: LinkedHashMap<String, String> = LinkedHashMap::new();
-        let mut r#ref: Option<Reference> = None;
-        let mut data = saphyr::Mapping::new();
-
-        for (key, value) in mapping.iter() {
-            match key {
-                saphyr::Yaml::Value(Scalar::String(s)) => {
-                    match s.as_ref() {
-                        "$id" => {
-                            metadata.insert(
-                                s.to_string(),
-                                loader::yaml_to_string(value, "$id must be a string")?,
-                            );
-                        }
-                        "$schema" => {
-                            metadata.insert(
-                                s.to_string(),
-                                loader::yaml_to_string(value, "$schema must be a string")?,
-                            );
-                        }
-                        "$ref" => {
-                            r#ref = Some(Reference::from_mapping(mapping)?);
-                            // TODO: What?
-                        }
-                        "title" => {
-                            metadata.insert(
-                                s.to_string(),
-                                loader::yaml_to_string(value, "title must be a string")?,
-                            );
-                        }
-                        "description" => {
-                            metadata.insert(
-                                s.to_string(),
-                                loader::yaml_to_string(value, "description must be a string")?,
-                            );
-                        }
-                        _ => {
-                            data.insert(key.clone(), value.clone());
-                        }
-                    }
-                }
-                _ => {
-                    data.insert(key.clone(), value.clone());
-                }
-            }
-        }
-        let schema = Schema::from_mapping(&data)?;
-        Ok(YamlSchema {
-            metadata: if metadata.is_empty() {
-                None
-            } else {
-                Some(metadata)
-            },
-            schema,
-            r#ref,
-        })
     }
 }
 

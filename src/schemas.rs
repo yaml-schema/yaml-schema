@@ -4,9 +4,6 @@ use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::YamlData;
 
-use crate::Result;
-use crate::Validator;
-
 mod all_of;
 mod any_of;
 mod array;
@@ -23,8 +20,6 @@ mod string;
 mod typed_schema;
 mod yaml_schema;
 
-use crate::loader::FromAnnotatedMapping;
-
 pub use all_of::AllOfSchema;
 pub use any_of::AnyOfSchema;
 pub use array::ArraySchema;
@@ -40,6 +35,9 @@ pub use one_of::OneOfSchema;
 pub use string::StringSchema;
 pub use typed_schema::TypedSchema;
 pub use yaml_schema::YamlSchema;
+
+use crate::Result;
+use crate::loader::FromAnnotatedMapping;
 
 #[derive(Debug, Default, PartialEq)]
 pub enum Schema {

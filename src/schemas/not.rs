@@ -1,5 +1,5 @@
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::{Context, Validator, YamlSchema, loader};
+use crate::loader::FromAnnotatedMapping;
+use crate::{Context, Validator, YamlSchema};
 use log::debug;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
@@ -12,28 +12,6 @@ pub struct NotSchema {
 impl std::fmt::Display for NotSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "not: {}", self.not)
-    }
-}
-
-impl FromSaphyrMapping<NotSchema> for NotSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> crate::Result<NotSchema> {
-        let mut not_schema = NotSchema::default();
-        for (key, value) in mapping.iter() {
-            if let Ok(key) = loader::load_string_value(key) {
-                match key.as_str() {
-                    "not" => {
-                        if let saphyr::Yaml::Mapping(mapping) = value {
-                            let schema = YamlSchema::from_mapping(mapping)?;
-                            not_schema.not = Box::new(schema);
-                        } else {
-                            return Err(generic_error!("Expected a mapping, but got: {:#?}", key));
-                        }
-                    }
-                    _ => return Err(generic_error!("Unsupported key: {}", key)),
-                }
-            }
-        }
-        Ok(not_schema)
     }
 }
 

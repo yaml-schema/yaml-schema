@@ -1,4 +1,4 @@
-// The loader module loads the YAML schema from a file into the in-memory model
+//! The loader module loads the YAML schema from a file into the in-memory model
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -7,23 +7,21 @@ use hashlink::LinkedHashMap;
 use log::debug;
 use reqwest::Url;
 use reqwest::blocking::Client;
-use saphyr::{AnnotatedMapping, LoadableYamlNode, MarkedYaml, Scalar, YamlData};
+use saphyr::AnnotatedMapping;
+use saphyr::LoadableYamlNode;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 
-use crate::AnyOfSchema;
 use crate::BoolOrTypedSchema;
-use crate::ConstSchema;
-use crate::EnumSchema;
 use crate::Error;
-use crate::NotSchema;
 use crate::Number;
-use crate::OneOfSchema;
-use crate::Reference;
 use crate::Result;
 use crate::RootSchema;
-use crate::Schema;
 use crate::TypedSchema;
 use crate::YamlSchema;
-use crate::utils::{format_marker, saphyr_yaml_string, try_unwrap_saphyr_scalar};
+use crate::utils::format_marker;
+use crate::utils::try_unwrap_saphyr_scalar;
 
 pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
     let path_s = path.into();
@@ -263,52 +261,6 @@ impl From<RootLoader> for RootSchema {
     }
 }
 
-/// "type" key
-const TYPE: saphyr::Yaml = saphyr_yaml_string("type");
-/// "enum" key
-const ENUM: saphyr::Yaml = saphyr_yaml_string("enum");
-/// "const" key
-const CONST: saphyr::Yaml = saphyr_yaml_string("const");
-/// "anyOf" key
-const ANY_OF: saphyr::Yaml = saphyr_yaml_string("anyOf");
-/// "oneOf" key
-const ONE_OF: saphyr::Yaml = saphyr_yaml_string("oneOf");
-/// "not" key
-const NOT: saphyr::Yaml = saphyr_yaml_string("not");
-
-impl FromSaphyrMapping<Option<Schema>> for Schema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<Option<Schema>> {
-        if mapping.is_empty() {
-            Ok(None)
-        } else if mapping.contains_key(&TYPE) {
-            match TypedSchema::from_mapping(mapping) {
-                Ok(typed_schema) => Ok(Some(typed_schema.into())),
-                Err(e) => Err(e),
-            }
-        } else if mapping.contains_key(&ENUM) {
-            let enum_schema = EnumSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::Enum(enum_schema)))
-        } else if mapping.contains_key(&CONST) {
-            let const_schema = ConstSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::Const(const_schema)))
-        } else if mapping.contains_key(&ANY_OF) {
-            let any_of_schema = AnyOfSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::AnyOf(any_of_schema)))
-        } else if mapping.contains_key(&ONE_OF) {
-            let one_of_schema = OneOfSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::OneOf(one_of_schema)))
-        } else if mapping.contains_key(&NOT) {
-            let not_schema = NotSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::Not(not_schema)))
-        } else {
-            Err(generic_error!(
-                "(FromSaphyrMapping) Don't know how to construct schema: {:#?}",
-                mapping
-            ))
-        }
-    }
-}
-
 /// Try to convert a saphyr::Mapping into the desired (schema) type
 pub trait FromSaphyrMapping<T> {
     fn from_mapping(mapping: &saphyr::Mapping) -> Result<T>;
@@ -338,20 +290,6 @@ pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) 
         Ok(s.to_string())
     } else {
         Err(generic_error!("{}", msg.into()))
-    }
-}
-
-pub fn load_array_of_schemas(value: &saphyr::Yaml) -> Result<Vec<YamlSchema>> {
-    if let saphyr::Yaml::Sequence(values) = value {
-        values
-            .iter()
-            .map(|v| match v {
-                saphyr::Yaml::Mapping(mapping) => YamlSchema::from_mapping(mapping),
-                _ => Err(generic_error!("Expected a mapping, but got: {:?}", v)),
-            })
-            .collect::<Result<Vec<YamlSchema>>>()
-    } else {
-        Err(generic_error!("Expected a sequence, but got: {:?}", value))
     }
 }
 
@@ -411,39 +349,6 @@ pub fn load_number(value: &saphyr::Yaml) -> Result<Number> {
     }
 }
 
-pub fn load_array_items(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
-    match value {
-        saphyr::Yaml::Value(scalar) => {
-            if let saphyr::Scalar::Boolean(b) = scalar {
-                Ok(BoolOrTypedSchema::Boolean(*b))
-            } else {
-                Err(generic_error!(
-                    "array: boolean or mapping with type or $ref, but got: {:?}",
-                    value
-                ))
-            }
-        }
-        saphyr::Yaml::Mapping(mapping) => {
-            if mapping.contains_key(&saphyr_yaml_string("$ref")) {
-                let reference = Reference::from_mapping(mapping);
-                Ok(BoolOrTypedSchema::Reference(reference?))
-            } else if mapping.contains_key(&saphyr_yaml_string("type")) {
-                let typed_schema = TypedSchema::from_mapping(mapping)?;
-                Ok(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema)))
-            } else {
-                Err(generic_error!(
-                    "array: boolean or mapping with type or $ref, but got: {:?}",
-                    value
-                ))
-            }
-        }
-        _ => Err(generic_error!(
-            "array: boolean or mapping with type or $ref, but got: {:?}",
-            value
-        )),
-    }
-}
-
 pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> {
     match &value.data {
         YamlData::Value(scalar) => {
@@ -481,10 +386,13 @@ pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> 
 mod tests {
     use regex::Regex;
 
+    use crate::ConstSchema;
     use crate::ConstValue;
+    use crate::Engine;
+    use crate::EnumSchema;
     use crate::IntegerSchema;
+    use crate::Schema;
     use crate::StringSchema;
-    use crate::{ArraySchema, Engine};
 
     use super::*;
 
@@ -610,25 +518,6 @@ mod tests {
         };
         let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
         assert_eq!(root_schema_schema, &Schema::String(expected));
-    }
-
-    #[test]
-    fn test_array_constructor_items_true() {
-        let mut mapping = saphyr::Mapping::new();
-        mapping.insert(saphyr_yaml_string("type"), saphyr_yaml_string("array"));
-        mapping.insert(
-            saphyr_yaml_string("items"),
-            saphyr::Yaml::Value(saphyr::Scalar::Boolean(true)),
-        );
-        let array_schema = ArraySchema::from_mapping(&mapping).unwrap();
-        assert_eq!(
-            array_schema,
-            ArraySchema {
-                items: Some(BoolOrTypedSchema::Boolean(true)),
-                prefix_items: None,
-                contains: None
-            }
-        );
     }
 
     #[test]

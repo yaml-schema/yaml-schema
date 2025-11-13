@@ -1,6 +1,6 @@
 use crate::YamlSchema;
 use crate::loader;
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
+use crate::loader::FromAnnotatedMapping;
 /// The `oneOf` schema is a schema that matches if one, and only one of the schemas in the `oneOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
 /// to the context.
@@ -30,23 +30,6 @@ impl TryFrom<&MarkedYaml<'_>> for OneOfSchema {
         } else {
             Err(expected_mapping!(value))
         }
-    }
-}
-
-impl FromSaphyrMapping<OneOfSchema> for OneOfSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> crate::Result<OneOfSchema> {
-        let mut one_of_schema = OneOfSchema::default();
-        for (key, value) in mapping.iter() {
-            if let Ok(key) = loader::load_string_value(key) {
-                match key.as_str() {
-                    "oneOf" => {
-                        one_of_schema.one_of = loader::load_array_of_schemas(value)?;
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-        }
-        Ok(one_of_schema)
     }
 }
 

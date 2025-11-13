@@ -1,12 +1,14 @@
-use super::Validator;
+use log::debug;
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+
 use crate::ConstValue;
 use crate::Context;
 use crate::Number;
 use crate::Result;
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::utils::{format_marker, saphyr_yaml_string};
-use log::debug;
-use saphyr::{AnnotatedMapping, MarkedYaml};
+use crate::Validator;
+use crate::loader::FromAnnotatedMapping;
+use crate::utils::format_marker;
 
 /// A const schema represents a constant value
 #[derive(Debug, PartialEq)]
@@ -17,33 +19,6 @@ pub struct ConstSchema {
 impl std::fmt::Display for ConstSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Const {:?}", self.r#const)
-    }
-}
-
-impl FromSaphyrMapping<ConstSchema> for ConstSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<ConstSchema> {
-        let value = mapping.get(&saphyr_yaml_string("const")).unwrap();
-        match value {
-            saphyr::Yaml::Value(scalar) => match scalar {
-                saphyr::Scalar::String(s) => Ok(ConstSchema {
-                    r#const: ConstValue::string(s.to_string()),
-                }),
-                saphyr::Scalar::Integer(i) => Ok(ConstSchema {
-                    r#const: ConstValue::integer(*i),
-                }),
-                saphyr::Scalar::FloatingPoint(o) => {
-                    let f = o.into_inner();
-                    Ok(ConstSchema {
-                        r#const: ConstValue::float(f),
-                    })
-                }
-                _ => Err(generic_error!("Unsupported const value: {:#?}", value)),
-            },
-            _ => Err(expected_scalar!(
-                "Expected a scalar value for const, but got: {:#?}",
-                value
-            )),
-        }
     }
 }
 
