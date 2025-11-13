@@ -227,7 +227,6 @@ Feature: Object types
         properties:
           id:
             type: string
-            description: "The property ID"
       ```
     Then it should accept:
       ```
