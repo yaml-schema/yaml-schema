@@ -246,7 +246,6 @@ mod tests {
     use crate::Schema;
     use crate::StringSchema;
     use crate::TypedSchema;
-    use crate::loader::FromSaphyrMapping;
     use saphyr::LoadableYamlNode;
 
     use super::*;
