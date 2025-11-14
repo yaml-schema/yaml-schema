@@ -24,8 +24,10 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - run: |
-          cargo test
+      - name: Check formatting and run tests
+        run: |
+          cargo fmt --check
+          cargo test --verbose
 
   self-validate:
     runs-on: ubuntu-latest

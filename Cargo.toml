@@ -35,9 +35,5 @@ cucumber = "0.21.0"
 tokio = { version = "1.43.1", features = ["full"] }
 
 [[test]]
-name = "basics"
-harness = false
-
-[[test]]
-name = "cli"
+name = "features"
 harness = false
