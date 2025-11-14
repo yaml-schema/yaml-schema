@@ -11,7 +11,6 @@ use crate::ObjectSchema;
 use crate::Result;
 use crate::StringSchema;
 use crate::Validator;
-use crate::loader::FromAnnotatedMapping;
 use crate::utils::format_scalar;
 
 /// A TypedSchema is a subset of YamlSchema that has a `type:`
@@ -106,7 +105,7 @@ fn try_typed_schema_from_mapping_with_type(
         .expect("[try_typed_schema_from_mapping_with_type] Expected a mapping");
     match r#type {
         "array" => {
-            let array_schema = ArraySchema::from_annotated_mapping(mapping)?;
+            let array_schema = ArraySchema::try_from(mapping)?;
             Ok(TypedSchema::Array(array_schema))
         }
         "boolean" => Ok(TypedSchema::BooleanSchema),
@@ -141,7 +140,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for TypedSchema {
                 YamlData::Value(scalar) => match scalar {
                     Scalar::String(s) => match s.as_ref() {
                         "array" => {
-                            let array_schema = ArraySchema::from_annotated_mapping(mapping)?;
+                            let array_schema = ArraySchema::try_from(mapping)?;
                             Ok(TypedSchema::Array(array_schema))
                         }
                         "boolean" => Ok(TypedSchema::BooleanSchema),

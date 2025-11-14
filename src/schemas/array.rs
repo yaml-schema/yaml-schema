@@ -13,7 +13,6 @@ use crate::TypedSchema;
 use crate::Validator;
 use crate::YamlSchema;
 use crate::loader;
-use crate::loader::FromAnnotatedMapping;
 use crate::utils::format_marker;
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
@@ -42,8 +41,10 @@ impl ArraySchema {
     }
 }
 
-impl FromAnnotatedMapping<ArraySchema> for ArraySchema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<ArraySchema> {
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ArraySchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let mut array_schema = ArraySchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(s)) = &key.data {
@@ -306,7 +307,7 @@ mod tests {
         let s_docs = saphyr::MarkedYaml::load_from_str(schema_string).unwrap();
         let first_schema = s_docs.first().unwrap();
         if let YamlData::Mapping(mapping) = &first_schema.data {
-            let schema = ArraySchema::from_annotated_mapping(mapping).unwrap();
+            let schema = ArraySchema::try_from(mapping).unwrap();
             let docs = saphyr::MarkedYaml::load_from_str(yaml_string).unwrap();
             let value = docs.first().unwrap();
             let context = crate::Context::default();
@@ -350,7 +351,7 @@ mod tests {
         let docs = MarkedYaml::load_from_str(schema_string).unwrap();
         let first_doc = docs.first().unwrap();
         if let YamlData::Mapping(mapping) = &first_doc.data {
-            let schema: ArraySchema = ArraySchema::from_annotated_mapping(mapping).unwrap();
+            let schema: ArraySchema = ArraySchema::try_from(mapping).unwrap();
             let docs = saphyr::MarkedYaml::load_from_str(yaml_string).unwrap();
             let value = docs.first().unwrap();
             let context = crate::Context::default();

@@ -37,7 +37,6 @@ pub use typed_schema::TypedSchema;
 pub use yaml_schema::YamlSchema;
 
 use crate::Result;
-use crate::loader::FromAnnotatedMapping;
 
 #[derive(Debug, Default, PartialEq)]
 pub enum Schema {
@@ -76,19 +75,19 @@ impl TryFrom<&MarkedYaml<'_>> for Schema {
                 let typed_schema: TypedSchema = marked_yaml.try_into()?;
                 Ok(typed_schema.into())
             } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
-                let enum_schema = EnumSchema::from_annotated_mapping(mapping)?;
+                let enum_schema = EnumSchema::try_from(mapping)?;
                 Ok(Schema::Enum(enum_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
-                let const_schema = ConstSchema::from_annotated_mapping(mapping)?;
+                let const_schema = ConstSchema::try_from(mapping)?;
                 Ok(Schema::Const(const_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
-                let any_of_schema = AnyOfSchema::from_annotated_mapping(mapping)?;
+                let any_of_schema = AnyOfSchema::try_from(mapping)?;
                 Ok(Schema::AnyOf(any_of_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("oneOf")) {
                 let one_of_schema = marked_yaml.try_into()?;
                 Ok(Schema::OneOf(one_of_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("not")) {
-                let not_schema = NotSchema::from_annotated_mapping(mapping)?;
+                let not_schema = NotSchema::try_from(mapping)?;
                 Ok(Schema::Not(not_schema))
             } else {
                 Err(generic_error!(
@@ -102,30 +101,32 @@ impl TryFrom<&MarkedYaml<'_>> for Schema {
     }
 }
 
-impl FromAnnotatedMapping<Schema> for Schema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<Self> {
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Schema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> Result<Self> {
         if mapping.is_empty() {
             Err(generic_error!("Empty mapping"))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
             let typed_schema: TypedSchema = mapping.try_into()?;
             Ok(typed_schema.into())
         } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
-            let enum_schema = EnumSchema::from_annotated_mapping(mapping)?;
+            let enum_schema = EnumSchema::try_from(mapping)?;
             Ok(Schema::Enum(enum_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
-            let const_schema = ConstSchema::from_annotated_mapping(mapping)?;
+            let const_schema = ConstSchema::try_from(mapping)?;
             Ok(Schema::Const(const_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("allOf")) {
-            let all_of_schema = AllOfSchema::from_annotated_mapping(mapping)?;
+            let all_of_schema = AllOfSchema::try_from(mapping)?;
             Ok(Schema::AllOf(all_of_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
-            let any_of_schema = AnyOfSchema::from_annotated_mapping(mapping)?;
+            let any_of_schema = AnyOfSchema::try_from(mapping)?;
             Ok(Schema::AnyOf(any_of_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("oneOf")) {
-            let one_of_schema = OneOfSchema::from_annotated_mapping(mapping)?;
+            let one_of_schema = OneOfSchema::try_from(mapping)?;
             Ok(Schema::OneOf(one_of_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("not")) {
-            let not_schema = NotSchema::from_annotated_mapping(mapping)?;
+            let not_schema = NotSchema::try_from(mapping)?;
             Ok(Schema::Not(not_schema))
         } else {
             Err(generic_error!(

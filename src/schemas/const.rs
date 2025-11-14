@@ -7,7 +7,6 @@ use crate::Context;
 use crate::Number;
 use crate::Result;
 use crate::Validator;
-use crate::loader::FromAnnotatedMapping;
 use crate::utils::format_marker;
 
 /// A const schema represents a constant value
@@ -22,8 +21,10 @@ impl std::fmt::Display for ConstSchema {
     }
 }
 
-impl FromAnnotatedMapping<ConstSchema> for ConstSchema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<ConstSchema> {
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ConstSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let value = mapping
             .get(&MarkedYaml::value_from_str("const"))
             .ok_or(generic_error!("No `const` key found"))?;

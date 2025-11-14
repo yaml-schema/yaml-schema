@@ -1,7 +1,12 @@
-use crate::loader::FromAnnotatedMapping;
-use crate::{Context, Validator, YamlSchema};
 use log::debug;
-use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
+
+use crate::Context;
+use crate::Validator;
+use crate::YamlSchema;
 
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
 #[derive(Debug, Default, PartialEq)]
@@ -15,8 +20,10 @@ impl std::fmt::Display for NotSchema {
     }
 }
 
-impl FromAnnotatedMapping<NotSchema> for NotSchema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> crate::Result<NotSchema> {
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NotSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let mut not_schema = NotSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {

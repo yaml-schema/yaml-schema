@@ -7,9 +7,10 @@ use crate::Context;
 use crate::Error;
 use crate::Result;
 use crate::Validator;
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
+use crate::loader::FromSaphyrMapping;
+use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
-use crate::utils::{format_vec, saphyr_yaml_string};
+use crate::utils::saphyr_yaml_string;
 
 /// An enum schema represents a set of constant values
 #[derive(Debug, Default, PartialEq)]
@@ -43,8 +44,10 @@ impl FromSaphyrMapping<EnumSchema> for EnumSchema {
     }
 }
 
-impl FromAnnotatedMapping<EnumSchema> for EnumSchema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<EnumSchema> {
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for EnumSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         if let Some(value) = mapping.get(&MarkedYaml::value_from_str("enum")) {
             if let saphyr::YamlData::Sequence(values) = &value.data {
                 let enum_values = load_enum_values(values)?;

@@ -7,7 +7,6 @@ use hashlink::LinkedHashMap;
 use log::debug;
 use reqwest::Url;
 use reqwest::blocking::Client;
-use saphyr::AnnotatedMapping;
 use saphyr::LoadableYamlNode;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
@@ -264,10 +263,6 @@ impl From<RootLoader> for RootSchema {
 /// Try to convert a saphyr::Mapping into the desired (schema) type
 pub trait FromSaphyrMapping<T> {
     fn from_mapping(mapping: &saphyr::Mapping) -> Result<T>;
-}
-
-pub trait FromAnnotatedMapping<T> {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<T>;
 }
 
 pub fn load_string_value(value: &saphyr::Yaml) -> Result<String> {

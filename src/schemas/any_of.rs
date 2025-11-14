@@ -5,7 +5,6 @@ use saphyr::YamlData;
 
 use crate::YamlSchema;
 use crate::loader;
-use crate::loader::FromAnnotatedMapping;
 use crate::utils::format_vec;
 
 /// The `anyOf` schema is a schema that matches if any of the schemas in the `anyOf` array match.
@@ -22,10 +21,10 @@ impl std::fmt::Display for AnyOfSchema {
     }
 }
 
-impl FromAnnotatedMapping<AnyOfSchema> for AnyOfSchema {
-    fn from_annotated_mapping(
-        mapping: &AnnotatedMapping<MarkedYaml>,
-    ) -> crate::Result<AnyOfSchema> {
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AnyOfSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let mut any_of_schema = AnyOfSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {

@@ -10,7 +10,6 @@ use crate::Context;
 use crate::Error;
 use crate::Result;
 use crate::YamlSchema;
-use crate::loader::FromAnnotatedMapping;
 use crate::utils::format_vec;
 use crate::{Validator, loader};
 
@@ -28,10 +27,10 @@ impl std::fmt::Display for AllOfSchema {
     }
 }
 
-impl FromAnnotatedMapping<AllOfSchema> for AllOfSchema {
-    fn from_annotated_mapping(
-        mapping: &AnnotatedMapping<MarkedYaml>,
-    ) -> crate::Result<AllOfSchema> {
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AllOfSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let mut all_of_schema = AllOfSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {

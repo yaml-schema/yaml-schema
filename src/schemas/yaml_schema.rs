@@ -10,8 +10,10 @@ use crate::Reference;
 use crate::Schema;
 use crate::StringSchema;
 use crate::Validator;
-use crate::loader::{FromAnnotatedMapping, marked_yaml_to_string};
-use crate::utils::{format_marker, format_yaml_data, linked_hash_map};
+use crate::loader::marked_yaml_to_string;
+use crate::utils::format_marker;
+use crate::utils::format_yaml_data;
+use crate::utils::linked_hash_map;
 
 /// YamlSchema is the core of the validation model
 #[derive(Debug, Default, PartialEq)]
@@ -318,7 +320,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for YamlSchema {
                 }
             }
         }
-        let schema = Some(Schema::from_annotated_mapping(&data)?);
+        let schema = Some(Schema::try_from(&data)?);
         Ok(YamlSchema {
             metadata: if metadata.is_empty() {
                 None
