@@ -24,6 +24,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: fmt
       - name: Check formatting and run tests
         run: |
           cargo fmt --check
