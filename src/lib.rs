@@ -219,9 +219,6 @@ impl ConstValue {
     pub fn string<V: Into<String>>(value: V) -> ConstValue {
         ConstValue::String(value.into())
     }
-    pub fn from_saphyr_yaml(value: &saphyr::Yaml) -> ConstValue {
-        value.try_into().unwrap()
-    }
 }
 
 impl TryFrom<&Scalar<'_>> for ConstValue {
@@ -258,20 +255,6 @@ impl<'a> TryFrom<&MarkedYaml<'a>> for ConstValue {
                 "{} Expected a scalar value, but got: {:?}",
                 format_marker(&value.span.start),
                 value
-            )),
-        }
-    }
-}
-
-impl TryFrom<&saphyr::Yaml<'_>> for ConstValue {
-    type Error = crate::Error;
-
-    fn try_from(value: &saphyr::Yaml) -> Result<Self> {
-        match value {
-            saphyr::Yaml::Value(scalar) => scalar.try_into(),
-            v => Err(unsupported_type!(
-                "Expected a constant value, but got: {:?}",
-                v
             )),
         }
     }

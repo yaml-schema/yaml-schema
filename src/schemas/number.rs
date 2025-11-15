@@ -1,12 +1,13 @@
 use crate::ConstValue;
+use crate::Number;
 use crate::Result;
-use crate::loader::FromSaphyrMapping;
 use crate::schemas::BaseSchema;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use crate::{Number, loader};
-use saphyr::{MarkedYaml, Scalar, YamlData};
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 use std::cmp::Ordering;
 
 /// A number schema
@@ -289,46 +290,5 @@ impl TryFrom<&MarkedYaml<'_>> for NumberSchema {
         } else {
             Err(expected_mapping!(value))
         }
-    }
-}
-
-impl FromSaphyrMapping<NumberSchema> for NumberSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<NumberSchema> {
-        let mut number_schema = NumberSchema::default();
-        for (key, value) in mapping.iter() {
-            if let Ok(key) = loader::load_string_value(key) {
-                match key.as_str() {
-                    "minimum" => {
-                        let minimum = loader::load_number(value).map_err(|_| {
-                            crate::Error::UnsupportedType(format!(
-                                "Expected type: integer or float, but got: {:?}",
-                                &value
-                            ))
-                        })?;
-                        number_schema.minimum = Some(minimum);
-                    }
-                    "maximum" => {
-                        number_schema.maximum = Some(loader::load_number(value)?);
-                    }
-                    "exclusiveMinimum" => {
-                        number_schema.exclusive_minimum = Some(loader::load_number(value)?);
-                    }
-                    "exclusiveMaximum" => {
-                        number_schema.exclusive_maximum = Some(loader::load_number(value)?);
-                    }
-                    "multipleOf" => {
-                        number_schema.multiple_of = Some(loader::load_number(value)?);
-                    }
-                    "type" => {
-                        let s = loader::load_string_value(value)?;
-                        if s != "number" {
-                            return Err(unsupported_type!("Expected type: number, but got: {}", s));
-                        }
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-        }
-        Ok(number_schema)
     }
 }

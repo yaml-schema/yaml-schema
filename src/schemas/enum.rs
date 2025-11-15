@@ -7,10 +7,8 @@ use crate::Context;
 use crate::Error;
 use crate::Result;
 use crate::Validator;
-use crate::loader::FromSaphyrMapping;
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
-use crate::utils::saphyr_yaml_string;
 
 /// An enum schema represents a set of constant values
 #[derive(Debug, Default, PartialEq)]
@@ -21,26 +19,6 @@ pub struct EnumSchema {
 impl std::fmt::Display for EnumSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Enum {{ enum: {} }}", format_vec(&self.r#enum))
-    }
-}
-
-impl FromSaphyrMapping<EnumSchema> for EnumSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<EnumSchema> {
-        if let Some(value) = mapping.get(&saphyr_yaml_string("enum")) {
-            if let saphyr::Yaml::Sequence(values) = value {
-                let enum_values = values.iter().map(ConstValue::from_saphyr_yaml).collect();
-                Ok(EnumSchema {
-                    r#enum: enum_values,
-                })
-            } else {
-                Err(generic_error!(
-                    "enum: Expected an array, but got: {:#?}",
-                    value
-                ))
-            }
-        } else {
-            Err(generic_error!("No \"enum\" key found!"))
-        }
     }
 }
 

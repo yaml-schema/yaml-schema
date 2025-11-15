@@ -1,12 +1,13 @@
 use crate::ConstValue;
+use crate::Number;
 use crate::Result;
-use crate::loader::FromSaphyrMapping;
 use crate::schemas::BaseSchema;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use crate::{Number, loader};
-use saphyr::{MarkedYaml, Scalar, YamlData};
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 use std::cmp::Ordering;
 
 /// An integer schema
@@ -75,51 +76,6 @@ impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
         } else {
             Err(expected_mapping!(value))
         }
-    }
-}
-
-impl FromSaphyrMapping<IntegerSchema> for IntegerSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<IntegerSchema> {
-        let mut integer_schema = IntegerSchema::default();
-        for (key, value) in mapping.iter() {
-            if let saphyr::Yaml::Value(scalar) = key {
-                if let saphyr::Scalar::String(key) = scalar {
-                    match key.as_ref() {
-                        "minimum" => {
-                            integer_schema.minimum = Some(loader::load_number(value)?);
-                        }
-                        "maximum" => {
-                            integer_schema.maximum = Some(loader::load_number(value)?);
-                        }
-                        "exclusiveMinimum" => {
-                            integer_schema.exclusive_minimum = Some(loader::load_number(value)?);
-                        }
-                        "exclusiveMaximum" => {
-                            integer_schema.exclusive_maximum = Some(loader::load_number(value)?);
-                        }
-                        "multipleOf" => {
-                            integer_schema.multiple_of = Some(loader::load_number(value)?);
-                        }
-                        "type" => {
-                            let s = loader::load_string_value(value)?;
-                            if s != "integer" {
-                                return Err(unsupported_type!(
-                                    "Expected type: integer, but got: {}",
-                                    s
-                                ));
-                            }
-                        }
-                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
-                    }
-                }
-            } else {
-                return Err(expected_scalar!(
-                    "Expected a scalar value for the key, got: {:#?}",
-                    key
-                ));
-            }
-        }
-        Ok(integer_schema)
     }
 }
 

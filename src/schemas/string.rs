@@ -7,7 +7,6 @@ use crate::ConstValue;
 use crate::Schema;
 use crate::YamlSchema;
 use crate::loader;
-use crate::loader::FromSaphyrMapping;
 use crate::schemas::base::BaseSchema;
 
 /// A string schema
@@ -112,57 +111,6 @@ impl TryFrom<&MarkedYaml<'_>> for StringSchema {
         } else {
             Err(expected_mapping!(value))
         }
-    }
-}
-
-impl FromSaphyrMapping<StringSchema> for StringSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> crate::Result<StringSchema> {
-        let mut string_schema = StringSchema::default();
-        for (key, value) in mapping.iter() {
-            if let Ok(key) = loader::load_string_value(key) {
-                match key.as_str() {
-                    "minLength" => {
-                        if let Ok(i) = loader::load_integer(value) {
-                            string_schema.min_length = Some(i as usize);
-                        } else {
-                            return Err(unsupported_type!(
-                                "minLength expected integer, but got: {:?}",
-                                value
-                            ));
-                        }
-                    }
-                    "maxLength" => {
-                        if let Ok(i) = loader::load_integer(value) {
-                            string_schema.max_length = Some(i as usize);
-                        } else {
-                            return Err(unsupported_type!(
-                                "maxLength expected integer, but got: {:?}",
-                                value
-                            ));
-                        }
-                    }
-                    "pattern" => {
-                        if let Ok(s) = loader::load_string_value(value) {
-                            let regex = regex::Regex::new(s.as_str())?;
-                            string_schema.pattern = Some(regex);
-                        } else {
-                            return Err(unsupported_type!(
-                                "pattern expected string, but got: {:?}",
-                                value
-                            ));
-                        }
-                    }
-                    "type" => {
-                        let s = loader::load_string_value(value)?;
-                        if s != "string" {
-                            return Err(unsupported_type!("Expected type: string, but got: {}", s));
-                        }
-                    }
-                    _ => unimplemented!("Unsupported key for type: string: {}", key),
-                }
-            }
-        }
-        Ok(string_schema)
     }
 }
 

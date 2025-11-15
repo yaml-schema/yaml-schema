@@ -22,6 +22,8 @@ use crate::YamlSchema;
 use crate::utils::format_marker;
 use crate::utils::try_unwrap_saphyr_scalar;
 
+/// Load a YAML schema from a file.
+/// Delegates to the `load_from_doc` function to load the schema from the first document.
 pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
     let path_s = path.into();
     let fs_metadata = std::fs::metadata(&path_s)?;
@@ -34,6 +36,56 @@ pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
         return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
     }
     load_from_doc(docs.first().unwrap())
+}
+
+/// Load a YAML schema from a document.
+/// This function is used to load the schema from the first document of a YAML file.
+/// It delegates to the `RootLoader` to load the schema from the document.
+pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
+    let mut loader = RootLoader::new();
+    match &doc.data {
+        YamlData::Value(scalar) => match scalar {
+            Scalar::Boolean(r#bool) => {
+                loader.set_schema(YamlSchema::boolean_literal(*r#bool));
+            }
+            Scalar::Null => {
+                loader.set_schema(YamlSchema::null());
+            }
+            Scalar::String(s) => match s.as_ref() {
+                "true" => {
+                    loader.set_schema(YamlSchema::boolean_literal(true));
+                }
+                "false" => {
+                    loader.set_schema(YamlSchema::boolean_literal(false));
+                }
+                s => return Err(generic_error!("Expected true or false, but got: {}", s)),
+            },
+            _ => {
+                return Err(generic_error!(
+                    "Don't know how to a handle scalar: {:?}",
+                    scalar
+                ));
+            }
+        },
+        _ => {
+            if doc.data.is_mapping() {
+                debug!("Found mapping: {doc:?}, trying to load as YamlSchema");
+                loader.load_root_schema(doc)?;
+            } else {
+                return Err(generic_error!("Don't know how to load: {:?}", doc));
+            }
+        }
+    }
+    Ok(loader.into()) // See From<Loader> for RootSchema below
+}
+
+/// Load a YAML schema from a string.
+/// This function is used to load the schema from a string.
+/// It delegates to the `load_from_doc` function to load the schema from the first document.
+pub fn load_from_str(s: &str) -> Result<RootSchema> {
+    let docs = MarkedYaml::load_from_str(s)?;
+    let first_doc = docs.first().unwrap();
+    Ok(load_from_doc(first_doc).unwrap())
 }
 
 /// Error type for URL loading operations
@@ -96,50 +148,6 @@ pub fn download_from_url(
 
     // Load the schema from the first document
     load_from_doc(docs.first().unwrap()).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-}
-
-pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
-    let mut loader = RootLoader::new();
-    match &doc.data {
-        YamlData::Value(scalar) => match scalar {
-            Scalar::Boolean(r#bool) => {
-                loader.set_schema(YamlSchema::boolean_literal(*r#bool));
-            }
-            Scalar::Null => {
-                loader.set_schema(YamlSchema::null());
-            }
-            Scalar::String(s) => match s.as_ref() {
-                "true" => {
-                    loader.set_schema(YamlSchema::boolean_literal(true));
-                }
-                "false" => {
-                    loader.set_schema(YamlSchema::boolean_literal(false));
-                }
-                s => return Err(generic_error!("Expected true or false, but got: {}", s)),
-            },
-            _ => {
-                return Err(generic_error!(
-                    "Don't know how to a handle scalar: {:?}",
-                    scalar
-                ));
-            }
-        },
-        _ => {
-            if doc.data.is_mapping() {
-                debug!("Found mapping: {doc:?}, trying to load as YamlSchema");
-                loader.load_root_schema(doc)?;
-            } else {
-                return Err(generic_error!("Don't know how to load: {:?}", doc));
-            }
-        }
-    }
-    Ok(loader.into()) // See From<Loader> for RootSchema below
-}
-
-pub fn load_from_str(s: &str) -> Result<RootSchema> {
-    let docs = MarkedYaml::load_from_str(s)?;
-    let first_doc = docs.first().unwrap();
-    Ok(load_from_doc(first_doc).unwrap())
 }
 
 #[derive(Debug, Default)]
@@ -260,11 +268,6 @@ impl From<RootLoader> for RootSchema {
     }
 }
 
-/// Try to convert a saphyr::Mapping into the desired (schema) type
-pub trait FromSaphyrMapping<T> {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<T>;
-}
-
 pub fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
     if let saphyr::Yaml::Value(Scalar::String(s)) = value {
         Ok(s.to_string())
@@ -274,10 +277,6 @@ pub fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
             value
         ))
     }
-}
-
-pub fn yaml_to_string<S: Into<String> + Copy>(yaml: &saphyr::Yaml, msg: S) -> Result<String> {
-    load_string_value(yaml).map_err(|_| generic_error!("{}", msg.into()))
 }
 
 pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) -> Result<String> {
