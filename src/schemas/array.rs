@@ -73,11 +73,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ArraySchema {
                                 ));
                             }
                         } else {
-                            return Err(generic_error!(
-                                "{} Expected string value for `type:`, got {:?}",
-                                format_marker(&value.span.start),
-                                value
-                            ));
+                            return Err(expected_type_is_string!(value));
                         }
                     }
                     "prefixItems" => {
@@ -219,6 +215,7 @@ impl Validator for ArraySchema {
 
             Ok(())
         } else {
+            debug!("[ArraySchema] context.fail_fast: {}", context.fail_fast);
             context.add_error(
                 value,
                 format!(

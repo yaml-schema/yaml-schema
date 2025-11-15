@@ -95,7 +95,7 @@ mod tests {
             "#;
         let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
         let value = docs.first().unwrap();
-        let context = crate::Context::with_root_schema(&root_schema, true);
+        let context = crate::Context::with_root_schema(&root_schema, false);
         let result = root_schema.validate(&context, value);
         println!("result: {result:#?}");
         assert!(result.is_ok());

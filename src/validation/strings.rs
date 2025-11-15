@@ -21,36 +21,36 @@ impl Validator for StringSchema {
 
 impl StringSchema {
     fn do_validate(&self, value: &saphyr::MarkedYaml) -> Vec<String> {
+        debug!("do_validate: {:?}", value.data);
         let mut errors = Vec::new();
-        let data = &value.data;
-        let str_value = match data.as_str() {
-            Some(s) => s,
-            None => {
-                errors.push(format!("Expected a string, but got: {data:?}"));
-                return errors;
-            }
-        };
-        let enum_strings = self.base.r#enum.as_ref().map(|enum_values| {
-            enum_values
-                .iter()
-                .filter_map(|v| {
-                    if let ConstValue::String(s) = v {
-                        Some(s.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        });
-        debug!("enum_strings: {enum_strings:?}");
-        validate_string(
-            &mut errors,
-            self.min_length,
-            self.max_length,
-            self.pattern.as_ref(),
-            enum_strings.as_ref(),
-            str_value,
-        );
+
+        if let saphyr::YamlData::Value(scalar) = &value.data
+            && let saphyr::Scalar::String(s) = scalar
+        {
+            let enum_strings = self.base.r#enum.as_ref().map(|enum_values| {
+                enum_values
+                    .iter()
+                    .filter_map(|v| {
+                        if let ConstValue::String(s) = v {
+                            Some(s.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            });
+            debug!("enum_strings: {enum_strings:?}");
+            validate_string(
+                &mut errors,
+                self.min_length,
+                self.max_length,
+                self.pattern.as_ref(),
+                enum_strings.as_ref(),
+                s,
+            );
+        } else {
+            errors.push(format!("Expected a string, but got: {:?}", value.data));
+        }
         errors
     }
 }
@@ -147,5 +147,17 @@ mod tests {
         let context = Context::default();
         let result = schema.validate(&context, value);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_string_schema_doesnt_validate_object() {
+        let yaml = "an: [arbitrarily, nested, data, structure]";
+        let doc = saphyr::MarkedYaml::load_from_str(yaml).unwrap();
+        let marked_yaml = doc.first().unwrap();
+        let string_schema: StringSchema = StringSchema::default();
+        let context = Context::default();
+        let result = string_schema.validate(&context, &marked_yaml);
+        assert!(result.is_ok());
+        assert!(context.has_errors());
     }
 }

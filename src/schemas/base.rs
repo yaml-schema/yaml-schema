@@ -85,7 +85,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for BaseSchema {
                                 .collect::<Result<Vec<String>, crate::Error>>()?;
                             base_schema.r#type = Some(SchemaTypeValue::Multiple(values));
                         } else {
-                            return Err(generic_error!(
+                            return Err(schema_loading_error!(
                                 "{} Expected string or array for type, got {:?}",
                                 format_marker(&value.span.start),
                                 value

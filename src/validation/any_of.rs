@@ -30,8 +30,7 @@ pub fn validate_any_of(
         // That also means that when evaluating sub schemas, we can fail fast to short circuit
         // the rest of the validation
         let sub_context = context.get_sub_context();
-        let sub_result = schema.validate(&sub_context, value);
-        match sub_result {
+        match schema.validate(&sub_context, value) {
             Ok(()) | Err(Error::FailFast) => {
                 if sub_context.has_errors() {
                     continue;

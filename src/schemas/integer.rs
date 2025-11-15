@@ -51,7 +51,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for IntegerSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut integer_schema = IntegerSchema::default();
+        let mut integer_schema = IntegerSchema::from_base(BaseSchema::try_from(mapping)?);
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
                 match key.as_ref() {

@@ -144,11 +144,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ObjectSchema {
                                 ));
                             }
                         } else {
-                            return Err(generic_error!(
-                                "{} Expected string value for `type:`, got {:?}",
-                                format_marker(&value.span.start),
-                                value.data
-                            ));
+                            return Err(expected_type_is_string!(value));
                         }
                     }
                     _ => {

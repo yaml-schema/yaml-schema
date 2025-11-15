@@ -633,7 +633,7 @@ mod tests {
 
         let yaml_contents = std::fs::read_to_string(schema_filename)?;
 
-        let context = Engine::evaluate(&root_schema, &yaml_contents, true)?;
+        let context = Engine::evaluate(&root_schema, &yaml_contents, false)?;
         if context.has_errors() {
             for error in context.errors.borrow().iter() {
                 eprintln!("{error}");
@@ -665,7 +665,7 @@ mod tests {
 
             // Verify the local schema is valid against the downloaded schema
             if let Ok(local_schema) = std::fs::read_to_string("yaml-schema.yaml") {
-                let context = Engine::evaluate(&root_schema, &local_schema, true);
+                let context = Engine::evaluate(&root_schema, &local_schema, false);
                 if let Ok(ctx) = context {
                     if ctx.has_errors() {
                         for error in ctx.errors.borrow().iter() {

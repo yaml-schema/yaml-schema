@@ -16,6 +16,7 @@ use crate::Result;
 use crate::StringSchema;
 use crate::Validator;
 use crate::utils::format_scalar;
+use crate::utils::format_yaml_data;
 
 /// A TypedSchema is a subset of YamlSchema that has a `type:`
 /// It can be a single type or an aggregate of types.
@@ -111,8 +112,10 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for TypedSchema {
                 },
                 // multiple typed schema
                 YamlData::Sequence(values) => {
-                    println!("values: {values:?}");
-                    let type_values = values
+                    debug!("[TypedSchema] values: {values:?}");
+                    // Check that type values are all strings, then convert to TypedSchemaType
+                    // then return a TypedSchema with r#type set to the TypedSchemaType values
+                    values
                         .iter()
                         .map(|v| {
                             if let YamlData::Value(Scalar::String(s)) = &v.data {
@@ -127,16 +130,12 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for TypedSchema {
                         .collect::<Result<Vec<&str>>>()?
                         .into_iter()
                         .map(|r#type| (r#type, mapping).try_into())
-                        .collect::<Result<Vec<TypedSchema>>>();
-                    match type_values {
-                        Ok(type_values) => {
-                            println!("type_values: {type_values:?}");
-                        }
-                        Err(e) => {
-                            return Err(e);
-                        }
-                    }
-                    unimplemented!()
+                        .collect::<Result<Vec<TypedSchemaType>>>()
+                        .map(|type_values| TypedSchema {
+                            r#type: type_values,
+                            r#enum: None,
+                            r#const: None,
+                        })
                 }
                 v => Err(expected_scalar!("Expected scalar type, but got: {:#?}", v)),
             }
@@ -184,22 +183,53 @@ impl Validator for TypedSchema {
     fn validate(&self, context: &crate::Context, value: &saphyr::MarkedYaml) -> Result<()> {
         debug!("[TypedSchema] self: {self:#?}");
         debug!("[TypedSchema] Validating value: {value:?}");
+        debug!("[TypedSchema] context.fail_fast: {}", context.fail_fast);
 
-        for typed_schema_type in self.r#type.iter() {
-            // Since we're only looking for the first match, we can stop as soon as we find one
-            // That also means that when evaluating sub schemas, we can fail fast to short circuit
-            // the rest of the validation
+        // To simplify the logic, if single type
+        // If multiple types, we validate the value against each of the types
+        // If any of the types validate successfully, we return Ok
+        // If all the types fail, we return the first error
+        if self.r#type.len() == 1 {
+            let typed_schema_type = self.r#type.first().unwrap();
             let sub_context = context.get_sub_context();
-            let sub_result = typed_schema_type.validate(&sub_context, value);
-            match sub_result {
-                Ok(()) | Err(Error::FailFast) => {
-                    if sub_context.has_errors() {
-                        context.extend_errors(sub_context.errors.take());
-                        continue;
-                    }
-                }
-                Err(e) => return Err(e),
+            typed_schema_type.validate(&sub_context, value)?;
+            if sub_context.has_errors() {
+                context.extend_errors(sub_context.errors.take());
             }
+        } else {
+            debug!(
+                "[TypedSchema] Validating value: {:?} against multiple types",
+                value.data
+            );
+            for typed_schema_type in self.r#type.iter() {
+                debug!("[TypedSchema] Validating against type: {typed_schema_type}");
+                let sub_context = context.get_sub_context();
+                let sub_result = typed_schema_type.validate(&sub_context, value);
+                debug!("[TypedSchema] sub_result: {sub_result:?}");
+                match sub_result {
+                    Ok(()) | Err(Error::FailFast) => {
+                        if sub_context.has_errors() {
+                            continue;
+                        }
+                        return Ok(());
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            // If we get here, then all the types failed
+            let types = self
+                .r#type
+                .iter()
+                .map(|t| t.str_type())
+                .collect::<Vec<&str>>()
+                .join(", ");
+            context.add_error(
+                value,
+                format!(
+                    "Expected one of [{types}] but got: {}",
+                    format_yaml_data(&value.data)
+                ),
+            );
         }
         Ok(())
     }
@@ -220,6 +250,20 @@ pub enum TypedSchemaType {
     Number(NumberSchema),
     Object(Box<ObjectSchema>),
     String(StringSchema),
+}
+
+impl TypedSchemaType {
+    pub fn str_type(&self) -> &str {
+        match self {
+            TypedSchemaType::Array(_) => "array",
+            TypedSchemaType::BooleanSchema => "boolean",
+            TypedSchemaType::Null => "null",
+            TypedSchemaType::Integer(_) => "integer",
+            TypedSchemaType::Number(_) => "number",
+            TypedSchemaType::Object(_) => "object",
+            TypedSchemaType::String(_) => "string",
+        }
+    }
 }
 
 impl TryFrom<(&str, &MarkedYaml<'_>)> for TypedSchemaType {
@@ -365,7 +409,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_types() {
+    fn test_multiple_types_ok() {
         // Given a YAML schema with a string type and a number type
         let yaml = r#"
         type: [string, number]
@@ -374,8 +418,9 @@ mod tests {
         let mapping = doc.first().unwrap();
         let typed_schema: TypedSchema = mapping.try_into().unwrap();
         println!("typed_schema: {typed_schema:?}");
-        // When we validate a value that is a string
         let context = validation::Context::default();
+
+        // When we validate a value that is a string
         typed_schema
             .validate(&context, &MarkedYaml::value_from_str("foo"))
             .expect("validate() failed!");
@@ -387,12 +432,26 @@ mod tests {
             .expect("validate() failed!");
         // Then we should not have any errors
         assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_multiple_types_should_error() {
+        // Given a YAML schema with a string type and a number type
+        let yaml = r#"
+        type: [string, number]
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let mapping = doc.first().unwrap();
+        let typed_schema: TypedSchema = mapping.try_into().unwrap();
+        println!("typed_schema: {typed_schema:?}");
+        let context = validation::Context::default();
+
         // When we validate a value that is not a string or number
+        let yaml = "an: [arbitrarily, nested, data, structure]";
+        let doc = saphyr::MarkedYaml::load_from_str(yaml).unwrap();
+        let marked_yaml = doc.first().unwrap();
         typed_schema
-            .validate(
-                &context,
-                &MarkedYaml::value_from_str("an: [arbitrarily, nested, data, structure]"),
-            )
+            .validate(&context, &marked_yaml)
             .expect("validate() failed!");
         // Then we should have one error
         assert!(context.has_errors());
@@ -401,7 +460,7 @@ mod tests {
         // And the error should be that the value is not a string or number
         assert_eq!(
             errors.first().unwrap().error,
-            "Expected a string or number, but got: `an: [arbitrarily, nested, data, structure]`"
+            "Expected one of [string, number] but got: [\"an\": [\"arbitrarily\", \"nested\", \"data\", \"structure\"]]"
         );
     }
 }
