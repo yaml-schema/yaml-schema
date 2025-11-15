@@ -113,7 +113,7 @@ impl Validator for ArraySchema {
                         fail_fast: true,
                         ..Default::default()
                     };
-                    sub_schema.validate(&sub_context, item).is_ok()
+                    sub_schema.validate(&sub_context, item).is_ok() && !sub_context.has_errors()
                 });
                 if !any_matches {
                     context.add_error(value, "Contains validation failed!".to_string());
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn test_contains_fails() {
+    fn test_array_schema_contains_fails() {
         let number_schema = YamlSchema::from(Schema::typed_number(NumberSchema::default()));
         let schema = ArraySchema {
             contains: Some(Box::new(number_schema)),

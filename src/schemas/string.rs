@@ -76,7 +76,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for StringSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut string_schema = StringSchema::default();
+        let mut string_schema = StringSchema::from_base(BaseSchema::try_from(mapping)?);
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
                 match key.as_ref() {

@@ -194,6 +194,7 @@ impl Validator for TypedSchema {
             match sub_result {
                 Ok(()) | Err(Error::FailFast) => {
                     if sub_context.has_errors() {
+                        context.extend_errors(sub_context.errors.take());
                         continue;
                     }
                 }
@@ -273,13 +274,17 @@ impl Validator for TypedSchemaType {
             TypedSchemaType::Array(a) => a.validate(context, value),
             TypedSchemaType::BooleanSchema => {
                 if !value.data.is_boolean() {
-                    context.add_error(value, format!("Expected: boolean, found: {value:?}"));
+                    context.add_error(
+                        value,
+                        format!("Expected: boolean, but got: {:?}", value.data),
+                    );
                 }
                 Ok(())
             }
             TypedSchemaType::Null => {
+                debug!("[TypedSchemaType] Validating value is `null`: {value:?}");
                 if !value.data.is_null() {
-                    context.add_error(value, format!("Expected null, but got: {value:?}"));
+                    context.add_error(value, format!("Expected null, but got: {:?}", value.data));
                 }
                 Ok(())
             }
