@@ -387,6 +387,7 @@ mod tests {
     use crate::IntegerSchema;
     use crate::Schema;
     use crate::StringSchema;
+    use crate::schemas::TypedSchemaType;
 
     use super::*;
 
@@ -452,7 +453,7 @@ mod tests {
         let string_schema = StringSchema::default();
         assert_eq!(
             root_schema.schema.as_ref().schema.as_ref().unwrap(),
-            &Schema::String(string_schema)
+            &Schema::typed_string(string_schema)
         );
     }
 
@@ -470,27 +471,31 @@ mod tests {
         .unwrap();
         let root_schema_schema = &root_schema.schema.as_ref().schema.as_ref().unwrap();
         let expected = StringSchema::default();
-        if let Schema::Object(object_schema) = root_schema_schema {
-            let name_property = object_schema
-                .properties
-                .as_ref()
-                .expect("Expected properties")
-                .get("name")
-                .expect("Expected name property");
-            let description = name_property
-                .metadata
-                .as_ref()
-                .expect("Expected metadata")
-                .get("description")
-                .expect("Expected description");
-            assert_eq!(description, "This is a description");
-            if let Schema::String(actual) = &name_property.schema.as_ref().unwrap() {
-                assert_eq!(&expected, actual);
-            } else {
-                panic!(
-                    "Expected Schema::String, but got: {:?}",
-                    name_property.schema
-                );
+        if let Schema::Typed(typed_schema) = root_schema_schema {
+            if let TypedSchemaType::Object(object_schema) = typed_schema.r#type.first().unwrap() {
+                let name_property = object_schema
+                    .properties
+                    .as_ref()
+                    .expect("Expected properties")
+                    .get("name")
+                    .expect("Expected name property");
+                let description = name_property
+                    .metadata
+                    .as_ref()
+                    .expect("Expected metadata")
+                    .get("description")
+                    .expect("Expected description");
+                assert_eq!(description, "This is a description");
+                if let Schema::Typed(typed_schema) = &name_property.schema.as_ref().unwrap() {
+                    if let TypedSchemaType::String(actual) = typed_schema.r#type.first().unwrap() {
+                        assert_eq!(&expected, actual);
+                    } else {
+                        panic!(
+                            "Expected Schema::String, but got: {:?}",
+                            name_property.schema
+                        );
+                    }
+                }
             }
         } else {
             panic!("Expected Schema::Object, but got: {root_schema_schema:?}");
@@ -511,7 +516,7 @@ mod tests {
             ..Default::default()
         };
         let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
-        assert_eq!(root_schema_schema, &Schema::String(expected));
+        assert_eq!(root_schema_schema, &Schema::typed_string(expected));
     }
 
     #[test]
@@ -521,7 +526,7 @@ mod tests {
         let integer_schema = IntegerSchema::default();
         assert_eq!(
             root_schema.schema.as_ref().schema.as_ref().unwrap(),
-            &Schema::Integer(integer_schema)
+            &Schema::typed_integer(integer_schema)
         );
     }
 
@@ -656,7 +661,7 @@ mod tests {
 
             // Verify we got a valid schema with expected properties
             let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
-            assert!(matches!(*root_schema_schema, Schema::Object(_)));
+            assert!(root_schema_schema.is_object());
 
             // Verify the local schema is valid against the downloaded schema
             if let Ok(local_schema) = std::fs::read_to_string("yaml-schema.yaml") {

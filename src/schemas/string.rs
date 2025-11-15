@@ -1,4 +1,5 @@
 use regex::Regex;
+use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
@@ -53,7 +54,7 @@ impl PartialEq for StringSchema {
 impl From<StringSchema> for YamlSchema {
     fn from(value: StringSchema) -> Self {
         YamlSchema {
-            schema: Some(Schema::String(value)),
+            schema: Some(Schema::typed_string(value)),
             ..Default::default()
         }
     }
@@ -64,56 +65,63 @@ impl TryFrom<&MarkedYaml<'_>> for StringSchema {
 
     fn try_from(value: &MarkedYaml) -> Result<StringSchema, Self::Error> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut string_schema = StringSchema::from_base(BaseSchema::try_from(value)?);
-            for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(key)) = &key.data {
-                    match key.as_ref() {
-                        "minLength" => {
-                            if let Ok(i) = loader::load_integer_marked(value) {
-                                string_schema.min_length = Some(i as usize);
-                            } else {
-                                return Err(unsupported_type!(
-                                    "minLength expected integer, but got: {:?}",
-                                    value
-                                ));
-                            }
-                        }
-                        "maxLength" => {
-                            if let Ok(i) = loader::load_integer_marked(value) {
-                                string_schema.max_length = Some(i as usize);
-                            } else {
-                                return Err(unsupported_type!(
-                                    "maxLength expected integer, but got: {:?}",
-                                    value
-                                ));
-                            }
-                        }
-                        "pattern" => {
-                            if let YamlData::Value(Scalar::String(s)) = &value.data {
-                                let regex = regex::Regex::new(s.as_ref())?;
-                                string_schema.pattern = Some(regex);
-                            } else {
-                                return Err(unsupported_type!(
-                                    "pattern expected string, but got: {:?}",
-                                    value
-                                ));
-                            }
-                        }
-                        // These should've been handled by the base schema
-                        "type" => (),
-                        "const" => (),
-                        "enum" => (),
-                        _ => unimplemented!("Unsupported key for type: string: {}", key),
-                    }
-                }
-            }
-            Ok(string_schema)
+            Ok(StringSchema::try_from(mapping)?)
         } else {
             Err(expected_mapping!(value))
         }
     }
 }
 
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for StringSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        let mut string_schema = StringSchema::default();
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
+                match key.as_ref() {
+                    "minLength" => {
+                        if let Ok(i) = loader::load_integer_marked(value) {
+                            string_schema.min_length = Some(i as usize);
+                        } else {
+                            return Err(unsupported_type!(
+                                "minLength expected integer, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "maxLength" => {
+                        if let Ok(i) = loader::load_integer_marked(value) {
+                            string_schema.max_length = Some(i as usize);
+                        } else {
+                            return Err(unsupported_type!(
+                                "maxLength expected integer, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "pattern" => {
+                        if let YamlData::Value(Scalar::String(s)) = &value.data {
+                            let regex = regex::Regex::new(s.as_ref())?;
+                            string_schema.pattern = Some(regex);
+                        } else {
+                            return Err(unsupported_type!(
+                                "pattern expected string, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    // These should've been handled by the base schema
+                    "type" => (),
+                    "const" => (),
+                    "enum" => (),
+                    _ => unimplemented!("Unsupported key for type: string: {}", key),
+                }
+            }
+        }
+        Ok(string_schema)
+    }
+}
 /// 'Naive' check to see if two regexes are equal, by comparing their string representations
 /// We do it this way because we can't `impl PartialEq for Regex` and don't want to have to
 /// alias or wrap the `regex::Regex` type

@@ -34,33 +34,69 @@ pub use object::ObjectSchema;
 pub use one_of::OneOfSchema;
 pub use string::StringSchema;
 pub use typed_schema::TypedSchema;
+pub use typed_schema::TypedSchemaType;
 pub use yaml_schema::YamlSchema;
 
 use crate::Result;
 
+/// The inner Schema of a YamlSchema
 #[derive(Debug, Default, PartialEq)]
 pub enum Schema {
     #[default]
     Empty, // no value
-    BooleanLiteral(bool),      // `true` or `false`
-    Const(ConstSchema),        // `const`
-    TypeNull,                  // `type: null`
-    Array(ArraySchema),        // `type: array`
-    BooleanSchema,             // `type: boolean`
-    Integer(IntegerSchema),    // `type: integer`
-    Number(NumberSchema),      // `type: number`
-    Object(Box<ObjectSchema>), // `type: object`
-    String(StringSchema),      // `type: string`
-    Enum(EnumSchema),          // `enum`
-    AllOf(AllOfSchema),        // `allOf`
-    AnyOf(AnyOfSchema),        // `anyOf`
-    OneOf(OneOfSchema),        // `oneOf`
-    Not(NotSchema),            // `not`
+    BooleanLiteral(bool), // `true` or `false`
+    Const(ConstSchema),   // `const`
+    Typed(TypedSchema),   // `type`
+    Enum(EnumSchema),     // `enum`
+    AllOf(AllOfSchema),   // `allOf`
+    AnyOf(AnyOfSchema),   // `anyOf`
+    OneOf(OneOfSchema),   // `oneOf`
+    Not(NotSchema),       // `not`
 }
 
 impl Schema {
-    pub fn object(schema: ObjectSchema) -> Schema {
-        Schema::Object(Box::new(schema))
+    pub fn typed_object(schema: ObjectSchema) -> Schema {
+        Schema::Typed(TypedSchema::object(schema))
+    }
+
+    pub fn typed_array(schema: ArraySchema) -> Schema {
+        Schema::Typed(TypedSchema::array(schema))
+    }
+
+    pub fn typed_boolean() -> Schema {
+        Schema::Typed(TypedSchema::boolean())
+    }
+
+    pub fn typed_integer(schema: IntegerSchema) -> Schema {
+        Schema::Typed(TypedSchema::integer(schema))
+    }
+
+    pub fn typed_number(schema: NumberSchema) -> Schema {
+        Schema::Typed(TypedSchema::number(schema))
+    }
+
+    pub fn typed_string(schema: StringSchema) -> Schema {
+        Schema::Typed(TypedSchema::string(schema))
+    }
+
+    pub fn typed_null() -> Schema {
+        Schema::Typed(TypedSchema::null())
+    }
+
+    pub fn is_typed(&self) -> bool {
+        matches!(self, Schema::Typed(_))
+    }
+
+    pub fn is_object(&self) -> bool {
+        if let Self::Typed(typed_schema) = self
+            && typed_schema.r#type.len() == 1
+        {
+            return matches!(
+                typed_schema.r#type.first().unwrap(),
+                TypedSchemaType::Object(_)
+            );
+        }
+        false
     }
 }
 
@@ -73,7 +109,7 @@ impl TryFrom<&MarkedYaml<'_>> for Schema {
                 Err(generic_error!("Empty mapping"))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
                 let typed_schema: TypedSchema = marked_yaml.try_into()?;
-                Ok(typed_schema.into())
+                Ok(Schema::Typed(typed_schema))
             } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
                 let enum_schema = EnumSchema::try_from(mapping)?;
                 Ok(Schema::Enum(enum_schema))
@@ -109,7 +145,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Schema {
             Err(generic_error!("Empty mapping"))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
             let typed_schema: TypedSchema = mapping.try_into()?;
-            Ok(typed_schema.into())
+            Ok(Schema::Typed(typed_schema))
         } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
             let enum_schema = EnumSchema::try_from(mapping)?;
             Ok(Schema::Enum(enum_schema))
@@ -141,36 +177,14 @@ impl std::fmt::Display for Schema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             Schema::Empty => write!(f, "<empty schema>"),
-            Schema::TypeNull => write!(f, "type: null"),
             Schema::BooleanLiteral(b) => write!(f, "{b}"),
-            Schema::BooleanSchema => write!(f, "type: boolean"),
             Schema::Const(c) => write!(f, "{c}"),
             Schema::Enum(e) => write!(f, "{e}"),
-            Schema::Integer(i) => write!(f, "{i}"),
             Schema::AllOf(all_of_schema) => write!(f, "{all_of_schema}"),
             Schema::AnyOf(any_of_schema) => write!(f, "{any_of_schema}"),
             Schema::OneOf(one_of_schema) => write!(f, "{one_of_schema}"),
             Schema::Not(not_schema) => write!(f, "{not_schema}"),
-            Schema::String(s) => write!(f, "{s}"),
-            Schema::Number(n) => write!(f, "{n}"),
-            Schema::Object(o) => write!(f, "{o}"),
-            Schema::Array(a) => write!(f, "{a}"),
-        }
-    }
-}
-
-/// Converts (upcast) a TypedSchema to a YamlSchema
-/// Since a YamlSchema is a superset of a TypedSchema, this is a lossless conversion
-impl From<TypedSchema> for Schema {
-    fn from(schema: TypedSchema) -> Self {
-        match schema {
-            TypedSchema::Array(array_schema) => Schema::Array(array_schema),
-            TypedSchema::BooleanSchema => Schema::BooleanSchema,
-            TypedSchema::Null => Schema::TypeNull,
-            TypedSchema::Integer(integer_schema) => Schema::Integer(integer_schema),
-            TypedSchema::Number(number_schema) => Schema::Number(number_schema),
-            TypedSchema::Object(object_schema) => Schema::Object(object_schema),
-            TypedSchema::String(string_schema) => Schema::String(string_schema),
+            Schema::Typed(typed_schema) => write!(f, "{typed_schema}"),
         }
     }
 }

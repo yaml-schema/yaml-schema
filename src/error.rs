@@ -15,6 +15,8 @@ pub enum Error {
     FloatParsingError(#[from] std::num::ParseFloatError),
     #[error("Regex parsing error: {0}")]
     RegexParsingError(#[from] regex::Error),
+    #[error("Error loading schema: {0}")]
+    SchemaLoadingError(String),
     #[error("Unsupported type '{0}'!")]
     UnsupportedType(String),
     #[error("Generic YAML schema error: {0}")]
@@ -35,6 +37,16 @@ macro_rules! fail_fast {
         if $context.fail_fast {
             return Err($crate::Error::FailFast);
         }
+    };
+}
+
+#[macro_export]
+macro_rules! schema_loading_error {
+    ($s:literal, $($e:expr),+) => {
+        $crate::Error::SchemaLoadingError(format!($s, $($e),+))
+    };
+    ($s:literal) => {
+        $crate::Error::SchemaLoadingError($s.to_string())
     };
 }
 

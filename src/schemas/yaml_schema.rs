@@ -3,8 +3,11 @@ use log::{debug, error};
 use hashlink::LinkedHashMap;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
+use crate::ArraySchema;
 use crate::Context;
 use crate::Error;
+use crate::IntegerSchema;
+use crate::NumberSchema;
 use crate::ObjectSchema;
 use crate::Reference;
 use crate::Schema;
@@ -24,6 +27,7 @@ pub struct YamlSchema {
 }
 
 impl YamlSchema {
+    /// Create an empty YamlSchema, which accepts any value
     pub fn empty() -> YamlSchema {
         YamlSchema {
             schema: Some(Schema::Empty),
@@ -31,13 +35,16 @@ impl YamlSchema {
         }
     }
 
+    /// Create a YamlSchema that accepts only null values
     pub fn null() -> YamlSchema {
         YamlSchema {
-            schema: Some(Schema::TypeNull),
+            schema: Some(Schema::typed_null()),
             ..Default::default()
         }
     }
 
+    /// Create a `true` or `false` YamlSchema, which will accept
+    /// or reject any value based on the boolean value
     pub fn boolean_literal(value: bool) -> YamlSchema {
         YamlSchema {
             schema: Some(Schema::BooleanLiteral(value)),
@@ -45,13 +52,55 @@ impl YamlSchema {
         }
     }
 
-    pub fn object(object_schema: ObjectSchema) -> YamlSchema {
+    /// Create a YamlSchema that accepts only objects
+    pub fn type_object(object_schema: ObjectSchema) -> YamlSchema {
         YamlSchema {
-            schema: Some(Schema::Object(Box::new(object_schema))),
+            schema: Some(Schema::typed_object(object_schema)),
             ..Default::default()
         }
     }
 
+    /// Create a YamlSchema that accepts only arrays
+    pub fn type_array(array_schema: ArraySchema) -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::typed_array(array_schema)),
+            ..Default::default()
+        }
+    }
+
+    /// Create a YamlSchema that accepts only booleans
+    pub fn type_boolean() -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::typed_boolean()),
+            ..Default::default()
+        }
+    }
+
+    /// Create a YamlSchema that accepts only integers
+    pub fn type_integer(integer_schema: IntegerSchema) -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::typed_integer(integer_schema)),
+            ..Default::default()
+        }
+    }
+
+    /// Create a YamlSchema that accepts only numbers
+    pub fn type_number(number_schema: NumberSchema) -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::typed_number(number_schema)),
+            ..Default::default()
+        }
+    }
+
+    /// Create a YamlSchema that accepts only strings
+    pub fn type_string(string_schema: StringSchema) -> YamlSchema {
+        YamlSchema {
+            schema: Some(Schema::typed_string(string_schema)),
+            ..Default::default()
+        }
+    }
+
+    /// Create a reference to a `$defs` definition
     pub fn reference(reference: Reference) -> YamlSchema {
         YamlSchema {
             r#ref: Some(reference),
@@ -59,6 +108,7 @@ impl YamlSchema {
         }
     }
 
+    /// Create a reference from a `String` or `&str`
     pub fn ref_str<S>(ref_name: S) -> YamlSchema
     where
         S: Into<String>,
@@ -66,13 +116,15 @@ impl YamlSchema {
         Self::reference(Reference::new(ref_name))
     }
 
+    /// Create a YamlSchema that accepts only strings
     pub fn string() -> YamlSchema {
         YamlSchema {
-            schema: Some(Schema::String(StringSchema::default())),
+            schema: Some(Schema::typed_string(StringSchema::default())),
             ..Default::default()
         }
     }
 
+    /// Create a YamlSchemaBuilder, which can be used to build a YamlSchema step by step
     pub fn builder() -> YamlSchemaBuilder {
         YamlSchemaBuilder::new()
     }
@@ -184,6 +236,7 @@ impl std::fmt::Display for YamlSchema {
     }
 }
 
+/// YamlSchemaBuilder is a builder for YamlSchema, which can be used to build a YamlSchema step by step
 pub struct YamlSchemaBuilder(YamlSchema);
 
 impl Default for YamlSchemaBuilder {
@@ -193,10 +246,12 @@ impl Default for YamlSchemaBuilder {
 }
 
 impl YamlSchemaBuilder {
+    /// Create a new YamlSchemaBuilder
     pub fn new() -> Self {
         YamlSchemaBuilder(YamlSchema::default())
     }
 
+    /// Add metadata to the YamlSchema
     pub fn metadata<K, V>(&mut self, key: K, value: V) -> &mut Self
     where
         K: Into<String>,
@@ -210,6 +265,7 @@ impl YamlSchemaBuilder {
         self
     }
 
+    /// Add a description to the YamlSchema
     pub fn description<S>(&mut self, description: S) -> &mut Self
     where
         S: Into<String>,
@@ -217,6 +273,7 @@ impl YamlSchemaBuilder {
         self.metadata("description", description)
     }
 
+    /// Add a reference to the YamlSchema
     pub fn r#ref(&mut self, r#ref: Reference) -> &mut Self {
         self.0.r#ref = Some(r#ref);
         self
@@ -228,13 +285,14 @@ impl YamlSchemaBuilder {
     }
 
     pub fn string_schema(&mut self, string_schema: StringSchema) -> &mut Self {
-        self.schema(Schema::String(string_schema))
+        self.schema(Schema::typed_string(string_schema))
     }
 
     pub fn object_schema(&mut self, object_schema: ObjectSchema) -> &mut Self {
-        self.schema(Schema::Object(Box::new(object_schema)))
+        self.schema(Schema::typed_object(object_schema))
     }
 
+    /// Build the YamlSchema
     pub fn build(&mut self) -> YamlSchema {
         std::mem::take(&mut self.0)
     }

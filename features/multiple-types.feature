@@ -1,6 +1,5 @@
 Feature: Multiple types
 
-  @ignore
   Scenario: "type: [string, number]" should accept strings and numbers
     Given a YAML schema:
       ```

@@ -241,17 +241,17 @@ mod tests {
         let mut properties = LinkedHashMap::new();
         properties.insert(
             "foo".to_string(),
-            YamlSchema::from(Schema::String(StringSchema::default())),
+            YamlSchema::from(Schema::typed_string(StringSchema::default())),
         );
         properties.insert(
             "bar".to_string(),
-            YamlSchema::from(Schema::Number(NumberSchema::default())),
+            YamlSchema::from(Schema::typed_number(NumberSchema::default())),
         );
         let object_schema = ObjectSchema {
             properties: Some(properties),
             ..Default::default()
         };
-        let root_schema = RootSchema::new_with_schema(Schema::Object(Box::new(object_schema)));
+        let root_schema = RootSchema::new_with_schema(Schema::typed_object(object_schema));
         let value = r#"
             foo: "I'm a string"
             bar: 42

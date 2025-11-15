@@ -5,6 +5,7 @@ use crate::schemas::BaseSchema;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
+use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
@@ -39,43 +40,51 @@ impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
 
     fn try_from(value: &MarkedYaml) -> Result<IntegerSchema> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut integer_schema = IntegerSchema::from_base(BaseSchema::try_from(value)?);
-            for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(key)) = &key.data {
-                    match key.as_ref() {
-                        "minimum" => {
-                            integer_schema.minimum = Some(value.try_into()?);
-                        }
-                        "maximum" => {
-                            integer_schema.maximum = Some(value.try_into()?);
-                        }
-                        "exclusiveMinimum" => {
-                            integer_schema.exclusive_minimum = Some(value.try_into()?);
-                        }
-                        "exclusiveMaximum" => {
-                            integer_schema.exclusive_maximum = Some(value.try_into()?);
-                        }
-                        "multipleOf" => {
-                            integer_schema.multiple_of = Some(value.try_into()?);
-                        }
-                        // These should've been handled by the base schema
-                        "type" => (),
-                        "const" => (),
-                        "enum" => (),
-                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
-                    }
-                } else {
-                    return Err(generic_error!(
-                        "{} Expected string key, got {:?}",
-                        format_marker(&key.span.start),
-                        key
-                    ));
-                }
-            }
-            Ok(integer_schema)
+            Ok(IntegerSchema::try_from(mapping)?)
         } else {
             Err(expected_mapping!(value))
         }
+    }
+}
+
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for IntegerSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        let mut integer_schema = IntegerSchema::default();
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
+                match key.as_ref() {
+                    "minimum" => {
+                        integer_schema.minimum = Some(value.try_into()?);
+                    }
+                    "maximum" => {
+                        integer_schema.maximum = Some(value.try_into()?);
+                    }
+                    "exclusiveMinimum" => {
+                        integer_schema.exclusive_minimum = Some(value.try_into()?);
+                    }
+                    "exclusiveMaximum" => {
+                        integer_schema.exclusive_maximum = Some(value.try_into()?);
+                    }
+                    "multipleOf" => {
+                        integer_schema.multiple_of = Some(value.try_into()?);
+                    }
+                    // These should've been handled by the base schema
+                    "type" => (),
+                    "const" => (),
+                    "enum" => (),
+                    _ => unimplemented!("Unsupported key for type: integer: {}", key),
+                }
+            } else {
+                return Err(generic_error!(
+                    "{} Expected string key, got {:?}",
+                    format_marker(&key.span.start),
+                    key
+                ));
+            }
+        }
+        Ok(integer_schema)
     }
 }
 

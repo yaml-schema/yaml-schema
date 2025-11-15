@@ -1,3 +1,10 @@
+use std::cmp::Ordering;
+
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
+
 use crate::ConstValue;
 use crate::Number;
 use crate::Result;
@@ -5,10 +12,6 @@ use crate::schemas::BaseSchema;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use saphyr::MarkedYaml;
-use saphyr::Scalar;
-use saphyr::YamlData;
-use std::cmp::Ordering;
 
 /// A number schema
 #[derive(Debug, PartialEq)]
@@ -251,44 +254,53 @@ impl NumberSchema {
 
 impl TryFrom<&MarkedYaml<'_>> for NumberSchema {
     type Error = crate::Error;
+
     fn try_from(value: &MarkedYaml) -> Result<NumberSchema> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut number_schema = NumberSchema::from_base(BaseSchema::try_from(value)?);
-            for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(key)) = &key.data {
-                    match key.as_ref() {
-                        "minimum" => {
-                            number_schema.minimum = Some(value.try_into()?);
-                        }
-                        "maximum" => {
-                            number_schema.maximum = Some(value.try_into()?);
-                        }
-                        "exclusiveMinimum" => {
-                            number_schema.exclusive_minimum = Some(value.try_into()?);
-                        }
-                        "exclusiveMaximum" => {
-                            number_schema.exclusive_maximum = Some(value.try_into()?);
-                        }
-                        "multipleOf" => {
-                            number_schema.multiple_of = Some(value.try_into()?);
-                        }
-                        // These should've been handled by the base schema
-                        "type" => (),
-                        "enum" => (),
-                        "const" => (),
-                        _ => unimplemented!(),
-                    }
-                } else {
-                    return Err(generic_error!(
-                        "{} Expected string key, got {:?}",
-                        format_marker(&key.span.start),
-                        key
-                    ));
-                }
-            }
-            Ok(number_schema)
+            Ok(NumberSchema::try_from(mapping)?)
         } else {
             Err(expected_mapping!(value))
         }
+    }
+}
+
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NumberSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        let mut number_schema = NumberSchema::from_base(BaseSchema::try_from(mapping)?);
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
+                match key.as_ref() {
+                    "minimum" => {
+                        number_schema.minimum = Some(value.try_into()?);
+                    }
+                    "maximum" => {
+                        number_schema.maximum = Some(value.try_into()?);
+                    }
+                    "exclusiveMinimum" => {
+                        number_schema.exclusive_minimum = Some(value.try_into()?);
+                    }
+                    "exclusiveMaximum" => {
+                        number_schema.exclusive_maximum = Some(value.try_into()?);
+                    }
+                    "multipleOf" => {
+                        number_schema.multiple_of = Some(value.try_into()?);
+                    }
+                    // These should've been handled by the base schema
+                    "type" => (),
+                    "enum" => (),
+                    "const" => (),
+                    _ => unimplemented!(),
+                }
+            } else {
+                return Err(generic_error!(
+                    "{} Expected string key, got {:?}",
+                    format_marker(&key.span.start),
+                    key
+                ));
+            }
+        }
+        Ok(number_schema)
     }
 }

@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn test_engine_validate_string() {
         let schema = StringSchema::default();
-        let root_schema = RootSchema::new_with_schema(Schema::String(schema));
+        let root_schema = RootSchema::new_with_schema(Schema::typed_string(schema));
         let context = Engine::evaluate(&root_schema, "some string", false).unwrap();
         assert!(!context.has_errors());
     }
@@ -112,7 +112,7 @@ mod tests {
             min_length: Some(5),
             ..Default::default()
         };
-        let root_schema = RootSchema::new_with_schema(Schema::String(schema));
+        let root_schema = RootSchema::new_with_schema(Schema::typed_string(schema));
         let context = Engine::evaluate(&root_schema, "hello", false).unwrap();
         assert!(!context.has_errors());
         let context = Engine::evaluate(&root_schema, "hell", false).unwrap();

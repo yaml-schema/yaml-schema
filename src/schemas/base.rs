@@ -1,3 +1,4 @@
+use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
@@ -49,75 +50,82 @@ impl TryFrom<&MarkedYaml<'_>> for BaseSchema {
 
     fn try_from(value: &MarkedYaml) -> Result<Self, Self::Error> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut base_schema = BaseSchema::default();
-            for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(key)) = &key.data {
-                    match key.as_ref() {
-                        "type" => {
-                            if let YamlData::Value(Scalar::String(value)) = &value.data {
-                                base_schema.r#type =
-                                    Some(SchemaTypeValue::Single(value.to_string()));
-                            } else if let YamlData::Sequence(values) = &value.data {
-                                let values = values
-                                    .iter()
-                                    .map(|v| {
-                                        if let YamlData::Value(Scalar::String(value)) = &v.data {
-                                            Ok(value.to_string())
-                                        } else {
-                                            Err(generic_error!(
-                                                "{} Expected a string value for type, got {:?}",
-                                                format_marker(&v.span.start),
-                                                v
-                                            ))
-                                        }
-                                    })
-                                    .collect::<Result<Vec<String>, crate::Error>>()?;
-                                base_schema.r#type = Some(SchemaTypeValue::Multiple(values));
-                            } else {
-                                return Err(generic_error!(
-                                    "{} Expected string or array for type, got {:?}",
-                                    format_marker(&value.span.start),
-                                    value
-                                ));
-                            }
-                        }
-                        "enum" => {
-                            if let YamlData::Sequence(values) = &value.data {
-                                base_schema.r#enum = Some(load_enum_values(values)?);
-                            } else {
-                                return Err(generic_error!(
-                                    "{} Expected an array for enum:, but got: {:#?}",
-                                    format_marker(&value.span.start),
-                                    value
-                                ));
-                            }
-                        }
-                        "const" => {
-                            if let YamlData::Value(scalar) = &value.data {
-                                let const_value: ConstValue = scalar.try_into()?;
-                                base_schema.r#const = Some(const_value);
-                            } else {
-                                return Err(generic_error!(
-                                    "{} Expecting scalar value for const, got {:?}",
-                                    format_marker(&value.span.start),
-                                    value
-                                ));
-                            }
-                        }
-                        _ => (),
-                    }
-                } else {
-                    return Err(generic_error!(
-                        "{} Expected string key, got {:?}",
-                        format_marker(&key.span.start),
-                        key
-                    ));
-                }
-            }
-            Ok(base_schema)
+            Ok(BaseSchema::try_from(mapping)?)
         } else {
             Err(expected_mapping!(value))
         }
+    }
+}
+
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for BaseSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        let mut base_schema = BaseSchema::default();
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
+                match key.as_ref() {
+                    "type" => {
+                        if let YamlData::Value(Scalar::String(value)) = &value.data {
+                            base_schema.r#type = Some(SchemaTypeValue::Single(value.to_string()));
+                        } else if let YamlData::Sequence(values) = &value.data {
+                            let values = values
+                                .iter()
+                                .map(|v| {
+                                    if let YamlData::Value(Scalar::String(value)) = &v.data {
+                                        Ok(value.to_string())
+                                    } else {
+                                        Err(generic_error!(
+                                            "{} Expected a string value for type, got {:?}",
+                                            format_marker(&v.span.start),
+                                            v
+                                        ))
+                                    }
+                                })
+                                .collect::<Result<Vec<String>, crate::Error>>()?;
+                            base_schema.r#type = Some(SchemaTypeValue::Multiple(values));
+                        } else {
+                            return Err(generic_error!(
+                                "{} Expected string or array for type, got {:?}",
+                                format_marker(&value.span.start),
+                                value
+                            ));
+                        }
+                    }
+                    "enum" => {
+                        if let YamlData::Sequence(values) = &value.data {
+                            base_schema.r#enum = Some(load_enum_values(values)?);
+                        } else {
+                            return Err(generic_error!(
+                                "{} Expected an array for enum:, but got: {:#?}",
+                                format_marker(&value.span.start),
+                                value
+                            ));
+                        }
+                    }
+                    "const" => {
+                        if let YamlData::Value(scalar) = &value.data {
+                            let const_value: ConstValue = scalar.try_into()?;
+                            base_schema.r#const = Some(const_value);
+                        } else {
+                            return Err(generic_error!(
+                                "{} Expecting scalar value for const, got {:?}",
+                                format_marker(&value.span.start),
+                                value
+                            ));
+                        }
+                    }
+                    _ => (),
+                }
+            } else {
+                return Err(generic_error!(
+                    "{} Expected string key, got {:?}",
+                    format_marker(&key.span.start),
+                    key
+                ));
+            }
+        }
+        Ok(base_schema)
     }
 }
 

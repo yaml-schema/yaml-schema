@@ -254,11 +254,11 @@ mod tests {
     #[test]
     fn test_array_schema_prefix_items() {
         let schema = ArraySchema {
-            prefix_items: Some(vec![YamlSchema::from(Schema::Number(
+            prefix_items: Some(vec![YamlSchema::from(Schema::typed_number(
                 NumberSchema::default(),
             ))]),
             items: Some(BoolOrTypedSchema::TypedSchema(Box::new(
-                TypedSchema::String(StringSchema::default()),
+                TypedSchema::string(StringSchema::default()),
             ))),
             ..Default::default()
         };
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_contains() {
-        let number_schema = YamlSchema::from(Schema::Number(NumberSchema::default()));
+        let number_schema = YamlSchema::from(Schema::typed_number(NumberSchema::default()));
         let schema = ArraySchema {
             contains: Some(Box::new(number_schema)),
             ..Default::default()
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_contains_fails() {
-        let number_schema = YamlSchema::from(Schema::Number(NumberSchema::default()));
+        let number_schema = YamlSchema::from(Schema::typed_number(NumberSchema::default()));
         let schema = ArraySchema {
             contains: Some(Box::new(number_schema)),
             ..Default::default()
