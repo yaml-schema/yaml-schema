@@ -1,6 +1,6 @@
-use log::{debug, error};
-
 use hashlink::LinkedHashMap;
+use log::debug;
+use log::error;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
 use crate::ArraySchema;

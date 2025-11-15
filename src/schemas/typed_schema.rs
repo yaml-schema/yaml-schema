@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 
 use log::debug;
@@ -15,7 +16,13 @@ use crate::ObjectSchema;
 use crate::Result;
 use crate::StringSchema;
 use crate::Validator;
+use crate::schemas::BaseSchema;
+use crate::schemas::SchemaMetadata as _;
+use crate::utils::collect_keys;
+use crate::utils::filter_mapping;
+use crate::utils::format_hash_map;
 use crate::utils::format_scalar;
+use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
 
 /// A TypedSchema is a subset of YamlSchema that has a `type:`
@@ -32,7 +39,7 @@ use crate::utils::format_yaml_data;
 /// minimum: 0
 /// minLength: 1
 /// ```
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub struct TypedSchema {
     pub r#type: Vec<TypedSchemaType>,
     pub r#enum: Option<Vec<ConstValue>>,
@@ -181,9 +188,15 @@ impl TryFrom<(&str, &AnnotatedMapping<'_, MarkedYaml<'_>>)> for TypedSchema {
 
 impl Validator for TypedSchema {
     fn validate(&self, context: &crate::Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[TypedSchema] self: {self:#?}");
-        debug!("[TypedSchema] Validating value: {value:?}");
-        debug!("[TypedSchema] context.fail_fast: {}", context.fail_fast);
+        debug!("[TypedSchema#validate] self: {self:#?}");
+        debug!(
+            "[TypedSchema#validate] Validating value: {}",
+            format_yaml_data(&value.data)
+        );
+        debug!(
+            "[TypedSchema#validate] context.fail_fast: {}",
+            context.fail_fast
+        );
 
         // To simplify the logic, if single type
         // If multiple types, we validate the value against each of the types
@@ -206,6 +219,10 @@ impl Validator for TypedSchema {
                 let sub_context = context.get_sub_context();
                 let sub_result = typed_schema_type.validate(&sub_context, value);
                 debug!("[TypedSchema] sub_result: {sub_result:?}");
+                debug!(
+                    "[TypedSchema] sub_context.has_errors: {}",
+                    sub_context.has_errors()
+                );
                 match sub_result {
                     Ok(()) | Err(Error::FailFast) => {
                         if sub_context.has_errors() {
@@ -241,14 +258,44 @@ impl Display for TypedSchema {
     }
 }
 
-#[derive(Debug, PartialEq)]
+impl std::fmt::Debug for TypedSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut h = HashMap::new();
+        if self.r#type.len() == 1 {
+            h.insert(
+                "type".to_string(),
+                format!("{:?}", self.r#type.first().unwrap()),
+            );
+        } else {
+            h.insert(
+                "types".to_string(),
+                format_vec(
+                    &self
+                        .r#type
+                        .iter()
+                        .map(|t| format!("{:?}", t))
+                        .collect::<Vec<String>>(),
+                ),
+            );
+        }
+        if let Some(r#enum) = &self.r#enum {
+            h.insert("enum".to_string(), format_vec(r#enum));
+        }
+        if let Some(r#const) = &self.r#const {
+            h.insert("const".to_string(), r#const.to_string());
+        }
+        write!(f, "TypedSchema {}", format_hash_map(&h))
+    }
+}
+
+#[derive(PartialEq)]
 pub enum TypedSchemaType {
     Null,
     Array(ArraySchema),
     BooleanSchema,
     Integer(IntegerSchema),
     Number(NumberSchema),
-    Object(Box<ObjectSchema>),
+    Object(Box<ObjectSchema>), // we box the ObjectSchema to avoid large size differences enum variants
     String(StringSchema),
 }
 
@@ -284,13 +331,56 @@ impl TryFrom<(&str, &AnnotatedMapping<'_, MarkedYaml<'_>>)> for TypedSchemaType 
         (r#type, mapping): (&str, &AnnotatedMapping<'_, MarkedYaml<'_>>),
     ) -> crate::Result<Self> {
         Ok(match r#type {
-            "array" => TypedSchemaType::Array(ArraySchema::try_from(mapping)?),
+            "array" => {
+                let keys = collect_keys(
+                    BaseSchema::get_accepted_keys(),
+                    ArraySchema::get_accepted_keys(),
+                );
+                debug!("[TypedSchemaType] keys: {keys:?}");
+                let filtered_mapping = filter_mapping(mapping, keys, r#type)?;
+                debug!("[TypedSchemaType] filtered_mapping: {filtered_mapping:?}");
+                TypedSchemaType::Array(ArraySchema::try_from(&filtered_mapping)?)
+            }
             "boolean" => TypedSchemaType::BooleanSchema,
-            "integer" => TypedSchemaType::Integer(IntegerSchema::try_from(mapping)?),
+            "integer" => {
+                let keys = collect_keys(
+                    BaseSchema::get_accepted_keys(),
+                    IntegerSchema::get_accepted_keys(),
+                );
+                debug!("[TypedSchemaType] keys: {keys:?}");
+                let filtered_mapping = filter_mapping(mapping, keys, r#type)?;
+                TypedSchemaType::Integer(IntegerSchema::try_from(&filtered_mapping)?)
+            }
             "null" => TypedSchemaType::Null,
-            "number" => TypedSchemaType::Number(NumberSchema::try_from(mapping)?),
-            "object" => TypedSchemaType::Object(Box::new(ObjectSchema::try_from(mapping)?)),
-            "string" => TypedSchemaType::String(StringSchema::try_from(mapping)?),
+            "number" => {
+                let keys = collect_keys(
+                    BaseSchema::get_accepted_keys(),
+                    NumberSchema::get_accepted_keys(),
+                );
+                debug!("[TypedSchemaType] keys: {keys:?}");
+                let filtered_mapping = filter_mapping(mapping, keys, r#type)?;
+                debug!("[TypedSchemaType] filtered_mapping: {filtered_mapping:?}");
+                TypedSchemaType::Number(NumberSchema::try_from(&filtered_mapping)?)
+            }
+            "object" => {
+                let keys = collect_keys(
+                    BaseSchema::get_accepted_keys(),
+                    ObjectSchema::get_accepted_keys(),
+                );
+                debug!("[TypedSchemaType] keys: {keys:?}");
+                let filtered_mapping = filter_mapping(mapping, keys, r#type)?;
+                TypedSchemaType::Object(Box::new(ObjectSchema::try_from(&filtered_mapping)?))
+            }
+            "string" => {
+                let keys = collect_keys(
+                    BaseSchema::get_accepted_keys(),
+                    StringSchema::get_accepted_keys(),
+                );
+                debug!("[TypedSchemaType] keys: {keys:?}");
+                let filtered_mapping = filter_mapping(mapping, keys, r#type)?;
+                debug!("[TypedSchemaType] filtered_mapping: {filtered_mapping:?}");
+                TypedSchemaType::String(StringSchema::try_from(&filtered_mapping)?)
+            }
             s => return Err(unsupported_type!(s.to_string())),
         })
     }
@@ -298,14 +388,20 @@ impl TryFrom<(&str, &AnnotatedMapping<'_, MarkedYaml<'_>>)> for TypedSchemaType 
 
 impl std::fmt::Display for TypedSchemaType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::fmt::Debug for TypedSchemaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypedSchemaType::Array(a) => write!(f, "{a}"),
-            TypedSchemaType::BooleanSchema => write!(f, "type: boolean"),
-            TypedSchemaType::Null => write!(f, "type: null"),
-            TypedSchemaType::Integer(i) => write!(f, "{i}"),
-            TypedSchemaType::Number(n) => write!(f, "{n}"),
-            TypedSchemaType::Object(o) => write!(f, "{o}"),
-            TypedSchemaType::String(s) => write!(f, "{s}"),
+            TypedSchemaType::Array(a) => write!(f, "{a:?}"),
+            TypedSchemaType::BooleanSchema => write!(f, "{{ type: boolean }}"),
+            TypedSchemaType::Null => write!(f, "{{ type: null }}"),
+            TypedSchemaType::Integer(i) => write!(f, "{i:?}"),
+            TypedSchemaType::Number(n) => write!(f, "{n:?}"),
+            TypedSchemaType::Object(o) => write!(f, "{o:?}"),
+            TypedSchemaType::String(s) => write!(f, "{s:?}"),
         }
     }
 }
@@ -462,5 +558,47 @@ mod tests {
             errors.first().unwrap().error,
             "Expected one of [string, number] but got: [\"an\": [\"arbitrarily\", \"nested\", \"data\", \"structure\"]]"
         );
+    }
+
+    #[test]
+    fn test_multiple_types_with_constraints() {
+        // Given a YAML schema with a string type and a number type
+        let yaml = r#"
+        type:
+          - string
+          - number
+        minimum: 1
+        minLength: 1
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let marked_yaml = doc.first().unwrap();
+        let typed_schema: TypedSchema = marked_yaml.try_into().unwrap();
+        println!("typed_schema: {typed_schema:?}");
+        let context = validation::Context::default();
+
+        // When we validate `1`
+        typed_schema
+            .validate(&context, &MarkedYaml::value_from_str("1"))
+            .expect("validate() failed!");
+        // Then we should not have any errors
+        assert!(!context.has_errors());
+
+        // When we validate `"one"`
+        typed_schema
+            .validate(&context, &MarkedYaml::value_from_str("one"))
+            .expect("validate() failed!");
+        // Then we should not have any errors
+        assert!(!context.has_errors());
+
+        // But when we validate `0`
+        typed_schema
+            .validate(&context, &MarkedYaml::value_from_str("0"))
+            .expect("validate() failed!");
+        // Then we should have one error
+        assert!(context.has_errors());
+        let errors = context.errors.borrow();
+        assert_eq!(errors.len(), 1);
+        // And the error should be that the value is not a string or number
+        println!("errors: {errors:?}");
     }
 }

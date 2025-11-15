@@ -1,11 +1,15 @@
+use std::collections::HashMap;
+
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
 
 use crate::ConstValue;
+use crate::schemas::SchemaMetadata;
 use crate::schemas::r#enum::load_enum_values;
 use crate::utils::format_marker;
+use crate::utils::format_vec;
 
 /// A `SchemaTypeValue` is either a string or an array of strings
 #[derive(Debug, PartialEq)]
@@ -42,6 +46,37 @@ impl BaseSchema {
             r#type: Some(SchemaTypeValue::Single("string".to_string())),
             ..Default::default()
         }
+    }
+
+    pub fn as_hash_map(&self) -> HashMap<String, String> {
+        let mut h = HashMap::new();
+        if let Some(r#type) = &self.r#type {
+            let type_value = match r#type {
+                SchemaTypeValue::Single(value) => value.to_string(),
+                SchemaTypeValue::Multiple(values) => format_vec(values),
+            };
+            h.insert("type".to_string(), type_value);
+        }
+        if let Some(r#enum) = &self.r#enum {
+            h.insert(
+                "enum".to_string(),
+                r#enum
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+            );
+        }
+        if let Some(r#const) = &self.r#const {
+            h.insert("const".to_string(), r#const.to_string());
+        }
+        h
+    }
+}
+
+impl SchemaMetadata for BaseSchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &["type", "enum", "const"]
     }
 }
 

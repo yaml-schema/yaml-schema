@@ -18,6 +18,7 @@ use crate::TypedSchema;
 use crate::YamlSchema;
 use crate::loader::load_array_of_schemas_marked;
 use crate::loader::load_integer_marked;
+use crate::schemas::SchemaMetadata;
 use crate::utils::format_marker;
 use crate::utils::hash_map;
 use crate::utils::linked_hash_map;
@@ -34,6 +35,21 @@ pub struct ObjectSchema {
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
     pub any_of: Option<AnyOfSchema>,
+}
+
+impl SchemaMetadata for ObjectSchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &[
+            "properties",
+            "required",
+            "additionalProperties",
+            "patternProperties",
+            "propertyNames",
+            "minProperties",
+            "maxProperties",
+            "anyOf",
+        ]
+    }
 }
 
 impl ObjectSchema {

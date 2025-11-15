@@ -39,6 +39,10 @@ pub use yaml_schema::YamlSchema;
 
 use crate::Result;
 
+pub trait SchemaMetadata {
+    fn get_accepted_keys() -> &'static [&'static str];
+}
+
 /// The inner Schema of a YamlSchema
 #[derive(Debug, Default, PartialEq)]
 pub enum Schema {
@@ -105,32 +109,7 @@ impl TryFrom<&MarkedYaml<'_>> for Schema {
 
     fn try_from(marked_yaml: &MarkedYaml) -> Result<Schema> {
         if let YamlData::Mapping(mapping) = &marked_yaml.data {
-            if mapping.is_empty() {
-                Err(generic_error!("Empty mapping"))
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("type")) {
-                let typed_schema: TypedSchema = marked_yaml.try_into()?;
-                Ok(Schema::Typed(typed_schema))
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("enum")) {
-                let enum_schema = EnumSchema::try_from(mapping)?;
-                Ok(Schema::Enum(enum_schema))
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("const")) {
-                let const_schema = ConstSchema::try_from(mapping)?;
-                Ok(Schema::Const(const_schema))
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("anyOf")) {
-                let any_of_schema = AnyOfSchema::try_from(mapping)?;
-                Ok(Schema::AnyOf(any_of_schema))
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("oneOf")) {
-                let one_of_schema = marked_yaml.try_into()?;
-                Ok(Schema::OneOf(one_of_schema))
-            } else if mapping.contains_key(&MarkedYaml::value_from_str("not")) {
-                let not_schema = NotSchema::try_from(mapping)?;
-                Ok(Schema::Not(not_schema))
-            } else {
-                Err(generic_error!(
-                    "(Schema) Don't know how to construct schema: {:?}",
-                    mapping
-                ))
-            }
+            Ok(Schema::try_from(mapping)?)
         } else {
             Err(expected_mapping!(marked_yaml))
         }

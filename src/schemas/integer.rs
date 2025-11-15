@@ -2,6 +2,7 @@ use crate::ConstValue;
 use crate::Number;
 use crate::Result;
 use crate::schemas::BaseSchema;
+use crate::schemas::SchemaMetadata;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
@@ -20,6 +21,18 @@ pub struct IntegerSchema {
     pub exclusive_minimum: Option<Number>,
     pub exclusive_maximum: Option<Number>,
     pub multiple_of: Option<Number>,
+}
+
+impl SchemaMetadata for IntegerSchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &[
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+        ]
+    }
 }
 
 impl Default for IntegerSchema {

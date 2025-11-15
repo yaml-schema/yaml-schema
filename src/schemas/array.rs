@@ -13,6 +13,7 @@ use crate::TypedSchema;
 use crate::Validator;
 use crate::YamlSchema;
 use crate::loader;
+use crate::schemas::SchemaMetadata;
 use crate::utils::format_marker;
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
@@ -23,6 +24,12 @@ pub struct ArraySchema {
     pub items: Option<BoolOrTypedSchema>,
     pub prefix_items: Option<Vec<YamlSchema>>,
     pub contains: Option<Box<YamlSchema>>,
+}
+
+impl SchemaMetadata for ArraySchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &["items", "prefixItems", "contains"]
+    }
 }
 
 impl ArraySchema {

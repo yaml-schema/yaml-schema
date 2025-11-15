@@ -8,15 +8,22 @@ use crate::ConstValue;
 use crate::Schema;
 use crate::YamlSchema;
 use crate::loader;
+use crate::schemas::SchemaMetadata;
 use crate::schemas::base::BaseSchema;
+use crate::utils::format_hash_map;
 
 /// A string schema
-#[derive(Debug)]
 pub struct StringSchema {
     pub base: BaseSchema,
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub pattern: Option<Regex>,
+}
+
+impl SchemaMetadata for StringSchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &["minLength", "maxLength", "pattern"]
+    }
 }
 
 impl Default for StringSchema {
@@ -27,6 +34,22 @@ impl Default for StringSchema {
             max_length: None,
             pattern: None,
         }
+    }
+}
+
+impl std::fmt::Debug for StringSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut h = self.base.as_hash_map();
+        if let Some(min_length) = self.min_length {
+            h.insert("minLength".to_string(), min_length.to_string());
+        }
+        if let Some(max_length) = self.max_length {
+            h.insert("maxLength".to_string(), max_length.to_string());
+        }
+        if let Some(pattern) = &self.pattern {
+            h.insert("pattern".to_string(), pattern.as_str().to_string());
+        }
+        write!(f, "StringSchema {}", format_hash_map(&h))
     }
 }
 
