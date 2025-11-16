@@ -1,12 +1,13 @@
-use super::Validator;
+use log::debug;
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+
 use crate::ConstValue;
 use crate::Context;
 use crate::Number;
 use crate::Result;
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-use crate::utils::{format_marker, saphyr_yaml_string};
-use log::debug;
-use saphyr::{AnnotatedMapping, MarkedYaml};
+use crate::Validator;
+use crate::utils::format_marker;
 
 /// A const schema represents a constant value
 #[derive(Debug, PartialEq)]
@@ -20,35 +21,10 @@ impl std::fmt::Display for ConstSchema {
     }
 }
 
-impl FromSaphyrMapping<ConstSchema> for ConstSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<ConstSchema> {
-        let value = mapping.get(&saphyr_yaml_string("const")).unwrap();
-        match value {
-            saphyr::Yaml::Value(scalar) => match scalar {
-                saphyr::Scalar::String(s) => Ok(ConstSchema {
-                    r#const: ConstValue::string(s.to_string()),
-                }),
-                saphyr::Scalar::Integer(i) => Ok(ConstSchema {
-                    r#const: ConstValue::integer(*i),
-                }),
-                saphyr::Scalar::FloatingPoint(o) => {
-                    let f = o.into_inner();
-                    Ok(ConstSchema {
-                        r#const: ConstValue::float(f),
-                    })
-                }
-                _ => Err(generic_error!("Unsupported const value: {:#?}", value)),
-            },
-            _ => Err(expected_scalar!(
-                "Expected a scalar value for const, but got: {:#?}",
-                value
-            )),
-        }
-    }
-}
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ConstSchema {
+    type Error = crate::Error;
 
-impl FromAnnotatedMapping<ConstSchema> for ConstSchema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<ConstSchema> {
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let value = mapping
             .get(&MarkedYaml::value_from_str("const"))
             .ok_or(generic_error!("No `const` key found"))?;

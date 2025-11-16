@@ -1,6 +1,7 @@
 // Various utility functions
 use crate::Result;
 use hashlink::linked_hash_map;
+use saphyr::{MarkedYaml, Scalar, YamlData};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -84,6 +85,7 @@ pub fn format_yaml_data<'a>(data: &saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>)
     }
 }
 
+/// Formats a saphyr::Marker as a string. Displays the line and column as a pair of numbers, separated by a comma.
 pub fn format_marker(marker: &saphyr::Marker) -> String {
     format!("[{}, {}]", marker.line(), marker.col())
 }
@@ -95,6 +97,55 @@ where
 {
     let items: Vec<String> = vec.iter().map(|v| format!("{v}")).collect();
     format!("[{}]", items.join(", "))
+}
+
+/// Formats a HashMap as a string, ala JSON
+pub fn format_hash_map<K, V>(hash_map: &HashMap<K, V>) -> String
+where
+    K: std::fmt::Display,
+    V: std::fmt::Display,
+{
+    let items: Vec<String> = hash_map
+        .iter()
+        .map(|(k, v)| format!("{}: {}", k, v))
+        .collect();
+    format!("{{ {} }}", items.join(", "))
+}
+/// Collects the keys of a list of SchemaMetadata implementations into a single slice of strings.
+pub fn collect_keys(a: &'static [&'static str], b: &'static [&'static str]) -> Vec<&'static str> {
+    let mut keys = Vec::with_capacity(a.len() + b.len());
+    keys.extend_from_slice(a);
+    keys.extend_from_slice(b);
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
+/// Filters a saphyr::Mapping and returns a new mapping with only the keys that are in the list.
+pub fn filter_mapping<'a>(
+    mapping: &saphyr::AnnotatedMapping<'a, saphyr::MarkedYaml<'a>>,
+    keys: Vec<&'static str>,
+    override_type: &'a str,
+) -> Result<saphyr::AnnotatedMapping<'a, saphyr::MarkedYaml<'a>>> {
+    let mut filtered_mapping = saphyr::AnnotatedMapping::new();
+    for (k, v) in mapping.iter() {
+        if let YamlData::Value(Scalar::String(key)) = &k.data {
+            if keys.contains(&key.as_ref()) {
+                match key.as_ref() {
+                    "type" => {
+                        filtered_mapping
+                            .insert(k.clone(), MarkedYaml::value_from_str(override_type));
+                    }
+                    _ => {
+                        filtered_mapping.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        } else {
+            return Err(expected_scalar!("Expected a string key, got: {:?}", k.data));
+        }
+    }
+    Ok(filtered_mapping.into_iter().collect())
 }
 
 #[cfg(test)]

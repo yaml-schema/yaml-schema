@@ -1,12 +1,15 @@
 use crate::ConstValue;
+use crate::Number;
 use crate::Result;
-use crate::loader::FromSaphyrMapping;
 use crate::schemas::BaseSchema;
+use crate::schemas::SchemaMetadata;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use crate::{Number, loader};
-use saphyr::{MarkedYaml, Scalar, YamlData};
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 use std::cmp::Ordering;
 
 /// An integer schema
@@ -18,6 +21,18 @@ pub struct IntegerSchema {
     pub exclusive_minimum: Option<Number>,
     pub exclusive_maximum: Option<Number>,
     pub multiple_of: Option<Number>,
+}
+
+impl SchemaMetadata for IntegerSchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &[
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+        ]
+    }
 }
 
 impl Default for IntegerSchema {
@@ -38,83 +53,46 @@ impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
 
     fn try_from(value: &MarkedYaml) -> Result<IntegerSchema> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut integer_schema = IntegerSchema::from_base(BaseSchema::try_from(value)?);
-            for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(key)) = &key.data {
-                    match key.as_ref() {
-                        "minimum" => {
-                            integer_schema.minimum = Some(value.try_into()?);
-                        }
-                        "maximum" => {
-                            integer_schema.maximum = Some(value.try_into()?);
-                        }
-                        "exclusiveMinimum" => {
-                            integer_schema.exclusive_minimum = Some(value.try_into()?);
-                        }
-                        "exclusiveMaximum" => {
-                            integer_schema.exclusive_maximum = Some(value.try_into()?);
-                        }
-                        "multipleOf" => {
-                            integer_schema.multiple_of = Some(value.try_into()?);
-                        }
-                        // These should've been handled by the base schema
-                        "type" => (),
-                        "const" => (),
-                        "enum" => (),
-                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
-                    }
-                } else {
-                    return Err(generic_error!(
-                        "{} Expected string key, got {:?}",
-                        format_marker(&key.span.start),
-                        key
-                    ));
-                }
-            }
-            Ok(integer_schema)
+            Ok(IntegerSchema::try_from(mapping)?)
         } else {
             Err(expected_mapping!(value))
         }
     }
 }
 
-impl FromSaphyrMapping<IntegerSchema> for IntegerSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<IntegerSchema> {
-        let mut integer_schema = IntegerSchema::default();
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for IntegerSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        let mut integer_schema = IntegerSchema::from_base(BaseSchema::try_from(mapping)?);
         for (key, value) in mapping.iter() {
-            if let saphyr::Yaml::Value(scalar) = key {
-                if let saphyr::Scalar::String(key) = scalar {
-                    match key.as_ref() {
-                        "minimum" => {
-                            integer_schema.minimum = Some(loader::load_number(value)?);
-                        }
-                        "maximum" => {
-                            integer_schema.maximum = Some(loader::load_number(value)?);
-                        }
-                        "exclusiveMinimum" => {
-                            integer_schema.exclusive_minimum = Some(loader::load_number(value)?);
-                        }
-                        "exclusiveMaximum" => {
-                            integer_schema.exclusive_maximum = Some(loader::load_number(value)?);
-                        }
-                        "multipleOf" => {
-                            integer_schema.multiple_of = Some(loader::load_number(value)?);
-                        }
-                        "type" => {
-                            let s = loader::load_string_value(value)?;
-                            if s != "integer" {
-                                return Err(unsupported_type!(
-                                    "Expected type: integer, but got: {}",
-                                    s
-                                ));
-                            }
-                        }
-                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
+                match key.as_ref() {
+                    "minimum" => {
+                        integer_schema.minimum = Some(value.try_into()?);
                     }
+                    "maximum" => {
+                        integer_schema.maximum = Some(value.try_into()?);
+                    }
+                    "exclusiveMinimum" => {
+                        integer_schema.exclusive_minimum = Some(value.try_into()?);
+                    }
+                    "exclusiveMaximum" => {
+                        integer_schema.exclusive_maximum = Some(value.try_into()?);
+                    }
+                    "multipleOf" => {
+                        integer_schema.multiple_of = Some(value.try_into()?);
+                    }
+                    // These should've been handled by the base schema
+                    "type" => (),
+                    "const" => (),
+                    "enum" => (),
+                    _ => unimplemented!("Unsupported key for type: integer: {}", key),
                 }
             } else {
-                return Err(expected_scalar!(
-                    "Expected a scalar value for the key, got: {:#?}",
+                return Err(generic_error!(
+                    "{} Expected string key, got {:?}",
+                    format_marker(&key.span.start),
                     key
                 ));
             }

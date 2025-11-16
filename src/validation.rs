@@ -57,39 +57,21 @@ impl Validator for Schema {
         );
         match self {
             Schema::Empty => Ok(()),
-            Schema::TypeNull => {
-                if !value.data.is_null() {
-                    context.add_error(value, format!("Expected null, but got: {:?}", value.data));
-                }
-                Ok(())
-            }
             Schema::BooleanLiteral(boolean) => {
                 if !*boolean {
                     context.add_error(value, "Schema is `false`!".to_string());
                 }
                 Ok(())
             }
-            Schema::BooleanSchema => validate_boolean_schema(context, value),
             Schema::Const(const_schema) => const_schema.validate(context, value),
             Schema::Enum(enum_schema) => enum_schema.validate(context, value),
-            Schema::Integer(integer_schema) => integer_schema.validate(context, value),
-            Schema::String(string_schema) => string_schema.validate(context, value),
-            Schema::Number(number_schema) => number_schema.validate(context, value),
-            Schema::Object(object_schema) => object_schema.validate(context, value),
-            Schema::Array(array_schema) => array_schema.validate(context, value),
             Schema::AllOf(all_of_schema) => all_of_schema.validate(context, value),
             Schema::AnyOf(any_of_schema) => any_of_schema.validate(context, value),
             Schema::OneOf(one_of_schema) => one_of_schema.validate(context, value),
             Schema::Not(not_schema) => not_schema.validate(context, value),
+            Schema::Typed(typed_schema) => typed_schema.validate(context, value),
         }
     }
-}
-
-fn validate_boolean_schema(context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-    if !value.data.is_boolean() {
-        context.add_error(value, format!("Expected: boolean, found: {value:?}"));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -56,7 +56,7 @@ impl<'r> Context<'r> {
         }
     }
 
-    pub fn push_error(&self, error: ValidationError) {
+    fn push_error(&self, error: ValidationError) {
         self.errors.borrow_mut().push(error);
     }
 
@@ -77,6 +77,11 @@ impl<'r> Context<'r> {
             marker: Some(marked_yaml.span.start),
             error: error.into(),
         });
+    }
+
+    /// Appends all the errors to the current context
+    pub fn extend_errors(&self, errors: Vec<ValidationError>) {
+        self.errors.borrow_mut().extend(errors);
     }
 
     /// Append a path to the current path

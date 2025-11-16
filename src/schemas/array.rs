@@ -1,13 +1,22 @@
-use super::{BoolOrTypedSchema, TypedSchema};
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
-
-use crate::utils::format_yaml_data;
-use crate::utils::{format_marker, format_vec};
-use crate::{Context, Reference};
-use crate::{Result, loader};
-use crate::{Validator, YamlSchema};
 use log::debug;
-use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
+
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
+
+use crate::BoolOrTypedSchema;
+use crate::Context;
+use crate::Reference;
+use crate::Result;
+use crate::TypedSchema;
+use crate::Validator;
+use crate::YamlSchema;
+use crate::loader;
+use crate::schemas::SchemaMetadata;
+use crate::utils::format_marker;
+use crate::utils::format_vec;
+use crate::utils::format_yaml_data;
 
 /// An array schema represents an array
 #[derive(Debug, Default, PartialEq)]
@@ -15,6 +24,12 @@ pub struct ArraySchema {
     pub items: Option<BoolOrTypedSchema>,
     pub prefix_items: Option<Vec<YamlSchema>>,
     pub contains: Option<Box<YamlSchema>>,
+}
+
+impl SchemaMetadata for ArraySchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &["items", "prefixItems", "contains"]
+    }
 }
 
 impl ArraySchema {
@@ -33,46 +48,10 @@ impl ArraySchema {
     }
 }
 
-impl FromSaphyrMapping<ArraySchema> for ArraySchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<ArraySchema> {
-        let mut array_schema = ArraySchema::default();
-        for (key, value) in mapping.iter() {
-            let s = loader::load_string_value(key)?;
-            match s.as_str() {
-                "contains" => {
-                    if let saphyr::Yaml::Mapping(mapping) = value {
-                        let yaml_schema = YamlSchema::from_mapping(mapping)?;
-                        array_schema.contains = Some(Box::new(yaml_schema));
-                    } else {
-                        return Err(generic_error!(
-                            "contains: expected a mapping, but got: {:#?}",
-                            value
-                        ));
-                    }
-                }
-                "items" => {
-                    let array_items = loader::load_array_items(value)?;
-                    array_schema.items = Some(array_items);
-                }
-                "type" => {
-                    let s = loader::load_string_value(value)?;
-                    if s != "array" {
-                        return Err(unsupported_type!("Expected type: array, but got: {}", s));
-                    }
-                }
-                "prefixItems" => {
-                    let prefix_items = loader::load_array_of_schemas(value)?;
-                    array_schema.prefix_items = Some(prefix_items);
-                }
-                _ => unimplemented!("Unsupported key for ArraySchema: {}", s),
-            }
-        }
-        Ok(array_schema)
-    }
-}
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ArraySchema {
+    type Error = crate::Error;
 
-impl FromAnnotatedMapping<ArraySchema> for ArraySchema {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<ArraySchema> {
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let mut array_schema = ArraySchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(s)) = &key.data {
@@ -101,11 +80,7 @@ impl FromAnnotatedMapping<ArraySchema> for ArraySchema {
                                 ));
                             }
                         } else {
-                            return Err(generic_error!(
-                                "{} Expected string value for `type:`, got {:?}",
-                                format_marker(&value.span.start),
-                                value
-                            ));
+                            return Err(expected_type_is_string!(value));
                         }
                     }
                     "prefixItems" => {
@@ -141,7 +116,7 @@ impl Validator for ArraySchema {
                         fail_fast: true,
                         ..Default::default()
                     };
-                    sub_schema.validate(&sub_context, item).is_ok()
+                    sub_schema.validate(&sub_context, item).is_ok() && !sub_context.has_errors()
                 });
                 if !any_matches {
                     context.add_error(value, "Contains validation failed!".to_string());
@@ -247,6 +222,7 @@ impl Validator for ArraySchema {
 
             Ok(())
         } else {
+            debug!("[ArraySchema] context.fail_fast: {}", context.fail_fast);
             context.add_error(
                 value,
                 format!(
@@ -275,7 +251,6 @@ mod tests {
     use crate::Schema;
     use crate::StringSchema;
     use crate::TypedSchema;
-    use crate::loader::FromSaphyrMapping;
     use saphyr::LoadableYamlNode;
 
     use super::*;
@@ -283,11 +258,11 @@ mod tests {
     #[test]
     fn test_array_schema_prefix_items() {
         let schema = ArraySchema {
-            prefix_items: Some(vec![YamlSchema::from(Schema::Number(
+            prefix_items: Some(vec![YamlSchema::from(Schema::typed_number(
                 NumberSchema::default(),
             ))]),
             items: Some(BoolOrTypedSchema::TypedSchema(Box::new(
-                TypedSchema::String(StringSchema::default()),
+                TypedSchema::string(StringSchema::default()),
             ))),
             ..Default::default()
         };
@@ -333,10 +308,10 @@ mod tests {
         - Washington
         "#;
 
-        let s_docs = saphyr::Yaml::load_from_str(schema_string).unwrap();
+        let s_docs = saphyr::MarkedYaml::load_from_str(schema_string).unwrap();
         let first_schema = s_docs.first().unwrap();
-        if let saphyr::Yaml::Mapping(array_schema_hash) = first_schema {
-            let schema = ArraySchema::from_mapping(array_schema_hash).unwrap();
+        if let YamlData::Mapping(mapping) = &first_schema.data {
+            let schema = ArraySchema::try_from(mapping).unwrap();
             let docs = saphyr::MarkedYaml::load_from_str(yaml_string).unwrap();
             let value = docs.first().unwrap();
             let context = crate::Context::default();
@@ -380,7 +355,7 @@ mod tests {
         let docs = MarkedYaml::load_from_str(schema_string).unwrap();
         let first_doc = docs.first().unwrap();
         if let YamlData::Mapping(mapping) = &first_doc.data {
-            let schema: ArraySchema = ArraySchema::from_annotated_mapping(mapping).unwrap();
+            let schema: ArraySchema = ArraySchema::try_from(mapping).unwrap();
             let docs = saphyr::MarkedYaml::load_from_str(yaml_string).unwrap();
             let value = docs.first().unwrap();
             let context = crate::Context::default();
@@ -395,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_contains() {
-        let number_schema = YamlSchema::from(Schema::Number(NumberSchema::default()));
+        let number_schema = YamlSchema::from(Schema::typed_number(NumberSchema::default()));
         let schema = ArraySchema {
             contains: Some(Box::new(number_schema)),
             ..Default::default()
@@ -416,8 +391,8 @@ mod tests {
     }
 
     #[test]
-    fn test_contains_fails() {
-        let number_schema = YamlSchema::from(Schema::Number(NumberSchema::default()));
+    fn test_array_schema_contains_fails() {
+        let number_schema = YamlSchema::from(Schema::typed_number(NumberSchema::default()));
         let schema = ArraySchema {
             contains: Some(Box::new(number_schema)),
             ..Default::default()

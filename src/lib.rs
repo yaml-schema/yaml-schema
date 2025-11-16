@@ -9,7 +9,6 @@ use saphyr::YamlData;
 pub mod engine;
 #[macro_use]
 pub mod error;
-pub mod codegen;
 pub mod loader;
 pub mod reference;
 pub mod schemas;
@@ -194,16 +193,20 @@ impl std::fmt::Display for Number {
 }
 
 /// A ConstValue is similar to a saphyr::Scalar, but for validating "number" types
-/// we treat integers and floating point values as 'fungible'
+/// we treat integers and floating point values as 'fungible' and represent them
+/// using the `Number` enum.
 #[derive(Debug, PartialEq)]
 pub enum ConstValue {
-    Boolean(bool),
     Null,
+    Boolean(bool),
     Number(Number),
     String(String),
 }
 
 impl ConstValue {
+    pub fn null() -> ConstValue {
+        ConstValue::Null
+    }
     pub fn boolean(value: bool) -> ConstValue {
         ConstValue::Boolean(value)
     }
@@ -213,14 +216,8 @@ impl ConstValue {
     pub fn float(value: f64) -> ConstValue {
         ConstValue::Number(Number::float(value))
     }
-    pub fn null() -> ConstValue {
-        ConstValue::Null
-    }
     pub fn string<V: Into<String>>(value: V) -> ConstValue {
         ConstValue::String(value.into())
-    }
-    pub fn from_saphyr_yaml(value: &saphyr::Yaml) -> ConstValue {
-        value.try_into().unwrap()
     }
 }
 
@@ -258,20 +255,6 @@ impl<'a> TryFrom<&MarkedYaml<'a>> for ConstValue {
                 "{} Expected a scalar value, but got: {:?}",
                 format_marker(&value.span.start),
                 value
-            )),
-        }
-    }
-}
-
-impl TryFrom<&saphyr::Yaml<'_>> for ConstValue {
-    type Error = crate::Error;
-
-    fn try_from(value: &saphyr::Yaml) -> Result<Self> {
-        match value {
-            saphyr::Yaml::Value(scalar) => scalar.try_into(),
-            v => Err(unsupported_type!(
-                "Expected a constant value, but got: {:?}",
-                v
             )),
         }
     }
