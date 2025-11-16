@@ -18,6 +18,7 @@ use crate::TypedSchema;
 use crate::YamlSchema;
 use crate::loader::load_array_of_schemas_marked;
 use crate::loader::load_integer_marked;
+use crate::schemas::BaseSchema;
 use crate::schemas::SchemaMetadata;
 use crate::utils::format_marker;
 use crate::utils::hash_map;
@@ -26,6 +27,7 @@ use crate::utils::linked_hash_map;
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
 pub struct ObjectSchema {
+    pub base: BaseSchema,
     pub metadata: Option<HashMap<String, String>>,
     pub properties: Option<LinkedHashMap<String, YamlSchema>>,
     pub required: Option<Vec<String>>,
@@ -53,6 +55,13 @@ impl SchemaMetadata for ObjectSchema {
 }
 
 impl ObjectSchema {
+    pub fn from_base(base: BaseSchema) -> Self {
+        Self {
+            base,
+            ..Default::default()
+        }
+    }
+
     pub fn builder() -> ObjectSchemaBuilder {
         ObjectSchemaBuilder::new()
     }
@@ -75,114 +84,119 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ObjectSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut object_schema = ObjectSchema::default();
+        let mut object_schema = ObjectSchema::from_base(BaseSchema::try_from(mapping)?);
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(s)) = &key.data {
-                match s.as_ref() {
-                    "properties" => {
-                        let properties = load_properties_marked(value)?;
-                        object_schema.properties = Some(properties);
-                    }
-                    "additionalProperties" => {
-                        let additional_properties = load_additional_properties_marked(value)?;
-                        object_schema.additional_properties = Some(additional_properties);
-                    }
-                    "minProperties" => {
-                        object_schema.min_properties = Some(load_integer_marked(value)? as usize);
-                    }
-                    "maxProperties" => {
-                        object_schema.max_properties = Some(load_integer_marked(value)? as usize);
-                    }
-                    "patternProperties" => {
-                        let pattern_properties = load_properties_marked(value)?;
-                        object_schema.pattern_properties = Some(pattern_properties);
-                    }
-                    "propertyNames" => {
-                        if let YamlData::Mapping(mapping) = &value.data {
-                            let pattern_key = MarkedYaml::value_from_str("pattern");
-                            if !mapping.contains_key(&pattern_key) {
-                                return Err(generic_error!(
-                                    "{} propertyNames: Missing required key: pattern",
-                                    format_marker(&value.span.start)
-                                ));
-                            }
-                            if let YamlData::Value(Scalar::String(pattern)) =
-                                &mapping.get(&pattern_key).unwrap().data
-                            {
-                                let regex = Regex::new(pattern.as_ref()).map_err(|_e| {
-                                    Error::InvalidRegularExpression(pattern.to_string())
-                                })?;
-                                object_schema.property_names =
-                                    Some(StringSchema::builder().pattern(regex).build());
-                            }
-                        } else {
-                            return Err(unsupported_type!(
-                                "propertyNames: Expected a mapping, but got: {:?}",
-                                value
-                            ));
+                if object_schema.base.handle_key_value(s, value)?.is_none() {
+                    match s.as_ref() {
+                        "properties" => {
+                            let properties = load_properties_marked(value)?;
+                            object_schema.properties = Some(properties);
                         }
-                    }
-                    "anyOf" => {
-                        let any_of = load_array_of_schemas_marked(value)?;
-                        let any_of_schema = AnyOfSchema { any_of };
-                        object_schema.any_of = Some(any_of_schema);
-                    }
-                    "required" => {
-                        if let YamlData::Sequence(values) = &value.data {
-                            let required = values
-                                .iter()
-                                .map(|v| {
-                                    if let YamlData::Value(Scalar::String(s)) = &v.data {
-                                        Ok(s.to_string())
-                                    } else {
-                                        Err(generic_error!(
-                                            "{} Expected a string, got {:?}",
-                                            format_marker(&v.span.start),
-                                            v
-                                        ))
-                                    }
-                                })
-                                .collect::<Result<Vec<String>>>()?;
-                            object_schema.required = Some(required);
-                        } else {
-                            return Err(unsupported_type!(
-                                "required: Expected an array, but got: {:?}",
-                                value
-                            ));
+                        "additionalProperties" => {
+                            let additional_properties = load_additional_properties_marked(value)?;
+                            object_schema.additional_properties = Some(additional_properties);
                         }
-                    }
-                    "type" => {
-                        if let YamlData::Value(Scalar::String(s)) = &value.data {
-                            if s != "object" {
-                                return Err(unsupported_type!(
-                                    "Expected type: object, but got: {}",
-                                    s
-                                ));
-                            }
-                        } else {
-                            return Err(expected_type_is_string!(value));
+                        "minProperties" => {
+                            object_schema.min_properties =
+                                Some(load_integer_marked(value)? as usize);
                         }
-                    }
-                    _ => {
-                        if s.starts_with("$") {
-                            if let YamlData::Value(Scalar::String(value)) = &key.data {
-                                if object_schema.metadata.is_none() {
-                                    object_schema.metadata = Some(HashMap::new());
+                        "maxProperties" => {
+                            object_schema.max_properties =
+                                Some(load_integer_marked(value)? as usize);
+                        }
+                        "patternProperties" => {
+                            let pattern_properties = load_properties_marked(value)?;
+                            object_schema.pattern_properties = Some(pattern_properties);
+                        }
+                        "propertyNames" => {
+                            if let YamlData::Mapping(mapping) = &value.data {
+                                let pattern_key = MarkedYaml::value_from_str("pattern");
+                                if !mapping.contains_key(&pattern_key) {
+                                    return Err(generic_error!(
+                                        "{} propertyNames: Missing required key: pattern",
+                                        format_marker(&value.span.start)
+                                    ));
                                 }
-                                object_schema
-                                    .metadata
-                                    .as_mut()
-                                    .unwrap()
-                                    .insert(s.to_string(), value.to_string());
+                                if let YamlData::Value(Scalar::String(pattern)) =
+                                    &mapping.get(&pattern_key).unwrap().data
+                                {
+                                    let regex = Regex::new(pattern.as_ref()).map_err(|_e| {
+                                        Error::InvalidRegularExpression(pattern.to_string())
+                                    })?;
+                                    object_schema.property_names =
+                                        Some(StringSchema::builder().pattern(regex).build());
+                                }
                             } else {
-                                return Err(generic_error!(
-                                    "{} Expected a string value but got {:?}",
-                                    format_marker(&value.span.start),
-                                    value.data
+                                return Err(unsupported_type!(
+                                    "propertyNames: Expected a mapping, but got: {:?}",
+                                    value
                                 ));
                             }
-                        } else {
-                            unimplemented!("Unsupported key for type: object: {}", s);
+                        }
+                        "anyOf" => {
+                            let any_of = load_array_of_schemas_marked(value)?;
+                            let any_of_schema = AnyOfSchema { any_of };
+                            object_schema.any_of = Some(any_of_schema);
+                        }
+                        "required" => {
+                            if let YamlData::Sequence(values) = &value.data {
+                                let required = values
+                                    .iter()
+                                    .map(|v| {
+                                        if let YamlData::Value(Scalar::String(s)) = &v.data {
+                                            Ok(s.to_string())
+                                        } else {
+                                            Err(generic_error!(
+                                                "{} Expected a string, got {:?}",
+                                                format_marker(&v.span.start),
+                                                v
+                                            ))
+                                        }
+                                    })
+                                    .collect::<Result<Vec<String>>>()?;
+                                object_schema.required = Some(required);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "required: Expected an array, but got: {:?}",
+                                    value
+                                ));
+                            }
+                        }
+                        // Maybe this should be handled by the base schema?
+                        "type" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                if s != "object" {
+                                    return Err(unsupported_type!(
+                                        "Expected type: object, but got: {}",
+                                        s
+                                    ));
+                                }
+                            } else {
+                                return Err(expected_type_is_string!(value));
+                            }
+                        }
+                        _ => {
+                            if s.starts_with("$") {
+                                if let YamlData::Value(Scalar::String(value)) = &key.data {
+                                    if object_schema.metadata.is_none() {
+                                        object_schema.metadata = Some(HashMap::new());
+                                    }
+                                    object_schema
+                                        .metadata
+                                        .as_mut()
+                                        .unwrap()
+                                        .insert(s.to_string(), value.to_string());
+                                } else {
+                                    return Err(generic_error!(
+                                        "{} Expected a string value but got {:?}",
+                                        format_marker(&value.span.start),
+                                        value.data
+                                    ));
+                                }
+                            } else {
+                                unimplemented!("Unsupported key for type: object: {}", s);
+                            }
                         }
                     }
                 }
@@ -234,28 +248,28 @@ fn load_properties_marked(value: &MarkedYaml) -> Result<LinkedHashMap<String, Ya
     }
 }
 
-fn load_additional_properties_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> {
-    match &value.data {
+fn load_additional_properties_marked(marked_yaml: &MarkedYaml) -> Result<BoolOrTypedSchema> {
+    match &marked_yaml.data {
         YamlData::Value(scalar) => match scalar {
             Scalar::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
             _ => Err(generic_error!(
                 "{} Expected a boolean scalar, but got: {:#?}",
-                format_marker(&value.span.start),
+                format_marker(&marked_yaml.span.start),
                 scalar
             )),
         },
         YamlData::Mapping(mapping) => {
             let ref_key = MarkedYaml::value_from_str("$ref");
             if mapping.contains_key(&ref_key) {
-                Ok(BoolOrTypedSchema::Reference(value.try_into()?))
+                Ok(BoolOrTypedSchema::Reference(marked_yaml.try_into()?))
             } else {
-                let schema: TypedSchema = value.try_into()?;
+                let schema: TypedSchema = marked_yaml.try_into()?;
                 Ok(BoolOrTypedSchema::TypedSchema(Box::new(schema)))
             }
         }
         _ => Err(unsupported_type!(
             "Expected type: boolean or mapping, but got: {:?}",
-            value
+            marked_yaml
         )),
     }
 }
@@ -443,5 +457,20 @@ office_number: 201",
         for error in context.errors.as_ref().borrow().iter() {
             println!("{error:?}");
         }
+    }
+
+    #[test]
+    fn test_object_schema_with_description() {
+        let yaml = r#"
+        type: object
+        description: The description
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let marked_yaml = doc.first().unwrap();
+        let object_schema = ObjectSchema::try_from(marked_yaml).unwrap();
+        assert_eq!(
+            object_schema.base.description,
+            Some("The description".to_string())
+        );
     }
 }

@@ -11,8 +11,10 @@ use crate::loader;
 use crate::schemas::SchemaMetadata;
 use crate::schemas::base::BaseSchema;
 use crate::utils::format_hash_map;
+use crate::utils::format_marker;
 
 /// A string schema
+#[derive(Default)]
 pub struct StringSchema {
     pub base: BaseSchema,
     pub min_length: Option<usize>,
@@ -23,17 +25,6 @@ pub struct StringSchema {
 impl SchemaMetadata for StringSchema {
     fn get_accepted_keys() -> &'static [&'static str] {
         &["minLength", "maxLength", "pattern"]
-    }
-}
-
-impl Default for StringSchema {
-    fn default() -> Self {
-        Self {
-            base: BaseSchema::type_string(),
-            min_length: None,
-            max_length: None,
-            pattern: None,
-        }
     }
 }
 
@@ -102,44 +93,66 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for StringSchema {
         let mut string_schema = StringSchema::from_base(BaseSchema::try_from(mapping)?);
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
-                match key.as_ref() {
-                    "minLength" => {
-                        if let Ok(i) = loader::load_integer_marked(value) {
-                            string_schema.min_length = Some(i as usize);
-                        } else {
-                            return Err(unsupported_type!(
-                                "minLength expected integer, but got: {:?}",
-                                value
+                if string_schema.base.handle_key_value(key, value)?.is_none() {
+                    match key.as_ref() {
+                        "minLength" => {
+                            if let Ok(i) = loader::load_integer_marked(value) {
+                                string_schema.min_length = Some(i as usize);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "minLength expected integer, but got: {:?}",
+                                    value
+                                ));
+                            }
+                        }
+                        "maxLength" => {
+                            if let Ok(i) = loader::load_integer_marked(value) {
+                                string_schema.max_length = Some(i as usize);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "maxLength expected integer, but got: {:?}",
+                                    value
+                                ));
+                            }
+                        }
+                        "pattern" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                let regex = regex::Regex::new(s.as_ref())?;
+                                string_schema.pattern = Some(regex);
+                            } else {
+                                return Err(unsupported_type!(
+                                    "pattern expected string, but got: {:?}",
+                                    value
+                                ));
+                            }
+                        }
+                        // Maybe this should be handled by the base schema?
+                        "type" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                if s != "string" {
+                                    return Err(unsupported_type!(
+                                        "Expected type: string, but got: {}",
+                                        s
+                                    ));
+                                }
+                            } else {
+                                return Err(expected_type_is_string!(value));
+                            }
+                        }
+                        _ => {
+                            return Err(schema_loading_error!(
+                                "Unsupported key for type: string: {}",
+                                key
                             ));
                         }
                     }
-                    "maxLength" => {
-                        if let Ok(i) = loader::load_integer_marked(value) {
-                            string_schema.max_length = Some(i as usize);
-                        } else {
-                            return Err(unsupported_type!(
-                                "maxLength expected integer, but got: {:?}",
-                                value
-                            ));
-                        }
-                    }
-                    "pattern" => {
-                        if let YamlData::Value(Scalar::String(s)) = &value.data {
-                            let regex = regex::Regex::new(s.as_ref())?;
-                            string_schema.pattern = Some(regex);
-                        } else {
-                            return Err(unsupported_type!(
-                                "pattern expected string, but got: {:?}",
-                                value
-                            ));
-                        }
-                    }
-                    // These should've been handled by the base schema
-                    "type" => (),
-                    "const" => (),
-                    "enum" => (),
-                    _ => unimplemented!("Unsupported key for type: string: {}", key),
                 }
+            } else {
+                return Err(expected_scalar!(
+                    "{} Expected a scalar key, got: {:#?}",
+                    format_marker(&key.span.start),
+                    key
+                ));
             }
         }
         Ok(string_schema)

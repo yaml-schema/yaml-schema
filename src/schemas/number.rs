@@ -17,7 +17,7 @@ use crate::validation::Context;
 use crate::validation::Validator;
 
 /// A number schema
-#[derive(PartialEq)]
+#[derive(Default, PartialEq)]
 pub struct NumberSchema {
     pub base: BaseSchema,
     pub minimum: Option<Number>,
@@ -36,19 +36,6 @@ impl SchemaMetadata for NumberSchema {
             "exclusiveMaximum",
             "multipleOf",
         ]
-    }
-}
-
-impl Default for NumberSchema {
-    fn default() -> Self {
-        Self {
-            base: BaseSchema::type_number(),
-            minimum: None,
-            maximum: None,
-            exclusive_minimum: None,
-            exclusive_maximum: None,
-            multiple_of: None,
-        }
     }
 }
 
@@ -289,31 +276,42 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NumberSchema {
         let mut number_schema = NumberSchema::from_base(BaseSchema::try_from(mapping)?);
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
-                match key.as_ref() {
-                    "minimum" => {
-                        number_schema.minimum = Some(value.try_into()?);
-                    }
-                    "maximum" => {
-                        number_schema.maximum = Some(value.try_into()?);
-                    }
-                    "exclusiveMinimum" => {
-                        number_schema.exclusive_minimum = Some(value.try_into()?);
-                    }
-                    "exclusiveMaximum" => {
-                        number_schema.exclusive_maximum = Some(value.try_into()?);
-                    }
-                    "multipleOf" => {
-                        number_schema.multiple_of = Some(value.try_into()?);
-                    }
-                    // These should've been handled by the base schema
-                    "type" => (),
-                    "enum" => (),
-                    "const" => (),
-                    _ => {
-                        return Err(schema_loading_error!(
-                            "Unsupported key for type: number: {}",
-                            key
-                        ));
+                if number_schema.base.handle_key_value(key, value)?.is_none() {
+                    match key.as_ref() {
+                        "minimum" => {
+                            number_schema.minimum = Some(value.try_into()?);
+                        }
+                        "maximum" => {
+                            number_schema.maximum = Some(value.try_into()?);
+                        }
+                        "exclusiveMinimum" => {
+                            number_schema.exclusive_minimum = Some(value.try_into()?);
+                        }
+                        "exclusiveMaximum" => {
+                            number_schema.exclusive_maximum = Some(value.try_into()?);
+                        }
+                        "multipleOf" => {
+                            number_schema.multiple_of = Some(value.try_into()?);
+                        }
+                        // Maybe this should be handled by the base schema?
+                        "type" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                if s != "number" {
+                                    return Err(unsupported_type!(
+                                        "Expected type: number, but got: {}",
+                                        s
+                                    ));
+                                }
+                            } else {
+                                return Err(expected_type_is_string!(value));
+                            }
+                        }
+                        _ => {
+                            return Err(schema_loading_error!(
+                                "Unsupported key for type: number: {}",
+                                key
+                            ));
+                        }
                     }
                 }
             } else {
@@ -369,7 +367,6 @@ mod tests {
     #[test]
     fn test_number_schema_debug() {
         let number_schema = NumberSchema {
-            base: BaseSchema::type_number(),
             minimum: Some(Number::Integer(1)),
             ..Default::default()
         };

@@ -13,7 +13,7 @@ use saphyr::YamlData;
 use std::cmp::Ordering;
 
 /// An integer schema
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct IntegerSchema {
     pub base: BaseSchema,
     pub minimum: Option<Number>,
@@ -32,19 +32,6 @@ impl SchemaMetadata for IntegerSchema {
             "exclusiveMaximum",
             "multipleOf",
         ]
-    }
-}
-
-impl Default for IntegerSchema {
-    fn default() -> Self {
-        Self {
-            base: BaseSchema::type_integer(),
-            minimum: None,
-            maximum: None,
-            exclusive_minimum: None,
-            exclusive_maximum: None,
-            multiple_of: None,
-        }
     }
 }
 
@@ -67,27 +54,38 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for IntegerSchema {
         let mut integer_schema = IntegerSchema::from_base(BaseSchema::try_from(mapping)?);
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
-                match key.as_ref() {
-                    "minimum" => {
-                        integer_schema.minimum = Some(value.try_into()?);
+                if integer_schema.base.handle_key_value(key, value)?.is_none() {
+                    match key.as_ref() {
+                        "minimum" => {
+                            integer_schema.minimum = Some(value.try_into()?);
+                        }
+                        "maximum" => {
+                            integer_schema.maximum = Some(value.try_into()?);
+                        }
+                        "exclusiveMinimum" => {
+                            integer_schema.exclusive_minimum = Some(value.try_into()?);
+                        }
+                        "exclusiveMaximum" => {
+                            integer_schema.exclusive_maximum = Some(value.try_into()?);
+                        }
+                        "multipleOf" => {
+                            integer_schema.multiple_of = Some(value.try_into()?);
+                        }
+                        // Maybe this should be handled by the base schema?
+                        "type" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                if s != "integer" {
+                                    return Err(unsupported_type!(
+                                        "Expected type: integer, but got: {}",
+                                        s
+                                    ));
+                                }
+                            } else {
+                                return Err(expected_type_is_string!(value));
+                            }
+                        }
+                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
                     }
-                    "maximum" => {
-                        integer_schema.maximum = Some(value.try_into()?);
-                    }
-                    "exclusiveMinimum" => {
-                        integer_schema.exclusive_minimum = Some(value.try_into()?);
-                    }
-                    "exclusiveMaximum" => {
-                        integer_schema.exclusive_maximum = Some(value.try_into()?);
-                    }
-                    "multipleOf" => {
-                        integer_schema.multiple_of = Some(value.try_into()?);
-                    }
-                    // These should've been handled by the base schema
-                    "type" => (),
-                    "const" => (),
-                    "enum" => (),
-                    _ => unimplemented!("Unsupported key for type: integer: {}", key),
                 }
             } else {
                 return Err(generic_error!(
@@ -268,8 +266,9 @@ impl IntegerSchema {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use saphyr::LoadableYamlNode;
+
+    use super::*;
 
     #[test]
     fn test_integer_schema_against_string() {
@@ -284,6 +283,20 @@ mod tests {
         assert_eq!(
             first_error.error,
             "Expected a number, but got: Value(String(\"foo\"))"
+        );
+    }
+
+    #[test]
+    fn test_integer_schema_with_description() {
+        let yaml = r#"
+        type: integer
+        description: The description
+        "#;
+        let marked_yaml = MarkedYaml::load_from_str(yaml).unwrap();
+        let integer_schema = IntegerSchema::try_from(marked_yaml.first().unwrap()).unwrap();
+        assert_eq!(
+            integer_schema.base.description,
+            Some("The description".to_string())
         );
     }
 }

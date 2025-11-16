@@ -91,6 +91,14 @@ impl Schema {
         matches!(self, Schema::Typed(_))
     }
 
+    pub fn as_typed_schema(&self) -> Result<&TypedSchema> {
+        if let Self::Typed(typed_schema) = self {
+            Ok(typed_schema)
+        } else {
+            Err(generic_error!("Schema is not a typed schema"))
+        }
+    }
+
     pub fn is_object(&self) -> bool {
         if let Self::Typed(typed_schema) = self
             && typed_schema.r#type.len() == 1

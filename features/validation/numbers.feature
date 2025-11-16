@@ -130,3 +130,41 @@ Feature: Numeric types
       ```
       3.14
       ```
+
+  Scenario: number with description
+    Given a YAML schema:
+      ```
+      type: number
+      description: The description
+      ```
+    Then it should accept:
+      ```
+      42
+      ```
+    And it should accept:
+      ```
+      3.14
+      ```
+    But it should NOT accept:
+      ```
+      "I'm a string"
+      ```
+
+  Scenario: integer with description
+    Given a YAML schema:
+      ```
+      type: integer
+      description: The description
+      ```
+    Then it should accept:
+      ```
+      42
+      ```
+    And it should accept:
+      ```
+      -1
+      ```
+    But it should NOT accept:
+      ```
+      "I'm a string"
+      ```
