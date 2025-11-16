@@ -268,22 +268,11 @@ impl From<RootLoader> for RootSchema {
     }
 }
 
-pub fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
-    if let saphyr::Yaml::Value(Scalar::String(s)) = value {
-        Ok(s.to_string())
-    } else {
-        Err(expected_scalar!(
-            "Expected a string value, but got: {:?}",
-            value
-        ))
-    }
-}
-
 pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) -> Result<String> {
     if let YamlData::Value(Scalar::String(s)) = &yaml.data {
         Ok(s.to_string())
     } else {
-        Err(generic_error!("{}", msg.into()))
+        Err(Error::ExpectedScalar(msg.into()))
     }
 }
 
@@ -653,7 +642,7 @@ mod tests {
         }
 
         let result = std::panic::catch_unwind(|| {
-            let url = "https://yaml-schema.github.io/yaml-schema.yaml";
+            let url = "https://yaml-schema.net/yaml-schema.yaml";
             let result = download_from_url(url, Some(10));
 
             // Verify the download and parse was successful
