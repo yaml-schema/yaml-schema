@@ -390,3 +390,38 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for YamlSchema {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use saphyr::LoadableYamlNode;
+
+    use crate::schemas::TypedSchemaType;
+
+    use super::*;
+
+    #[test]
+    fn test_yaml_schema_with_multiple_types() {
+        let yaml = r#"
+        type:
+          - boolean
+          - number
+          - integer
+          - string
+        "#;
+        let doc = MarkedYaml::load_from_str(&yaml).expect("Failed to load YAML");
+        let marked_yaml = doc.first().unwrap();
+        let yaml_schema = YamlSchema::try_from(marked_yaml).unwrap();
+        let schema = yaml_schema.schema.unwrap();
+        assert!(schema.is_typed());
+        let typed_schema = schema.as_typed_schema().unwrap();
+        assert_eq!(
+            typed_schema.r#type,
+            vec![
+                TypedSchemaType::BooleanSchema,
+                TypedSchemaType::Number(NumberSchema::default()),
+                TypedSchemaType::Integer(IntegerSchema::default()),
+                TypedSchemaType::String(StringSchema::default()),
+            ]
+        );
+    }
+}
