@@ -1,25 +1,33 @@
-use crate::loader::{
-    FromSaphyrMapping, load_array_of_schemas, load_array_of_schemas_marked, load_integer,
-    load_integer_marked, load_string_value, yaml_to_string,
-};
+use std::collections::HashMap;
 
-use crate::Result;
-use crate::TypedSchema;
-use crate::utils::{format_marker, hash_map, linked_hash_map, saphyr_yaml_string};
-use crate::{AnyOfSchema, StringSchema};
-use crate::{BoolOrTypedSchema, Error};
-use crate::{Reference, YamlSchema};
 use hashlink::LinkedHashMap;
 use log::debug;
 use regex::Regex;
-use saphyr::{MarkedYaml, Scalar, YamlData};
-use std::collections::HashMap;
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 
-const PATTERN: saphyr::Yaml = saphyr_yaml_string("pattern");
+use crate::AnyOfSchema;
+use crate::BoolOrTypedSchema;
+use crate::Error;
+use crate::Reference;
+use crate::Result;
+use crate::StringSchema;
+use crate::TypedSchema;
+use crate::YamlSchema;
+use crate::loader::load_array_of_schemas_marked;
+use crate::loader::load_integer_marked;
+use crate::schemas::BaseSchema;
+use crate::schemas::SchemaMetadata;
+use crate::utils::format_marker;
+use crate::utils::hash_map;
+use crate::utils::linked_hash_map;
 
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
 pub struct ObjectSchema {
+    pub base: BaseSchema,
     pub metadata: Option<HashMap<String, String>>,
     pub properties: Option<LinkedHashMap<String, YamlSchema>>,
     pub required: Option<Vec<String>>,
@@ -31,7 +39,29 @@ pub struct ObjectSchema {
     pub any_of: Option<AnyOfSchema>,
 }
 
+impl SchemaMetadata for ObjectSchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &[
+            "properties",
+            "required",
+            "additionalProperties",
+            "patternProperties",
+            "propertyNames",
+            "minProperties",
+            "maxProperties",
+            "anyOf",
+        ]
+    }
+}
+
 impl ObjectSchema {
+    pub fn from_base(base: BaseSchema) -> Self {
+        Self {
+            base,
+            ..Default::default()
+        }
+    }
+
     pub fn builder() -> ObjectSchemaBuilder {
         ObjectSchemaBuilder::new()
     }
@@ -43,9 +73,21 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
     fn try_from(marked_yaml: &MarkedYaml<'_>) -> Result<Self> {
         debug!("[ObjectSchema]: TryFrom {marked_yaml:?}");
         if let YamlData::Mapping(mapping) = &marked_yaml.data {
-            let mut object_schema = ObjectSchema::default();
-            for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(s)) = &key.data {
+            Ok(ObjectSchema::try_from(mapping)?)
+        } else {
+            Err(expected_mapping!(marked_yaml))
+        }
+    }
+}
+
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ObjectSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        let mut object_schema = ObjectSchema::from_base(BaseSchema::try_from(mapping)?);
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(s)) = &key.data {
+                if object_schema.base.handle_key_value(s, value)?.is_none() {
                     match s.as_ref() {
                         "properties" => {
                             let properties = load_properties_marked(value)?;
@@ -121,6 +163,7 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
                                 ));
                             }
                         }
+                        // Maybe this should be handled by the base schema?
                         "type" => {
                             if let YamlData::Value(Scalar::String(s)) = &value.data {
                                 if s != "object" {
@@ -130,11 +173,7 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
                                     ));
                                 }
                             } else {
-                                return Err(generic_error!(
-                                    "{} Expected string value for `type:`, got {:?}",
-                                    format_marker(&value.span.start),
-                                    value.data
-                                ));
+                                return Err(expected_type_is_string!(value));
                             }
                         }
                         _ => {
@@ -160,150 +199,16 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
                             }
                         }
                     }
-                } else {
-                    return Err(generic_error!(
-                        "{} Expected a scalar key, got: {:#?}",
-                        format_marker(&key.span.start),
-                        key
-                    ));
-                }
-            }
-            Ok(object_schema)
-        } else {
-            Err(expected_mapping!(marked_yaml))
-        }
-    }
-}
-
-impl FromSaphyrMapping<ObjectSchema> for ObjectSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<ObjectSchema> {
-        let mut object_schema = ObjectSchema::default();
-        for (key, value) in mapping.iter() {
-            if let saphyr::Yaml::Value(scalar) = key {
-                if let saphyr::Scalar::String(key) = scalar {
-                    match key.as_ref() {
-                        "properties" => {
-                            let properties = load_properties(value)?;
-                            object_schema.properties = Some(properties);
-                        }
-                        "additionalProperties" => {
-                            let additional_properties = load_additional_properties(value)?;
-                            object_schema.additional_properties = Some(additional_properties);
-                        }
-                        "minProperties" => {
-                            object_schema.min_properties = Some(load_integer(value)? as usize);
-                        }
-                        "maxProperties" => {
-                            object_schema.max_properties = Some(load_integer(value)? as usize);
-                        }
-                        "patternProperties" => {
-                            let pattern_properties = load_properties(value)?;
-                            object_schema.pattern_properties = Some(pattern_properties);
-                        }
-                        "propertyNames" => {
-                            if let saphyr::Yaml::Mapping(mapping) = value {
-                                if !mapping.contains_key(&PATTERN) {
-                                    return Err(generic_error!(
-                                        "propertyNames: Missing required key: pattern"
-                                    ));
-                                }
-                                let pattern = load_string_value(
-                                    mapping.get(&saphyr_yaml_string("pattern")).unwrap(),
-                                )?;
-                                let regex = Regex::new(pattern.as_str())
-                                    .map_err(|_e| Error::InvalidRegularExpression(pattern))?;
-                                object_schema.property_names =
-                                    Some(StringSchema::builder().pattern(regex).build());
-                            } else {
-                                return Err(unsupported_type!(
-                                    "propertyNames: Expected a mapping, but got: {:?}",
-                                    value
-                                ));
-                            }
-                        }
-                        "anyOf" => {
-                            let any_of = load_array_of_schemas(value)?;
-                            let any_of_schema = AnyOfSchema { any_of };
-                            object_schema.any_of = Some(any_of_schema);
-                        }
-                        "required" => {
-                            if let saphyr::Yaml::Sequence(values) = value {
-                                object_schema.required = Some(
-                                    values
-                                        .iter()
-                                        .map(|v| load_string_value(v))
-                                        .collect::<Result<Vec<String>>>()?,
-                                );
-                            } else {
-                                return Err(unsupported_type!(
-                                    "required: Expected an array, but got: {:?}",
-                                    value
-                                ));
-                            }
-                        }
-                        "type" => {
-                            let s = load_string_value(value)?;
-                            if s != "object" {
-                                return Err(unsupported_type!(
-                                    "Expected type: object, but got: {}",
-                                    s
-                                ));
-                            }
-                        }
-                        _ => {
-                            if key.starts_with("$") {
-                                if object_schema.metadata.is_none() {
-                                    object_schema.metadata = Some(HashMap::new());
-                                }
-                                object_schema.metadata.as_mut().unwrap().insert(
-                                    key.to_string(),
-                                    yaml_to_string(
-                                        value,
-                                        &format!("Value for {key} must be a string"),
-                                    )?,
-                                );
-                            } else {
-                                unimplemented!("Unsupported key for type: object: {}", key);
-                            }
-                        }
-                    }
                 }
             } else {
-                return Err(generic_error!("Expected a scalar key, got: {:#?}", key));
+                return Err(generic_error!(
+                    "{} Expected a scalar key, got: {:#?}",
+                    format_marker(&key.span.start),
+                    key
+                ));
             }
         }
         Ok(object_schema)
-    }
-}
-
-fn load_properties(value: &saphyr::Yaml) -> Result<LinkedHashMap<String, YamlSchema>> {
-    if let saphyr::Yaml::Mapping(mapping) = value {
-        let mut properties = LinkedHashMap::new();
-        for (key, value) in mapping.iter() {
-            if let Ok(key) = load_string_value(key) {
-                if key.as_str() == "$ref" {
-                    let reference = Reference::from_mapping(mapping)?;
-                    properties.insert(key.clone(), YamlSchema::builder().r#ref(reference).build());
-                } else if let saphyr::Yaml::Mapping(mapping) = value {
-                    let schema = YamlSchema::from_mapping(mapping)?;
-                    properties.insert(key.clone(), schema);
-                } else {
-                    return Err(generic_error!(
-                        "properties: Expected a mapping for \"{}\", but got: {:?}",
-                        key,
-                        value
-                    ));
-                }
-            } else {
-                return Err(generic_error!("Expected a string key, but got: {:?}", key));
-            }
-        }
-        Ok(properties)
-    } else {
-        Err(generic_error!(
-            "properties: expected a mapping, but got: {:#?}",
-            value
-        ))
     }
 }
 
@@ -343,55 +248,28 @@ fn load_properties_marked(value: &MarkedYaml) -> Result<LinkedHashMap<String, Ya
     }
 }
 
-fn load_additional_properties(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
-    match value {
-        saphyr::Yaml::Value(scalar) => match scalar {
-            saphyr::Scalar::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
-            _ => Err(generic_error!(
-                "Expected a boolean scalar, but got: {:#?}",
-                scalar
-            )),
-        },
-        saphyr::Yaml::Mapping(mapping) => {
-            let ref_key = saphyr_yaml_string("$ref");
-            if mapping.contains_key(&ref_key) {
-                Ok(BoolOrTypedSchema::Reference(Reference::from_mapping(
-                    mapping,
-                )?))
-            } else {
-                let schema = TypedSchema::from_mapping(mapping)?;
-                Ok(BoolOrTypedSchema::TypedSchema(Box::new(schema)))
-            }
-        }
-        _ => Err(unsupported_type!(
-            "Expected type: boolean or mapping, but got: {:?}",
-            value
-        )),
-    }
-}
-
-fn load_additional_properties_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> {
-    match &value.data {
+fn load_additional_properties_marked(marked_yaml: &MarkedYaml) -> Result<BoolOrTypedSchema> {
+    match &marked_yaml.data {
         YamlData::Value(scalar) => match scalar {
             Scalar::Boolean(b) => Ok(BoolOrTypedSchema::Boolean(*b)),
             _ => Err(generic_error!(
                 "{} Expected a boolean scalar, but got: {:#?}",
-                format_marker(&value.span.start),
+                format_marker(&marked_yaml.span.start),
                 scalar
             )),
         },
         YamlData::Mapping(mapping) => {
             let ref_key = MarkedYaml::value_from_str("$ref");
             if mapping.contains_key(&ref_key) {
-                Ok(BoolOrTypedSchema::Reference(value.try_into()?))
+                Ok(BoolOrTypedSchema::Reference(marked_yaml.try_into()?))
             } else {
-                let schema: TypedSchema = value.try_into()?;
+                let schema: TypedSchema = marked_yaml.try_into()?;
                 Ok(BoolOrTypedSchema::TypedSchema(Box::new(schema)))
             }
         }
         _ => Err(unsupported_type!(
             "Expected type: boolean or mapping, but got: {:?}",
-            value
+            marked_yaml
         )),
     }
 }
@@ -579,5 +457,20 @@ office_number: 201",
         for error in context.errors.as_ref().borrow().iter() {
             println!("{error:?}");
         }
+    }
+
+    #[test]
+    fn test_object_schema_with_description() {
+        let yaml = r#"
+        type: object
+        description: The description
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let marked_yaml = doc.first().unwrap();
+        let object_schema = ObjectSchema::try_from(marked_yaml).unwrap();
+        assert_eq!(
+            object_schema.base.description,
+            Some("The description".to_string())
+        );
     }
 }

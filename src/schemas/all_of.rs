@@ -1,12 +1,15 @@
-use log::{debug, error};
+use log::debug;
+use log::error;
 
-use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 
 use crate::Context;
 use crate::Error;
 use crate::Result;
 use crate::YamlSchema;
-use crate::loader::{FromAnnotatedMapping, FromSaphyrMapping};
 use crate::utils::format_vec;
 use crate::{Validator, loader};
 
@@ -24,27 +27,10 @@ impl std::fmt::Display for AllOfSchema {
     }
 }
 
-impl FromSaphyrMapping<AllOfSchema> for AllOfSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> crate::Result<AllOfSchema> {
-        let mut all_of_schema = AllOfSchema::default();
-        for (key, value) in mapping.iter() {
-            if let Ok(key) = loader::load_string_value(key) {
-                match key.as_str() {
-                    "allOf" => {
-                        all_of_schema.all_of = loader::load_array_of_schemas(value)?;
-                    }
-                    _ => return Err(generic_error!("Unsupported key: {}", key)),
-                }
-            }
-        }
-        Ok(all_of_schema)
-    }
-}
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AllOfSchema {
+    type Error = crate::Error;
 
-impl FromAnnotatedMapping<AllOfSchema> for AllOfSchema {
-    fn from_annotated_mapping(
-        mapping: &AnnotatedMapping<MarkedYaml>,
-    ) -> crate::Result<AllOfSchema> {
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let mut all_of_schema = AllOfSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {

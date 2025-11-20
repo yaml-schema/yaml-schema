@@ -23,6 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt
       - name: Cargo cache
         uses: actions/cache@v4
         with:
@@ -32,8 +36,10 @@ jobs:
           key: test-cargo-registry
       - name: List
         run: find ./
-      - name: Run tests
-        run: cargo test --verbose
+      - name: Check formatting and run tests
+        run: |
+          cargo fmt --check
+          cargo test --verbose
 
   build:
     strategy:

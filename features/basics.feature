@@ -3,8 +3,8 @@ Feature: Basic YAML schema
   Scenario: Empty YAML
     Given a YAML schema:
       ```
+      
       ```
-
     Then it should accept:
       ```
       42
@@ -26,7 +26,6 @@ Feature: Basic YAML schema
       ```
       true
       ```
-
     Then it should accept:
       ```
       42
@@ -48,7 +47,6 @@ Feature: Basic YAML schema
       ```
       false
       ```
-
     Then it should NOT accept:
       ```
       42

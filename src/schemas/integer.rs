@@ -1,16 +1,19 @@
 use crate::ConstValue;
+use crate::Number;
 use crate::Result;
-use crate::loader::FromSaphyrMapping;
 use crate::schemas::BaseSchema;
+use crate::schemas::SchemaMetadata;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use crate::{Number, loader};
-use saphyr::{MarkedYaml, Scalar, YamlData};
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 use std::cmp::Ordering;
 
 /// An integer schema
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct IntegerSchema {
     pub base: BaseSchema,
     pub minimum: Option<Number>,
@@ -20,16 +23,15 @@ pub struct IntegerSchema {
     pub multiple_of: Option<Number>,
 }
 
-impl Default for IntegerSchema {
-    fn default() -> Self {
-        Self {
-            base: BaseSchema::type_integer(),
-            minimum: None,
-            maximum: None,
-            exclusive_minimum: None,
-            exclusive_maximum: None,
-            multiple_of: None,
-        }
+impl SchemaMetadata for IntegerSchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &[
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+        ]
     }
 }
 
@@ -38,9 +40,21 @@ impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
 
     fn try_from(value: &MarkedYaml) -> Result<IntegerSchema> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut integer_schema = IntegerSchema::from_base(BaseSchema::try_from(value)?);
-            for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(key)) = &key.data {
+            Ok(IntegerSchema::try_from(mapping)?)
+        } else {
+            Err(expected_mapping!(value))
+        }
+    }
+}
+
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for IntegerSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        let mut integer_schema = IntegerSchema::from_base(BaseSchema::try_from(mapping)?);
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
+                if integer_schema.base.handle_key_value(key, value)?.is_none() {
                     match key.as_ref() {
                         "minimum" => {
                             integer_schema.minimum = Some(value.try_into()?);
@@ -57,64 +71,26 @@ impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
                         "multipleOf" => {
                             integer_schema.multiple_of = Some(value.try_into()?);
                         }
-                        // These should've been handled by the base schema
-                        "type" => (),
-                        "const" => (),
-                        "enum" => (),
-                        _ => unimplemented!("Unsupported key for type: integer: {}", key),
-                    }
-                } else {
-                    return Err(generic_error!(
-                        "{} Expected string key, got {:?}",
-                        format_marker(&key.span.start),
-                        key
-                    ));
-                }
-            }
-            Ok(integer_schema)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
-
-impl FromSaphyrMapping<IntegerSchema> for IntegerSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<IntegerSchema> {
-        let mut integer_schema = IntegerSchema::default();
-        for (key, value) in mapping.iter() {
-            if let saphyr::Yaml::Value(scalar) = key {
-                if let saphyr::Scalar::String(key) = scalar {
-                    match key.as_ref() {
-                        "minimum" => {
-                            integer_schema.minimum = Some(loader::load_number(value)?);
-                        }
-                        "maximum" => {
-                            integer_schema.maximum = Some(loader::load_number(value)?);
-                        }
-                        "exclusiveMinimum" => {
-                            integer_schema.exclusive_minimum = Some(loader::load_number(value)?);
-                        }
-                        "exclusiveMaximum" => {
-                            integer_schema.exclusive_maximum = Some(loader::load_number(value)?);
-                        }
-                        "multipleOf" => {
-                            integer_schema.multiple_of = Some(loader::load_number(value)?);
-                        }
+                        // Maybe this should be handled by the base schema?
                         "type" => {
-                            let s = loader::load_string_value(value)?;
-                            if s != "integer" {
-                                return Err(unsupported_type!(
-                                    "Expected type: integer, but got: {}",
-                                    s
-                                ));
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                if s != "integer" {
+                                    return Err(unsupported_type!(
+                                        "Expected type: integer, but got: {}",
+                                        s
+                                    ));
+                                }
+                            } else {
+                                return Err(expected_type_is_string!(value));
                             }
                         }
                         _ => unimplemented!("Unsupported key for type: integer: {}", key),
                     }
                 }
             } else {
-                return Err(expected_scalar!(
-                    "Expected a scalar value for the key, got: {:#?}",
+                return Err(generic_error!(
+                    "{} Expected string key, got {:?}",
+                    format_marker(&key.span.start),
                     key
                 ));
             }
@@ -290,8 +266,9 @@ impl IntegerSchema {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use saphyr::LoadableYamlNode;
+
+    use super::*;
 
     #[test]
     fn test_integer_schema_against_string() {
@@ -306,6 +283,20 @@ mod tests {
         assert_eq!(
             first_error.error,
             "Expected a number, but got: Value(String(\"foo\"))"
+        );
+    }
+
+    #[test]
+    fn test_integer_schema_with_description() {
+        let yaml = r#"
+        type: integer
+        description: The description
+        "#;
+        let marked_yaml = MarkedYaml::load_from_str(yaml).unwrap();
+        let integer_schema = IntegerSchema::try_from(marked_yaml.first().unwrap()).unwrap();
+        assert_eq!(
+            integer_schema.base.description,
+            Some("The description".to_string())
         );
     }
 }

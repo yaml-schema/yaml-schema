@@ -68,3 +68,26 @@ Feature: String validation
       ```
       "(800)FLOWERS"
       ```
+
+  Scenario: string with description
+    Given a YAML schema:
+      ```
+      type: string
+      description: "First name"
+      ```
+    Then it should accept:
+      ```
+      "John Doe"
+      ```
+    And it should accept:
+      ```
+      "Marie"
+      ```
+    But it should NOT accept:
+      ```
+      1
+      ```
+    And it should NOT accept:
+      ```
+      true
+      ```

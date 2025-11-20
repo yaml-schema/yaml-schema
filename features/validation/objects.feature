@@ -214,6 +214,43 @@ Feature: Object types
       keyword: 42
       ```
 
+  Scenario: additionalProperties as a object schemas with unused properties
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        number:
+          type: number
+      additionalProperties:
+        type: object
+        description: "Any extra props"
+        properties:
+          id:
+            type: string
+      ```
+    Then it should accept:
+      ```
+      number: 1600
+      myCustomProperty:
+        id: my-id
+      ```
+    # This is valid, since the additional property's value is a string:
+    And it should accept:
+      ```
+      number: 1600
+      one:
+        id: first
+      two:
+        id: second
+      ```
+    # This is invalid, since the additional property's value is not a string:
+    And it should NOT accept:
+      ```
+      number: 1600
+      one: hello
+      two: 2
+      ```
+
   Scenario: Required properties
     Given a YAML schema:
       ```

@@ -1,16 +1,23 @@
+use std::cmp::Ordering;
+
+use log::debug;
+use saphyr::AnnotatedMapping;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
+
 use crate::ConstValue;
+use crate::Number;
 use crate::Result;
-use crate::loader::FromSaphyrMapping;
 use crate::schemas::BaseSchema;
+use crate::schemas::SchemaMetadata;
+use crate::utils::format_hash_map;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
-use crate::{Number, loader};
-use saphyr::{MarkedYaml, Scalar, YamlData};
-use std::cmp::Ordering;
 
 /// A number schema
-#[derive(Debug, PartialEq)]
+#[derive(Default, PartialEq)]
 pub struct NumberSchema {
     pub base: BaseSchema,
     pub minimum: Option<Number>,
@@ -20,28 +27,23 @@ pub struct NumberSchema {
     pub multiple_of: Option<Number>,
 }
 
-impl Default for NumberSchema {
-    fn default() -> Self {
-        Self {
-            base: BaseSchema::type_number(),
-            minimum: None,
-            maximum: None,
-            exclusive_minimum: None,
-            exclusive_maximum: None,
-            multiple_of: None,
-        }
-    }
-}
-
-impl std::fmt::Display for NumberSchema {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Number {self:?}")
+impl SchemaMetadata for NumberSchema {
+    fn get_accepted_keys() -> &'static [&'static str] {
+        &[
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+        ]
     }
 }
 
 impl Validator for NumberSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
+        debug!("[NumberSchema#validate] self: {self:?}");
         let data = &value.data;
+        debug!("[NumberSchema#validate] data: {data:?}");
         if let YamlData::Value(scalar) = data {
             if let Scalar::Integer(i) = scalar {
                 let enum_values = self.base.r#enum.as_ref().map(|r#enum| {
@@ -100,6 +102,13 @@ impl NumberSchema {
         value: &MarkedYaml,
         i: i64,
     ) {
+        debug!("[NumberSchema#validate_number_i64] self: {self:?}");
+        debug!("[NumberSchema#validate_number_i64] enum_values: {enum_values:?}");
+        debug!(
+            "[NumberSchema#validate_number_i64] value: {:?}",
+            &value.data
+        );
+        debug!("[NumberSchema#validate_number_i64] i: {i}");
         if let Some(exclusive_min) = self.exclusive_minimum {
             match exclusive_min {
                 Number::Integer(exclusive_min) => {
@@ -122,7 +131,7 @@ impl NumberSchema {
         } else if let Some(minimum) = self.minimum {
             match minimum {
                 Number::Integer(min) => {
-                    if i <= min {
+                    if i < min {
                         context.add_error(
                             value,
                             format!("Number must be greater than or equal to {min}"),
@@ -130,8 +139,8 @@ impl NumberSchema {
                     }
                 }
                 Number::Float(min) => {
-                    let cmp = (i as f64).partial_cmp(&min);
-                    if cmp != Some(Ordering::Less) && cmp != Some(Ordering::Equal) {
+                    let cmp = min.partial_cmp(&(i as f64));
+                    if cmp == Some(Ordering::Less) {
                         context.add_error(
                             value,
                             format!("Number must be greater than or equal to {min}"),
@@ -250,11 +259,24 @@ impl NumberSchema {
 
 impl TryFrom<&MarkedYaml<'_>> for NumberSchema {
     type Error = crate::Error;
+
     fn try_from(value: &MarkedYaml) -> Result<NumberSchema> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let mut number_schema = NumberSchema::from_base(BaseSchema::try_from(value)?);
-            for (key, value) in mapping.iter() {
-                if let YamlData::Value(Scalar::String(key)) = &key.data {
+            Ok(NumberSchema::try_from(mapping)?)
+        } else {
+            Err(expected_mapping!(value))
+        }
+    }
+}
+
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NumberSchema {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        let mut number_schema = NumberSchema::from_base(BaseSchema::try_from(mapping)?);
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(key)) = &key.data {
+                if number_schema.base.handle_key_value(key, value)?.is_none() {
                     match key.as_ref() {
                         "minimum" => {
                             number_schema.minimum = Some(value.try_into()?);
@@ -271,64 +293,91 @@ impl TryFrom<&MarkedYaml<'_>> for NumberSchema {
                         "multipleOf" => {
                             number_schema.multiple_of = Some(value.try_into()?);
                         }
-                        // These should've been handled by the base schema
-                        "type" => (),
-                        "enum" => (),
-                        "const" => (),
-                        _ => unimplemented!(),
-                    }
-                } else {
-                    return Err(generic_error!(
-                        "{} Expected string key, got {:?}",
-                        format_marker(&key.span.start),
-                        key
-                    ));
-                }
-            }
-            Ok(number_schema)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
-
-impl FromSaphyrMapping<NumberSchema> for NumberSchema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<NumberSchema> {
-        let mut number_schema = NumberSchema::default();
-        for (key, value) in mapping.iter() {
-            if let Ok(key) = loader::load_string_value(key) {
-                match key.as_str() {
-                    "minimum" => {
-                        let minimum = loader::load_number(value).map_err(|_| {
-                            crate::Error::UnsupportedType(format!(
-                                "Expected type: integer or float, but got: {:?}",
-                                &value
-                            ))
-                        })?;
-                        number_schema.minimum = Some(minimum);
-                    }
-                    "maximum" => {
-                        number_schema.maximum = Some(loader::load_number(value)?);
-                    }
-                    "exclusiveMinimum" => {
-                        number_schema.exclusive_minimum = Some(loader::load_number(value)?);
-                    }
-                    "exclusiveMaximum" => {
-                        number_schema.exclusive_maximum = Some(loader::load_number(value)?);
-                    }
-                    "multipleOf" => {
-                        number_schema.multiple_of = Some(loader::load_number(value)?);
-                    }
-                    "type" => {
-                        let s = loader::load_string_value(value)?;
-                        if s != "number" {
-                            return Err(unsupported_type!("Expected type: number, but got: {}", s));
+                        // Maybe this should be handled by the base schema?
+                        "type" => {
+                            if let YamlData::Value(Scalar::String(s)) = &value.data {
+                                if s != "number" {
+                                    return Err(unsupported_type!(
+                                        "Expected type: number, but got: {}",
+                                        s
+                                    ));
+                                }
+                            } else {
+                                return Err(expected_type_is_string!(value));
+                            }
+                        }
+                        _ => {
+                            return Err(schema_loading_error!(
+                                "Unsupported key for type: number: {}",
+                                key
+                            ));
                         }
                     }
-                    _ => unimplemented!(),
                 }
+            } else {
+                return Err(expected_scalar!(
+                    "{} Expected string key, got {:?}",
+                    format_marker(&key.span.start),
+                    key
+                ));
             }
         }
         Ok(number_schema)
+    }
+}
+
+impl std::fmt::Display for NumberSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Number {self:?}")
+    }
+}
+
+impl std::fmt::Debug for NumberSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut h = self.base.as_hash_map();
+        if let Some(minimum) = self.minimum {
+            h.insert("minimum".to_string(), minimum.to_string());
+        }
+        if let Some(maximum) = self.maximum {
+            h.insert("maximum".to_string(), maximum.to_string());
+        }
+        if let Some(exclusive_minimum) = self.exclusive_minimum {
+            h.insert(
+                "exclusiveMinimum".to_string(),
+                exclusive_minimum.to_string(),
+            );
+        }
+        if let Some(exclusive_maximum) = self.exclusive_maximum {
+            h.insert(
+                "exclusiveMaximum".to_string(),
+                exclusive_maximum.to_string(),
+            );
+        }
+        if let Some(multiple_of) = self.multiple_of {
+            h.insert("multipleOf".to_string(), multiple_of.to_string());
+        }
+        write!(f, "Number {}", format_hash_map(&h))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_number_schema_debug() {
+        let number_schema = NumberSchema {
+            minimum: Some(Number::Integer(1)),
+            ..Default::default()
+        };
+        println!("number_schema: {number_schema:?}");
+        let marked_yaml = MarkedYaml::value_from_str("1");
+        println!("marked_yaml: {marked_yaml:?}");
+        let context = Context::default();
+        number_schema
+            .validate(&context, &marked_yaml)
+            .expect("validate() failed!");
+        println!("context: {context:?}");
+        assert!(!context.has_errors());
     }
 }

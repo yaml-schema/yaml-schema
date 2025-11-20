@@ -1,4 +1,4 @@
-// The loader module loads the YAML schema from a file into the in-memory model
+//! The loader module loads the YAML schema from a file into the in-memory model
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -7,24 +7,23 @@ use hashlink::LinkedHashMap;
 use log::debug;
 use reqwest::Url;
 use reqwest::blocking::Client;
-use saphyr::{AnnotatedMapping, LoadableYamlNode, MarkedYaml, Scalar, YamlData};
+use saphyr::LoadableYamlNode;
+use saphyr::MarkedYaml;
+use saphyr::Scalar;
+use saphyr::YamlData;
 
-use crate::AnyOfSchema;
 use crate::BoolOrTypedSchema;
-use crate::ConstSchema;
-use crate::EnumSchema;
 use crate::Error;
-use crate::NotSchema;
 use crate::Number;
-use crate::OneOfSchema;
-use crate::Reference;
 use crate::Result;
 use crate::RootSchema;
-use crate::Schema;
 use crate::TypedSchema;
 use crate::YamlSchema;
-use crate::utils::{format_marker, saphyr_yaml_string, try_unwrap_saphyr_scalar};
+use crate::utils::format_marker;
+use crate::utils::try_unwrap_saphyr_scalar;
 
+/// Load a YAML schema from a file.
+/// Delegates to the `load_from_doc` function to load the schema from the first document.
 pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
     let path_s = path.into();
     let fs_metadata = std::fs::metadata(&path_s)?;
@@ -37,6 +36,56 @@ pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
         return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
     }
     load_from_doc(docs.first().unwrap())
+}
+
+/// Load a YAML schema from a document.
+/// This function is used to load the schema from the first document of a YAML file.
+/// It delegates to the `RootLoader` to load the schema from the document.
+pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
+    let mut loader = RootLoader::new();
+    match &doc.data {
+        YamlData::Value(scalar) => match scalar {
+            Scalar::Boolean(r#bool) => {
+                loader.set_schema(YamlSchema::boolean_literal(*r#bool));
+            }
+            Scalar::Null => {
+                loader.set_schema(YamlSchema::null());
+            }
+            Scalar::String(s) => match s.as_ref() {
+                "true" => {
+                    loader.set_schema(YamlSchema::boolean_literal(true));
+                }
+                "false" => {
+                    loader.set_schema(YamlSchema::boolean_literal(false));
+                }
+                s => return Err(generic_error!("Expected true or false, but got: {}", s)),
+            },
+            _ => {
+                return Err(generic_error!(
+                    "Don't know how to a handle scalar: {:?}",
+                    scalar
+                ));
+            }
+        },
+        _ => {
+            if doc.data.is_mapping() {
+                debug!("Found mapping: {doc:?}, trying to load as YamlSchema");
+                loader.load_root_schema(doc)?;
+            } else {
+                return Err(generic_error!("Don't know how to load: {:?}", doc));
+            }
+        }
+    }
+    Ok(loader.into()) // See From<Loader> for RootSchema below
+}
+
+/// Load a YAML schema from a string.
+/// This function is used to load the schema from a string.
+/// It delegates to the `load_from_doc` function to load the schema from the first document.
+pub fn load_from_str(s: &str) -> Result<RootSchema> {
+    let docs = MarkedYaml::load_from_str(s)?;
+    let first_doc = docs.first().unwrap();
+    Ok(load_from_doc(first_doc).unwrap())
 }
 
 /// Error type for URL loading operations
@@ -99,50 +148,6 @@ pub fn download_from_url(
 
     // Load the schema from the first document
     load_from_doc(docs.first().unwrap()).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-}
-
-pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
-    let mut loader = RootLoader::new();
-    match &doc.data {
-        YamlData::Value(scalar) => match scalar {
-            Scalar::Boolean(r#bool) => {
-                loader.set_schema(YamlSchema::boolean_literal(*r#bool));
-            }
-            Scalar::Null => {
-                loader.set_schema(YamlSchema::null());
-            }
-            Scalar::String(s) => match s.as_ref() {
-                "true" => {
-                    loader.set_schema(YamlSchema::boolean_literal(true));
-                }
-                "false" => {
-                    loader.set_schema(YamlSchema::boolean_literal(false));
-                }
-                s => return Err(generic_error!("Expected true or false, but got: {}", s)),
-            },
-            _ => {
-                return Err(generic_error!(
-                    "Don't know how to a handle scalar: {:?}",
-                    scalar
-                ));
-            }
-        },
-        _ => {
-            if doc.data.is_mapping() {
-                debug!("Found mapping: {doc:?}, trying to load as YamlSchema");
-                loader.load_root_schema(doc)?;
-            } else {
-                return Err(generic_error!("Don't know how to load: {:?}", doc));
-            }
-        }
-    }
-    Ok(loader.into()) // See From<Loader> for RootSchema below
-}
-
-pub fn load_from_str(s: &str) -> Result<RootSchema> {
-    let docs = MarkedYaml::load_from_str(s)?;
-    let first_doc = docs.first().unwrap();
-    Ok(load_from_doc(first_doc).unwrap())
 }
 
 #[derive(Debug, Default)]
@@ -263,95 +268,11 @@ impl From<RootLoader> for RootSchema {
     }
 }
 
-/// "type" key
-const TYPE: saphyr::Yaml = saphyr_yaml_string("type");
-/// "enum" key
-const ENUM: saphyr::Yaml = saphyr_yaml_string("enum");
-/// "const" key
-const CONST: saphyr::Yaml = saphyr_yaml_string("const");
-/// "anyOf" key
-const ANY_OF: saphyr::Yaml = saphyr_yaml_string("anyOf");
-/// "oneOf" key
-const ONE_OF: saphyr::Yaml = saphyr_yaml_string("oneOf");
-/// "not" key
-const NOT: saphyr::Yaml = saphyr_yaml_string("not");
-
-impl FromSaphyrMapping<Option<Schema>> for Schema {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<Option<Schema>> {
-        if mapping.is_empty() {
-            Ok(None)
-        } else if mapping.contains_key(&TYPE) {
-            match TypedSchema::from_mapping(mapping) {
-                Ok(typed_schema) => Ok(Some(typed_schema.into())),
-                Err(e) => Err(e),
-            }
-        } else if mapping.contains_key(&ENUM) {
-            let enum_schema = EnumSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::Enum(enum_schema)))
-        } else if mapping.contains_key(&CONST) {
-            let const_schema = ConstSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::Const(const_schema)))
-        } else if mapping.contains_key(&ANY_OF) {
-            let any_of_schema = AnyOfSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::AnyOf(any_of_schema)))
-        } else if mapping.contains_key(&ONE_OF) {
-            let one_of_schema = OneOfSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::OneOf(one_of_schema)))
-        } else if mapping.contains_key(&NOT) {
-            let not_schema = NotSchema::from_mapping(mapping)?;
-            Ok(Some(Schema::Not(not_schema)))
-        } else {
-            Err(generic_error!(
-                "(FromSaphyrMapping) Don't know how to construct schema: {:#?}",
-                mapping
-            ))
-        }
-    }
-}
-
-/// Try to convert a saphyr::Mapping into the desired (schema) type
-pub trait FromSaphyrMapping<T> {
-    fn from_mapping(mapping: &saphyr::Mapping) -> Result<T>;
-}
-
-pub trait FromAnnotatedMapping<T> {
-    fn from_annotated_mapping(mapping: &AnnotatedMapping<MarkedYaml>) -> Result<T>;
-}
-
-pub fn load_string_value(value: &saphyr::Yaml) -> Result<String> {
-    if let saphyr::Yaml::Value(Scalar::String(s)) = value {
-        Ok(s.to_string())
-    } else {
-        Err(expected_scalar!(
-            "Expected a string value, but got: {:?}",
-            value
-        ))
-    }
-}
-
-pub fn yaml_to_string<S: Into<String> + Copy>(yaml: &saphyr::Yaml, msg: S) -> Result<String> {
-    load_string_value(yaml).map_err(|_| generic_error!("{}", msg.into()))
-}
-
 pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) -> Result<String> {
     if let YamlData::Value(Scalar::String(s)) = &yaml.data {
         Ok(s.to_string())
     } else {
-        Err(generic_error!("{}", msg.into()))
-    }
-}
-
-pub fn load_array_of_schemas(value: &saphyr::Yaml) -> Result<Vec<YamlSchema>> {
-    if let saphyr::Yaml::Sequence(values) = value {
-        values
-            .iter()
-            .map(|v| match v {
-                saphyr::Yaml::Mapping(mapping) => YamlSchema::from_mapping(mapping),
-                _ => Err(generic_error!("Expected a mapping, but got: {:?}", v)),
-            })
-            .collect::<Result<Vec<YamlSchema>>>()
-    } else {
-        Err(generic_error!("Expected a sequence, but got: {:?}", value))
+        Err(Error::ExpectedScalar(msg.into()))
     }
 }
 
@@ -411,39 +332,6 @@ pub fn load_number(value: &saphyr::Yaml) -> Result<Number> {
     }
 }
 
-pub fn load_array_items(value: &saphyr::Yaml) -> Result<BoolOrTypedSchema> {
-    match value {
-        saphyr::Yaml::Value(scalar) => {
-            if let saphyr::Scalar::Boolean(b) = scalar {
-                Ok(BoolOrTypedSchema::Boolean(*b))
-            } else {
-                Err(generic_error!(
-                    "array: boolean or mapping with type or $ref, but got: {:?}",
-                    value
-                ))
-            }
-        }
-        saphyr::Yaml::Mapping(mapping) => {
-            if mapping.contains_key(&saphyr_yaml_string("$ref")) {
-                let reference = Reference::from_mapping(mapping);
-                Ok(BoolOrTypedSchema::Reference(reference?))
-            } else if mapping.contains_key(&saphyr_yaml_string("type")) {
-                let typed_schema = TypedSchema::from_mapping(mapping)?;
-                Ok(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema)))
-            } else {
-                Err(generic_error!(
-                    "array: boolean or mapping with type or $ref, but got: {:?}",
-                    value
-                ))
-            }
-        }
-        _ => Err(generic_error!(
-            "array: boolean or mapping with type or $ref, but got: {:?}",
-            value
-        )),
-    }
-}
-
 pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> {
     match &value.data {
         YamlData::Value(scalar) => {
@@ -481,10 +369,14 @@ pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BoolOrTypedSchema> 
 mod tests {
     use regex::Regex;
 
+    use crate::ConstSchema;
     use crate::ConstValue;
+    use crate::Engine;
+    use crate::EnumSchema;
     use crate::IntegerSchema;
+    use crate::Schema;
     use crate::StringSchema;
-    use crate::{ArraySchema, Engine};
+    use crate::schemas::TypedSchemaType;
 
     use super::*;
 
@@ -550,7 +442,7 @@ mod tests {
         let string_schema = StringSchema::default();
         assert_eq!(
             root_schema.schema.as_ref().schema.as_ref().unwrap(),
-            &Schema::String(string_schema)
+            &Schema::typed_string(string_schema)
         );
     }
 
@@ -568,27 +460,31 @@ mod tests {
         .unwrap();
         let root_schema_schema = &root_schema.schema.as_ref().schema.as_ref().unwrap();
         let expected = StringSchema::default();
-        if let Schema::Object(object_schema) = root_schema_schema {
-            let name_property = object_schema
-                .properties
-                .as_ref()
-                .expect("Expected properties")
-                .get("name")
-                .expect("Expected name property");
-            let description = name_property
-                .metadata
-                .as_ref()
-                .expect("Expected metadata")
-                .get("description")
-                .expect("Expected description");
-            assert_eq!(description, "This is a description");
-            if let Schema::String(actual) = &name_property.schema.as_ref().unwrap() {
-                assert_eq!(&expected, actual);
-            } else {
-                panic!(
-                    "Expected Schema::String, but got: {:?}",
-                    name_property.schema
-                );
+        if let Schema::Typed(typed_schema) = root_schema_schema {
+            if let TypedSchemaType::Object(object_schema) = typed_schema.r#type.first().unwrap() {
+                let name_property = object_schema
+                    .properties
+                    .as_ref()
+                    .expect("Expected properties")
+                    .get("name")
+                    .expect("Expected name property");
+                let description = name_property
+                    .metadata
+                    .as_ref()
+                    .expect("Expected metadata")
+                    .get("description")
+                    .expect("Expected description");
+                assert_eq!(description, "This is a description");
+                if let Schema::Typed(typed_schema) = &name_property.schema.as_ref().unwrap() {
+                    if let TypedSchemaType::String(actual) = typed_schema.r#type.first().unwrap() {
+                        assert_eq!(&expected, actual);
+                    } else {
+                        panic!(
+                            "Expected Schema::String, but got: {:?}",
+                            name_property.schema
+                        );
+                    }
+                }
             }
         } else {
             panic!("Expected Schema::Object, but got: {root_schema_schema:?}");
@@ -609,26 +505,7 @@ mod tests {
             ..Default::default()
         };
         let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
-        assert_eq!(root_schema_schema, &Schema::String(expected));
-    }
-
-    #[test]
-    fn test_array_constructor_items_true() {
-        let mut mapping = saphyr::Mapping::new();
-        mapping.insert(saphyr_yaml_string("type"), saphyr_yaml_string("array"));
-        mapping.insert(
-            saphyr_yaml_string("items"),
-            saphyr::Yaml::Value(saphyr::Scalar::Boolean(true)),
-        );
-        let array_schema = ArraySchema::from_mapping(&mapping).unwrap();
-        assert_eq!(
-            array_schema,
-            ArraySchema {
-                items: Some(BoolOrTypedSchema::Boolean(true)),
-                prefix_items: None,
-                contains: None
-            }
-        );
+        assert_eq!(root_schema_schema, &Schema::typed_string(expected));
     }
 
     #[test]
@@ -638,7 +515,7 @@ mod tests {
         let integer_schema = IntegerSchema::default();
         assert_eq!(
             root_schema.schema.as_ref().schema.as_ref().unwrap(),
-            &Schema::Integer(integer_schema)
+            &Schema::typed_integer(integer_schema)
         );
     }
 
@@ -745,7 +622,7 @@ mod tests {
 
         let yaml_contents = std::fs::read_to_string(schema_filename)?;
 
-        let context = Engine::evaluate(&root_schema, &yaml_contents, true)?;
+        let context = Engine::evaluate(&root_schema, &yaml_contents, false)?;
         if context.has_errors() {
             for error in context.errors.borrow().iter() {
                 eprintln!("{error}");
@@ -765,7 +642,7 @@ mod tests {
         }
 
         let result = std::panic::catch_unwind(|| {
-            let url = "https://yaml-schema.github.io/yaml-schema.yaml";
+            let url = "https://yaml-schema.net/yaml-schema.yaml";
             let result = download_from_url(url, Some(10));
 
             // Verify the download and parse was successful
@@ -773,11 +650,11 @@ mod tests {
 
             // Verify we got a valid schema with expected properties
             let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
-            assert!(matches!(*root_schema_schema, Schema::Object(_)));
+            assert!(root_schema_schema.is_object());
 
             // Verify the local schema is valid against the downloaded schema
             if let Ok(local_schema) = std::fs::read_to_string("yaml-schema.yaml") {
-                let context = Engine::evaluate(&root_schema, &local_schema, true);
+                let context = Engine::evaluate(&root_schema, &local_schema, false);
                 if let Ok(ctx) = context {
                     if ctx.has_errors() {
                         for error in ctx.errors.borrow().iter() {

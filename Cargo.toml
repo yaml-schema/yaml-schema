@@ -1,6 +1,6 @@
 [package]
 name = "yaml-schema"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2024"
 description = "A YAML schema validator"
 license = "MIT"
@@ -35,9 +35,5 @@ cucumber = "0.21.0"
 tokio = { version = "1.43.1", features = ["full"] }
 
 [[test]]
-name = "basics"
-harness = false
-
-[[test]]
-name = "cli"
+name = "features"
 harness = false
