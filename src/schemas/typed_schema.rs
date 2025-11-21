@@ -198,18 +198,33 @@ impl Validator for TypedSchema {
             context.fail_fast
         );
 
-        // To simplify the logic, if single type
-        // If multiple types, we validate the value against each of the types
-        // If any of the types validate successfully, we return Ok
-        // If all the types fail, we return the first error
+        // To simplify the logic, if single type we validate the value against the one type
         if self.r#type.len() == 1 {
             let typed_schema_type = self.r#type.first().unwrap();
             let sub_context = context.get_sub_context();
-            typed_schema_type.validate(&sub_context, value)?;
-            if sub_context.has_errors() {
-                context.extend_errors(sub_context.errors.take());
+            match typed_schema_type.validate(&sub_context, value) {
+                Ok(()) => {
+                    debug!(
+                        "[TypedSchema#validate] sub_context.has_errors(): {}",
+                        sub_context.has_errors()
+                    );
+                    if sub_context.has_errors() {
+                        context.extend_errors(sub_context.errors.take());
+                    }
+                    Ok(())
+                }
+                Err(Error::FailFast) => {
+                    if sub_context.has_errors() {
+                        context.extend_errors(sub_context.errors.take());
+                    }
+                    Err(Error::FailFast)
+                }
+                Err(e) => Err(e),
             }
         } else {
+            // If multiple types, we validate the value against each of the types
+            // If any of the types validate successfully, we return Ok
+            // If all the types fail, we return the first error
             debug!(
                 "[TypedSchema] Validating value: {:?} against multiple types",
                 value.data
@@ -247,8 +262,8 @@ impl Validator for TypedSchema {
                     format_yaml_data(&value.data)
                 ),
             );
+            Ok(())
         }
-        Ok(())
     }
 }
 
@@ -264,7 +279,10 @@ impl std::fmt::Debug for TypedSchema {
         if self.r#type.len() == 1 {
             h.insert(
                 "type".to_string(),
-                format!("{:?}", self.r#type.first().unwrap()),
+                match self.r#type.first() {
+                    Some(t) => format!("{:?}", t),
+                    None => "<null>".to_string(),
+                },
             );
         } else {
             h.insert(

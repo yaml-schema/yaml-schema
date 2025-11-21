@@ -79,7 +79,7 @@ impl Validator for NumberSchema {
         } else {
             context.add_error(value, format!("Expected a scalar value, but got: {data:?}"));
         }
-        if !context.errors.borrow().is_empty() {
+        if context.has_errors() {
             fail_fast!(context)
         }
         Ok(())
@@ -379,5 +379,18 @@ mod tests {
             .expect("validate() failed!");
         println!("context: {context:?}");
         assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_number_schema_should_not_accept_boolean() {
+        let number_schema = NumberSchema::default();
+        let marked_yaml = MarkedYaml::value_from_str("true");
+        assert!(marked_yaml.data.is_boolean());
+        let context = Context::default();
+        number_schema
+            .validate(&context, &marked_yaml)
+            .expect("validate() failed!");
+        println!("context: {context:?}");
+        assert!(context.has_errors());
     }
 }

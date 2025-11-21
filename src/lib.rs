@@ -86,7 +86,7 @@ impl RootSchema {
         if docs.is_empty() {
             return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
         }
-        loader::load_from_doc(docs.first().unwrap())
+        loader::load_from_doc(docs.first().expect("should have at least one doc"))
     }
 
     pub fn validate(&self, context: &Context, value: &MarkedYaml) -> Result<()> {

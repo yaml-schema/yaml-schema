@@ -47,6 +47,10 @@ Feature: Schema Composition
       ```
       -5
       ```
+    And it should NOT accept:
+      ```
+      true
+      ```
 
   Scenario: oneOf
     Given a YAML schema:
@@ -191,4 +195,25 @@ Feature: Schema Composition
     But it should NOT accept:
       ```
       "I am a string"
+      ```
+
+  Scenario: anyOf with description
+    Given a YAML schema:
+      ```
+      description: A string or a number
+      anyOf:
+        - type: string
+        - type: number
+      ```
+    Then it should accept:
+      ```
+      "I am a string"
+      ```
+    And it should accept:
+      ```
+      42
+      ```
+    But it should NOT accept:
+      ```
+      true
       ```

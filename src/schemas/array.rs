@@ -185,10 +185,8 @@ impl Validator for ArraySchema {
                         BoolOrTypedSchema::Boolean(true) => { /* no-op */ }
                         BoolOrTypedSchema::Boolean(false) => {
                             if self.prefix_items.is_none() && !array.is_empty() {
-                                context.add_error(
-                                    array.first().unwrap(),
-                                    "Array items are not allowed!".to_string(),
-                                );
+                                context
+                                    .add_error(value, "Array items are not allowed!".to_string());
                             }
                         }
                         BoolOrTypedSchema::TypedSchema(typed_schema) => {
@@ -200,14 +198,14 @@ impl Validator for ArraySchema {
                             // Grab the reference from the root schema.
                             let Some(root) = &context.root_schema else {
                                 context.add_error(
-                                    array.first().unwrap(),
+                                    value,
                                     "No root schema was provided to look up references".to_string(),
                                 );
                                 return Ok(());
                             };
                             let Some(def) = root.get_def(&reference.ref_name) else {
                                 context.add_error(
-                                    array.first().unwrap(),
+                                    value,
                                     format!("No definition for {} found", reference.ref_name),
                                 );
                                 return Ok(());

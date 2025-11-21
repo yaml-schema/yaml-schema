@@ -45,7 +45,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for EnumSchema {
 }
 
 pub fn load_enum_values(values: &AnnotatedSequence<MarkedYaml>) -> Result<Vec<ConstValue>> {
-    Ok(values.iter().map(|v| v.try_into().unwrap()).collect())
+    values.iter().map(|v| v.try_into()).collect()
 }
 
 impl Validator for EnumSchema {
