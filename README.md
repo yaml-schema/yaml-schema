@@ -1,7 +1,7 @@
 ys - yaml-schema
 ====
 
-[![CI Tests](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml/badge.svg)](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml) [![built with Codeium](https://codeium.com/badges/main)](https://codeium.com)
+[![CI Tests](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml/badge.svg)](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml)
 
 **yaml-schema** is a tool to validate YAML files against a YAML schema.
 
