@@ -104,8 +104,8 @@ impl Schema {
             && typed_schema.r#type.len() == 1
         {
             return matches!(
-                typed_schema.r#type.first().unwrap(),
-                TypedSchemaType::Object(_)
+                typed_schema.r#type.first(),
+                Some(TypedSchemaType::Object(_))
             );
         }
         false

@@ -30,28 +30,31 @@ impl<'a> Engine<'a> {
         let context = Context::with_root_schema(root_schema, fail_fast);
         let engine = Engine::new(root_schema, context);
         let docs = saphyr::MarkedYaml::load_from_str(value).map_err(Error::YamlParsingError)?;
-        if docs.is_empty() {
-            if let Some(sub_schema) = &engine.root_schema.schema.as_ref().schema {
-                match sub_schema {
-                    Schema::Empty => (),
-                    Schema::BooleanLiteral(false) => {
-                        engine
+        match docs.first() {
+            Some(yaml) => {
+                engine
+                    .root_schema
+                    .validate(&engine.context.borrow(), yaml)?;
+            }
+            None => {
+                // docs.is_empty()
+                if let Some(sub_schema) = &engine.root_schema.schema.as_ref().schema {
+                    match sub_schema {
+                        Schema::Empty => (),
+                        Schema::BooleanLiteral(false) => {
+                            engine
+                                .context
+                                .borrow()
+                                .add_doc_error("Empty YAML document is not allowed");
+                        }
+                        Schema::BooleanLiteral(true) => (),
+                        _ => engine
                             .context
-                            .borrow_mut()
-                            .add_doc_error("Empty YAML document is not allowed");
+                            .borrow()
+                            .add_doc_error("Empty YAML document is not allowed"),
                     }
-                    Schema::BooleanLiteral(true) => (),
-                    _ => engine
-                        .context
-                        .borrow_mut()
-                        .add_doc_error("Empty YAML document is not allowed"),
                 }
             }
-        } else {
-            let yaml = docs.first().unwrap();
-            engine
-                .root_schema
-                .validate(&engine.context.borrow(), yaml)?;
         }
         Ok(engine.context.take())
     }

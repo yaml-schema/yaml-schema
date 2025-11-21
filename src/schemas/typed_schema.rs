@@ -105,8 +105,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for TypedSchema {
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let type_key = MarkedYaml::value_from_str("type");
-        if mapping.contains_key(&type_key) {
-            let type_value = mapping.get(&type_key).unwrap();
+        if let Some(type_value) = mapping.get(&type_key) {
             match &type_value.data {
                 // singly typed schema
                 YamlData::Value(scalar) => match scalar {
@@ -200,7 +199,7 @@ impl Validator for TypedSchema {
 
         // To simplify the logic, if single type we validate the value against the one type
         if self.r#type.len() == 1 {
-            let typed_schema_type = self.r#type.first().unwrap();
+            let typed_schema_type = self.r#type.first().expect("Expeted single type");
             let sub_context = context.get_sub_context();
             match typed_schema_type.validate(&sub_context, value) {
                 Ok(()) => {

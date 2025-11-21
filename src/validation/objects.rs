@@ -188,7 +188,7 @@ impl ObjectSchema {
             for required_property in required {
                 if !mapping
                     .keys()
-                    .map(|k| k.data.as_str().unwrap())
+                    .filter_map(|k| k.data.as_str())
                     .any(|s| s == required_property)
                 {
                     context.add_error(

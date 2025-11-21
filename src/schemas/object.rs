@@ -118,8 +118,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ObjectSchema {
                                         format_marker(&value.span.start)
                                     ));
                                 }
-                                if let YamlData::Value(Scalar::String(pattern)) =
-                                    &mapping.get(&pattern_key).unwrap().data
+                                if let Some(v) = &mapping.get(&pattern_key)
+                                    && let YamlData::Value(Scalar::String(pattern)) = &v.data
                                 {
                                     let regex = Regex::new(pattern.as_ref()).map_err(|_e| {
                                         Error::InvalidRegularExpression(pattern.to_string())
@@ -179,14 +179,14 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ObjectSchema {
                         _ => {
                             if s.starts_with("$") {
                                 if let YamlData::Value(Scalar::String(value)) = &key.data {
-                                    if object_schema.metadata.is_none() {
-                                        object_schema.metadata = Some(HashMap::new());
+                                    match object_schema.metadata.as_mut() {
+                                        Some(metadata) => {
+                                            metadata.insert(s.to_string(), value.to_string());
+                                        }
+                                        None => {
+                                            object_schema.metadata = Some(HashMap::new());
+                                        }
                                     }
-                                    object_schema
-                                        .metadata
-                                        .as_mut()
-                                        .unwrap()
-                                        .insert(s.to_string(), value.to_string());
                                 } else {
                                     return Err(generic_error!(
                                         "{} Expected a string value but got {:?}",

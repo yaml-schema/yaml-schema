@@ -41,7 +41,7 @@ impl TryFrom<&MarkedYaml<'_>> for Reference {
                 ));
             }
 
-            let ref_value = mapping.get(&ref_key).unwrap();
+            let ref_value = mapping.get(&ref_key).expect("$ref key not found");
             match &ref_value.data {
                 YamlData::Value(saphyr::Scalar::String(s)) => {
                     if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
@@ -52,7 +52,9 @@ impl TryFrom<&MarkedYaml<'_>> for Reference {
                     }
                     let ref_name = match s.strip_prefix("#/$defs/") {
                         Some(ref_name) => ref_name,
-                        _ => s.strip_prefix("#/definitions/").unwrap(),
+                        _ => s
+                            .strip_prefix("#/definitions/")
+                            .expect("#/definitions/ prefix not found"),
                     };
 
                     Ok(Reference::new(ref_name))
