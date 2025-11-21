@@ -18,7 +18,7 @@ pub struct FeaturesWorld {
 
 #[given(regex = "a YAML schema:")]
 async fn a_yaml_schema(world: &mut FeaturesWorld, step: &Step) {
-    let schema = step.docstring().unwrap();
+    let schema = step.docstring().expect("Expected a docstring");
     debug!("schema: {schema:?}");
     match RootSchema::load_from_str(schema) {
         Ok(root_schema) => world.root_schema = root_schema,
@@ -40,29 +40,37 @@ fn evaluate(world: &mut FeaturesWorld, s: &str) -> Result<bool> {
 
 #[then(regex = "it should accept:")]
 async fn it_should_accept(world: &mut FeaturesWorld, step: &Step) {
-    let raw_input = step.docstring().unwrap();
-    let input_without_beginning_newline = raw_input.strip_prefix('\n').unwrap();
-    let result = evaluate(world, input_without_beginning_newline).unwrap();
+    let raw_input = step.docstring().expect("Expected a docstring");
+    let input_without_beginning_newline =
+        raw_input.strip_prefix('\n').expect("Expected a docstring");
+    let result = evaluate(world, input_without_beginning_newline).expect("Evaluation failed");
     assert!(result);
 }
 
 #[then(regex = "it should NOT accept:")]
 async fn it_should_not_accept(world: &mut FeaturesWorld, step: &Step) {
-    let raw_input = step.docstring().unwrap();
-    let input_without_beginning_newline = raw_input.strip_prefix('\n').unwrap();
-    let result = evaluate(world, input_without_beginning_newline).unwrap();
+    let raw_input = step.docstring().expect("Expected a docstring");
+    let input_without_beginning_newline =
+        raw_input.strip_prefix('\n').expect("Expected a docstring");
+    let result = evaluate(world, input_without_beginning_newline).expect("Evaluation failed");
     assert!(!result);
 }
 
 #[then(expr = "the error message should be {string}")]
 fn the_error_message_should_be(world: &mut FeaturesWorld, expected_error_message: String) {
-    let errors = world.errors.as_ref().unwrap().borrow();
-    if !errors.is_empty() {
-        let first_error = errors.first().unwrap();
-        let actual_error_message = first_error.to_string();
-        assert_eq!(actual_error_message, expected_error_message);
-    } else {
-        panic!("Expected an error message, but there was no error!");
+    let errors = world
+        .errors
+        .as_ref()
+        .expect("Unable to borrow errors")
+        .borrow();
+    match errors.first() {
+        Some(error) => {
+            let actual_error_message = error.to_string();
+            assert_eq!(actual_error_message, expected_error_message);
+        }
+        None => {
+            panic!("Expected an error message, but there was no error!");
+        }
     }
 }
 
@@ -86,7 +94,7 @@ fn list_feature_files(dir: &str) -> std::result::Result<Vec<String>, std::io::Er
                 Some(
                     path.file_name()
                         .and_then(|n| n.to_str())
-                        .unwrap()
+                        .expect("Unable to get file name")
                         .to_string(),
                 )
             } else {
@@ -114,11 +122,13 @@ async fn main() {
         .target(env_logger::Target::Stdout)
         .init();
 
-    for feature_file in list_feature_files("features").unwrap() {
+    for feature_file in list_feature_files("features").expect("Unable to list feature files") {
         FeaturesWorld::filter_run(format!("features/{feature_file}"), filter_ignored_scenarios)
             .await;
     }
-    for feature_file in list_feature_files("features/validation").unwrap() {
+    for feature_file in
+        list_feature_files("features/validation").expect("Unable to list feature files")
+    {
         FeaturesWorld::filter_run(
             format!("features/validation/{feature_file}"),
             filter_ignored_scenarios,

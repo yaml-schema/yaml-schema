@@ -35,7 +35,8 @@ pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
     if docs.is_empty() {
         return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
     }
-    load_from_doc(docs.first().unwrap())
+    let first_doc = docs.first().expect("No documents found");
+    load_from_doc(first_doc)
 }
 
 /// Load a YAML schema from a document.
@@ -84,8 +85,8 @@ pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
 /// It delegates to the `load_from_doc` function to load the schema from the first document.
 pub fn load_from_str(s: &str) -> Result<RootSchema> {
     let docs = MarkedYaml::load_from_str(s)?;
-    let first_doc = docs.first().unwrap();
-    Ok(load_from_doc(first_doc).unwrap())
+    let first_doc = docs.first().expect("No documents found");
+    load_from_doc(first_doc)
 }
 
 /// Error type for URL loading operations
@@ -94,11 +95,20 @@ pub enum UrlLoadError {
     #[error("Failed to download from URL: {0}")]
     DownloadError(#[from] reqwest::Error),
 
+    #[error("Failed to parse URL: {0}")]
+    ParseUrlError(#[from] url::ParseError),
+
     #[error("Failed to parse YAML: {0}")]
     ParseError(#[from] saphyr::ScanError),
 
     #[error("No YAML documents found in the downloaded content")]
     NoDocuments,
+}
+
+impl From<reqwest::Error> for crate::Error {
+    fn from(value: reqwest::Error) -> Self {
+        crate::Error::UrlLoadError(UrlLoadError::DownloadError(value))
+    }
 }
 
 /// Downloads a YAML schema from a URL and parses it into a RootSchema
@@ -116,10 +126,7 @@ pub enum UrlLoadError {
 ///
 /// let schema = download_from_url("https://example.com/schema.yaml", None).unwrap();
 /// ```
-pub fn download_from_url(
-    url_string: &str,
-    timeout_seconds: Option<u64>,
-) -> std::result::Result<RootSchema, Box<dyn std::error::Error>> {
+pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<RootSchema> {
     // Create a new HTTP client with a custom timeout
     let timeout = Duration::from_secs(timeout_seconds.unwrap_or(30));
     let client = Client::builder()
@@ -127,14 +134,15 @@ pub fn download_from_url(
         .use_native_tls()
         .build()?;
 
-    let url = Url::parse(url_string)?;
+    let url = Url::parse(url_string).map_err(|e| Error::UrlLoadError(e.into()))?;
 
     // Download the YAML content
     let response = client.get(url).send()?;
     if !response.status().is_success() {
-        return Err(Box::new(UrlLoadError::DownloadError(
-            response.error_for_status().unwrap_err(),
-        )));
+        match response.error_for_status() {
+            Ok(_) => unreachable!(),
+            Err(e) => return Err(e.into()),
+        }
     }
 
     let yaml_content = response.text()?;
@@ -142,12 +150,10 @@ pub fn download_from_url(
     // Parse the YAML content
     let docs = MarkedYaml::load_from_str(&yaml_content).map_err(UrlLoadError::ParseError)?;
 
-    if docs.is_empty() {
-        return Err(Box::new(UrlLoadError::NoDocuments));
+    match docs.first() {
+        Some(doc) => load_from_doc(doc),
+        None => Err(UrlLoadError::NoDocuments.into()),
     }
-
-    // Load the schema from the first document
-    load_from_doc(docs.first().unwrap()).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 #[derive(Debug, Default)]

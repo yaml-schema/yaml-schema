@@ -300,6 +300,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_scalar_to_constvalue() -> Result<()> {
         let scalars = [
             Scalar::Null,

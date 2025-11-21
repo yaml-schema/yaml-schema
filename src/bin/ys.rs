@@ -67,7 +67,7 @@ fn command_validate(opts: Opts) -> Result<i32> {
         return Err(eyre::eyre!("No YAML file specified"));
     }
 
-    let schema_filename = opts.schemas.first().unwrap();
+    let schema_filename = opts.schemas.first().expect("No schema file(s) specified");
     let root_schema = match RootSchema::load_file(schema_filename) {
         Ok(schema) => schema,
         Err(e) => {
@@ -77,7 +77,7 @@ fn command_validate(opts: Opts) -> Result<i32> {
         }
     };
 
-    let yaml_filename = opts.file.as_ref().unwrap();
+    let yaml_filename = opts.file.as_ref().expect("No YAML file specified");
     let yaml_contents = std::fs::read_to_string(yaml_filename)
         .wrap_err_with(|| format!("Failed to read YAML file: {yaml_filename}"))?;
 

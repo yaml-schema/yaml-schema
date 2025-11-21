@@ -165,6 +165,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_scalar_to_string() {
         assert_eq!("null", scalar_to_string(&saphyr::Scalar::Null));
         assert_eq!("true", scalar_to_string(&saphyr::Scalar::Boolean(true)));
@@ -182,6 +183,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_format_scalar() {
         assert_eq!("null", format_scalar(&saphyr::Scalar::Null));
         assert_eq!("true", format_scalar(&saphyr::Scalar::Boolean(true)));

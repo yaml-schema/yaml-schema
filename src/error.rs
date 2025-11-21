@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::loader::UrlLoadError;
+
 /// Unexpected errors that can occur during the validation of a YAML schema
 #[derive(Debug, Error)]
 pub enum Error {
@@ -31,6 +33,8 @@ pub enum Error {
     FailFast,
     #[error("Invalid regular expression: {0}")]
     InvalidRegularExpression(String),
+    #[error("Failed to download from URL: {0}")]
+    UrlLoadError(#[from] UrlLoadError),
 }
 
 #[macro_export]
