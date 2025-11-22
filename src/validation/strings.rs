@@ -156,7 +156,7 @@ mod tests {
         let marked_yaml = doc.first().unwrap();
         let string_schema: StringSchema = StringSchema::default();
         let context = Context::default();
-        let result = string_schema.validate(&context, &marked_yaml);
+        let result = string_schema.validate(&context, marked_yaml);
         assert!(result.is_ok());
         assert!(context.has_errors());
     }

@@ -676,14 +676,14 @@ mod tests {
 
         if let Err(e) = result {
             // If the test fails due to network issues, mark it as passed with a warning
-            if let Some(s) = e.downcast_ref::<String>() {
-                if s.contains("Network is unreachable")
-                    || s.contains("failed to lookup address information")
-                {
-                    eprintln!("Warning: Network unreachable, skipping download test");
-                    return;
-                }
+            if let Some(s) = e.downcast_ref::<String>()
+                && (s.contains("Network is unreachable")
+                    || s.contains("failed to lookup address information"))
+            {
+                eprintln!("Warning: Network unreachable, skipping download test");
+                return;
             }
+
             // Re-panic if the failure wasn't network-related
             std::panic::resume_unwind(e);
         }

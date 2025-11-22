@@ -408,7 +408,7 @@ mod tests {
           - integer
           - string
         "#;
-        let doc = MarkedYaml::load_from_str(&yaml).expect("Failed to load YAML");
+        let doc = MarkedYaml::load_from_str(yaml).expect("Failed to load YAML");
         let marked_yaml = doc.first().unwrap();
         let yaml_schema = YamlSchema::try_from(marked_yaml).unwrap();
         let schema = yaml_schema.schema.unwrap();

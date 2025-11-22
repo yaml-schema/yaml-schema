@@ -564,7 +564,7 @@ mod tests {
         let doc = saphyr::MarkedYaml::load_from_str(yaml).unwrap();
         let marked_yaml = doc.first().unwrap();
         typed_schema
-            .validate(&context, &marked_yaml)
+            .validate(&context, marked_yaml)
             .expect("validate() failed!");
         // Then we should have one error
         assert!(context.has_errors());

@@ -98,13 +98,12 @@ mod tests {
         println!("schema: {schema:#?}");
         if let Schema::Typed(typed_schema) = schema {
             let first_type = typed_schema.r#type.first().unwrap();
-            if let crate::schemas::TypedSchemaType::Object(object_schema) = first_type {
-                if let Some(properties) = &object_schema.properties {
-                    if let Some(name_property) = properties.get("name") {
-                        let name_ref = name_property.r#ref.as_ref().unwrap();
-                        assert_eq!(name_ref.ref_name, "name");
-                    }
-                }
+            if let crate::schemas::TypedSchemaType::Object(object_schema) = first_type
+                && let Some(properties) = &object_schema.properties
+                && let Some(name_property) = properties.get("name")
+            {
+                let name_ref = name_property.r#ref.as_ref().unwrap();
+                assert_eq!(name_ref.ref_name, "name");
             }
         } else {
             panic!("Expected Schema::Typed, but got: {schema:?}");
