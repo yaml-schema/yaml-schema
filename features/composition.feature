@@ -13,11 +13,11 @@ Feature: Schema Composition
       ```
       "short"
       ```
-    But it should not accept:
+    But it should NOT accept:
       ```
       ""
       ```
-    And it should not accept:
+    And it should NOT accept:
       ```
       "too long"
       ```
