@@ -56,7 +56,6 @@ impl Validator for crate::schemas::OneOfSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let one_of_is_valid = validate_one_of(context, &self.one_of, value)?;
         if !one_of_is_valid {
-            error!("OneOf: None of the schemas in `oneOf` matched!");
             context.add_error(value, "None of the schemas in `oneOf` matched!");
             fail_fast!(context);
         }
