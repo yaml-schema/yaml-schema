@@ -24,13 +24,12 @@ use crate::utils::try_unwrap_saphyr_scalar;
 
 /// Load a YAML schema from a file.
 /// Delegates to the `load_from_doc` function to load the schema from the first document.
-pub fn load_file<S: Into<String>>(path: S) -> Result<RootSchema> {
-    let path_s = path.into();
-    let fs_metadata = std::fs::metadata(&path_s)?;
+pub fn load_file<S: AsRef<str>>(path: S) -> Result<RootSchema> {
+    let fs_metadata = std::fs::metadata(path.as_ref())?;
     if !fs_metadata.is_file() {
-        return Err(Error::FileNotFound(path_s.clone()));
+        return Err(Error::FileNotFound(path.as_ref().to_string()));
     }
-    let s = std::fs::read_to_string(&path_s)?;
+    let s = std::fs::read_to_string(path.as_ref())?;
     let docs = MarkedYaml::load_from_str(&s)?;
     if docs.is_empty() {
         return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
