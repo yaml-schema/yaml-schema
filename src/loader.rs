@@ -2,8 +2,6 @@
 
 use std::time::Duration;
 
-use hashlink::LinkedHashMap;
-use regex::Regex;
 use reqwest::Url;
 use reqwest::blocking::Client;
 use saphyr::LoadableYamlNode;
@@ -11,18 +9,11 @@ use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
 
-use crate::ConstValue;
-use crate::Engine;
 use crate::Error;
 use crate::Number;
 use crate::Result;
 use crate::RootSchema;
-use crate::Validator as _;
-use crate::loader;
 use crate::schemas::BooleanOrSchema;
-use crate::schemas::IntegerSchema;
-use crate::schemas::SchemaType;
-use crate::schemas::StringSchema;
 use crate::schemas::YamlSchema;
 use crate::utils::format_marker;
 use crate::utils::try_unwrap_saphyr_scalar;
@@ -126,111 +117,6 @@ pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Resu
     }
 }
 
-#[derive(Debug, Default)]
-struct RootLoader {
-    pub id: Option<String>,
-    pub meta_schema: Option<String>,
-    pub title: Option<String>,
-    pub defs: Option<LinkedHashMap<String, YamlSchema>>,
-    pub description: Option<String>,
-    pub schema: Option<YamlSchema>,
-}
-
-impl RootLoader {
-    fn new() -> Self {
-        RootLoader::default()
-    }
-
-    /// Set the loader schema
-    /// Just a convenience function to avoid having to write
-    /// `self.schema = Some(schema);`
-    fn set_schema(&mut self, schema: YamlSchema) {
-        self.schema = Some(schema);
-    }
-
-    fn load_root_schema(&mut self, marked_yaml: &MarkedYaml<'_>) -> Result<()> {
-        // We can't remove the annotations, so we simply construct a new AnnotatedMapping containing
-        // the 'data' nodes only
-        if let YamlData::Mapping(mapping) = &marked_yaml.data {
-            for (key, value) in mapping.iter() {
-                match &key.data {
-                    YamlData::Value(Scalar::String(s)) => match s.as_ref() {
-                        "$id" => {
-                            self.id = Some(marked_yaml_to_string(value, "$id must be a string")?)
-                        }
-                        "$schema" => {
-                            self.meta_schema =
-                                Some(marked_yaml_to_string(value, "$schema must be a string")?)
-                        }
-                        "title" => {
-                            self.title =
-                                Some(marked_yaml_to_string(value, "title must be a string")?)
-                        }
-                        "description" => {
-                            self.description = Some(marked_yaml_to_string(
-                                value,
-                                "description must be a string",
-                            )?)
-                        }
-                        "$defs" | "definitions" => {
-                            if let YamlData::Mapping(mapping) = &value.data {
-                                let mut defs = LinkedHashMap::new();
-                                for (key, value) in mapping.iter() {
-                                    if let Ok(key_string) =
-                                        marked_yaml_to_string(key, "key must be a string")
-                                    {
-                                        if value.is_mapping() {
-                                            let schema: YamlSchema = value.try_into()?;
-                                            defs.insert(key_string, schema);
-                                        } else {
-                                            return Err(generic_error!(
-                                                "{} {} Expected a hash for {}, but got: {:?}",
-                                                format_marker(&value.span.start),
-                                                s,
-                                                key_string,
-                                                value
-                                            ));
-                                        }
-                                    } else {
-                                        return Err(generic_error!(
-                                            "{} Expected a string key, but got: {:?}",
-                                            s,
-                                            value
-                                        ));
-                                    }
-                                }
-                                self.defs = Some(defs);
-                            } else {
-                                return Err(generic_error!(
-                                    "{} Expected a hash, but got: {:?}",
-                                    s,
-                                    value
-                                ));
-                            }
-                        }
-                        _ => (),
-                    },
-                    _ => {
-                        return Err(expected_scalar!(
-                            "{} Expected scalar key, but got: {:?}",
-                            format_marker(&key.span.start),
-                            key
-                        ));
-                    }
-                }
-            }
-        } else {
-            return Err(generic_error!(
-                "[YamlSchema] Expected a mapping, but got: {:?}",
-                marked_yaml
-            ));
-        }
-        let yaml_schema: YamlSchema = marked_yaml.try_into()?;
-        self.schema = Some(yaml_schema);
-        Ok(())
-    }
-}
-
 pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) -> Result<String> {
     if let YamlData::Value(Scalar::String(s)) = &yaml.data {
         Ok(s.to_string())
@@ -321,10 +207,22 @@ pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BooleanOrSchema> {
 #[cfg(test)]
 mod tests {
     use regex::Regex;
+    use reqwest::Url;
+    use reqwest::blocking::Client;
+    use saphyr::LoadableYamlNode;
+    use saphyr::MarkedYaml;
+    use saphyr::Scalar;
+    use saphyr::YamlData;
 
     use crate::ConstValue;
     use crate::Engine;
+    use crate::Error;
+    use crate::Number;
+    use crate::Result;
+    use crate::RootSchema;
+    use crate::Validator as _;
     use crate::loader;
+    use crate::schemas::BooleanOrSchema;
     use crate::schemas::EnumSchema;
     use crate::schemas::IntegerSchema;
     use crate::schemas::SchemaType;
@@ -435,64 +333,63 @@ mod tests {
             Some(StringSchema::default())
         );
     }
-}
 
-#[test]
-fn test_type_string_with_pattern() {
-    let root_schema = loader::load_from_str(
-        r#"
+    #[test]
+    fn test_type_string_with_pattern() {
+        let root_schema = loader::load_from_str(
+            r#"
         type: string
         pattern: "^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$"
         "#,
-    )
-    .unwrap();
-    let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-        panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
-    };
-    assert_eq!(subschema.r#type, Some(SchemaType::single("string")));
-    let expected = StringSchema {
-        pattern: Some(Regex::new("^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$").unwrap()),
-        ..Default::default()
-    };
+        )
+        .unwrap();
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        assert_eq!(subschema.r#type, Some(SchemaType::single("string")));
+        let expected = StringSchema {
+            pattern: Some(Regex::new("^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$").unwrap()),
+            ..Default::default()
+        };
 
-    assert_eq!(subschema.string_schema, Some(expected));
-}
+        assert_eq!(subschema.string_schema, Some(expected));
+    }
 
-#[test]
-fn test_integer_schema() {
-    let root_schema = loader::load_from_str("type: integer").unwrap();
-    let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-        panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
-    };
-    let integer_schema = IntegerSchema::default();
-    assert_eq!(subschema.integer_schema, Some(integer_schema));
-}
+    #[test]
+    fn test_integer_schema() {
+        let root_schema = loader::load_from_str("type: integer").unwrap();
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        let integer_schema = IntegerSchema::default();
+        assert_eq!(subschema.integer_schema, Some(integer_schema));
+    }
 
-#[test]
-fn test_enum() {
-    let root_schema = loader::load_from_str(
-        r#"
+    #[test]
+    fn test_enum() {
+        let root_schema = loader::load_from_str(
+            r#"
         enum:
           - foo
           - bar
           - baz
         "#,
-    )
-    .unwrap();
-    let enum_values = ["foo", "bar", "baz"]
-        .iter()
-        .map(|s| ConstValue::string(s.to_string()))
-        .collect();
-    let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-        panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
-    };
-    assert_eq!(subschema.r#enum, Some(enum_values));
-}
+        )
+        .unwrap();
+        let enum_values = ["foo", "bar", "baz"]
+            .iter()
+            .map(|s| ConstValue::string(s.to_string()))
+            .collect();
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        assert_eq!(subschema.r#enum, Some(enum_values));
+    }
 
-#[test]
-fn test_enum_without_type() {
-    let root_schema = loader::load_from_str(
-        r#"
+    #[test]
+    fn test_enum_without_type() {
+        let root_schema = loader::load_from_str(
+            r#"
             enum:
               - red
               - amber
@@ -500,25 +397,25 @@ fn test_enum_without_type() {
               - null
               - 42
             "#,
-    )
-    .unwrap();
-    let enum_values = vec![
-        ConstValue::string("red".to_string()),
-        ConstValue::string("amber".to_string()),
-        ConstValue::string("green".to_string()),
-        ConstValue::null(),
-        ConstValue::integer(42),
-    ];
-    let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-        panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
-    };
-    assert_eq!(subschema.r#enum, Some(enum_values));
-}
+        )
+        .unwrap();
+        let enum_values = vec![
+            ConstValue::string("red".to_string()),
+            ConstValue::string("amber".to_string()),
+            ConstValue::string("green".to_string()),
+            ConstValue::null(),
+            ConstValue::integer(42),
+        ];
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        assert_eq!(subschema.r#enum, Some(enum_values));
+    }
 
-#[test]
-fn test_one_of_with_ref() {
-    let root_schema = loader::load_from_str(
-        r##"
+    #[test]
+    fn test_one_of_with_ref() {
+        let root_schema = loader::load_from_str(
+            r##"
             $defs:
               foo:
                 type: boolean
@@ -526,112 +423,113 @@ fn test_one_of_with_ref() {
               - type: string
               - $ref: "#/$defs/foo"
             "##,
-    )
-    .unwrap();
-    println!("root_schema: {root_schema:?}");
-    let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-        panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
-    };
-    assert!(subschema.one_of.is_some());
-    let Some(one_of) = &subschema.one_of else {
-        panic!("Expected oneOf, but got: {:?}", &subschema.one_of);
-    };
-    assert_eq!(one_of.one_of.len(), 2);
-    assert_eq!(
-        one_of.one_of[0],
-        YamlSchema::typed_string(StringSchema::default())
-    );
-    assert_eq!(one_of.one_of[1], YamlSchema::ref_str("foo"));
-
-    let s = r#"
-        false
-        "#;
-    let docs = MarkedYaml::load_from_str(s).unwrap();
-    let value = docs.first().unwrap();
-    let context = crate::Context::with_root_schema(&root_schema, true);
-    let result = root_schema.validate(&context, value);
-    println!("result: {result:?}");
-    assert!(result.is_ok());
-    for error in context.errors.borrow().iter() {
-        println!("error: {error:?}");
-    }
-    assert!(!context.has_errors());
-}
-
-#[test]
-fn test_self_validate() -> Result<()> {
-    let schema_filename = "yaml-schema.yaml";
-    let root_schema = match loader::load_file(schema_filename) {
-        Ok(schema) => schema,
-        Err(e) => {
-            eprintln!("Failed to read YAML schema file: {schema_filename}");
-            log::error!("{e}");
-            return Err(e);
-        }
-    };
-
-    let yaml_contents = std::fs::read_to_string(schema_filename)?;
-
-    let context = Engine::evaluate(&root_schema, &yaml_contents, false)?;
-    if context.has_errors() {
-        for error in context.errors.borrow().iter() {
-            eprintln!("{error}");
-        }
-    }
-    assert!(!context.has_errors());
-
-    Ok(())
-}
-
-#[test]
-fn test_download_from_url() {
-    // This is an integration test that requires internet access
-    if std::env::var("CI").is_ok() {
-        // Skip in CI environments if needed
-        return;
-    }
-
-    let result = std::panic::catch_unwind(|| {
-        let url = "https://yaml-schema.net/yaml-schema.yaml";
-        let result = download_from_url(url, Some(10));
-
-        // Verify the download and parse was successful
-        let root_schema = result.expect("Failed to download and parse YAML schema from URL");
-
-        // Verify we got a valid schema with expected properties
+        )
+        .unwrap();
+        println!("root_schema: {root_schema:?}");
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
         };
-        assert_eq!(subschema.r#type, Some(SchemaType::single("object")));
-        assert!(subschema.object_schema.is_some());
+        assert!(subschema.one_of.is_some());
+        let Some(one_of) = &subschema.one_of else {
+            panic!("Expected oneOf, but got: {:?}", &subschema.one_of);
+        };
+        assert_eq!(one_of.one_of.len(), 2);
+        assert_eq!(
+            one_of.one_of[0],
+            YamlSchema::typed_string(StringSchema::default())
+        );
+        assert_eq!(one_of.one_of[1], YamlSchema::ref_str("foo"));
 
-        // Verify the local schema is valid against the downloaded schema
-        if let Ok(local_schema) = std::fs::read_to_string("yaml-schema.yaml") {
-            let context = Engine::evaluate(&root_schema, &local_schema, false);
-            if let Ok(ctx) = context {
-                if ctx.has_errors() {
-                    for error in ctx.errors.borrow().iter() {
-                        eprintln!("Validation error: {}", error);
-                    }
-                    panic!("Downloaded schema failed validation against local schema");
-                }
-            } else if let Err(e) = context {
-                panic!("Failed to validate downloaded schema: {}", e);
+        let s = r#"
+        false
+        "#;
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::with_root_schema(&root_schema, true);
+        let result = root_schema.validate(&context, value);
+        println!("result: {result:?}");
+        assert!(result.is_ok());
+        for error in context.errors.borrow().iter() {
+            println!("error: {error:?}");
+        }
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_self_validate() -> Result<()> {
+        let schema_filename = "yaml-schema.yaml";
+        let root_schema = match loader::load_file(schema_filename) {
+            Ok(schema) => schema,
+            Err(e) => {
+                eprintln!("Failed to read YAML schema file: {schema_filename}");
+                log::error!("{e}");
+                return Err(e);
+            }
+        };
+
+        let yaml_contents = std::fs::read_to_string(schema_filename)?;
+
+        let context = Engine::evaluate(&root_schema, &yaml_contents, false)?;
+        if context.has_errors() {
+            for error in context.errors.borrow().iter() {
+                eprintln!("{error}");
             }
         }
-    });
+        assert!(!context.has_errors());
 
-    if let Err(e) = result {
-        // If the test fails due to network issues, mark it as passed with a warning
-        if let Some(s) = e.downcast_ref::<String>()
-            && (s.contains("Network is unreachable")
-                || s.contains("failed to lookup address information"))
-        {
-            eprintln!("Warning: Network unreachable, skipping download test");
+        Ok(())
+    }
+
+    #[test]
+    fn test_download_from_url() {
+        // This is an integration test that requires internet access
+        if std::env::var("CI").is_ok() {
+            // Skip in CI environments if needed
             return;
         }
 
-        // Re-panic if the failure wasn't network-related
-        std::panic::resume_unwind(e);
+        let result = std::panic::catch_unwind(|| {
+            let url = "https://yaml-schema.net/yaml-schema.yaml";
+            let result = download_from_url(url, Some(10));
+
+            // Verify the download and parse was successful
+            let root_schema = result.expect("Failed to download and parse YAML schema from URL");
+
+            // Verify we got a valid schema with expected properties
+            let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+                panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            };
+            assert_eq!(subschema.r#type, Some(SchemaType::single("object")));
+            assert!(subschema.object_schema.is_some());
+
+            // Verify the local schema is valid against the downloaded schema
+            if let Ok(local_schema) = std::fs::read_to_string("yaml-schema.yaml") {
+                let context = Engine::evaluate(&root_schema, &local_schema, false);
+                if let Ok(ctx) = context {
+                    if ctx.has_errors() {
+                        for error in ctx.errors.borrow().iter() {
+                            eprintln!("Validation error: {}", error);
+                        }
+                        panic!("Downloaded schema failed validation against local schema");
+                    }
+                } else if let Err(e) = context {
+                    panic!("Failed to validate downloaded schema: {}", e);
+                }
+            }
+        });
+
+        if let Err(e) = result {
+            // If the test fails due to network issues, mark it as passed with a warning
+            if let Some(s) = e.downcast_ref::<String>()
+                && (s.contains("Network is unreachable")
+                    || s.contains("failed to lookup address information"))
+            {
+                eprintln!("Warning: Network unreachable, skipping download test");
+                return;
+            }
+
+            // Re-panic if the failure wasn't network-related
+            std::panic::resume_unwind(e);
+        }
     }
 }

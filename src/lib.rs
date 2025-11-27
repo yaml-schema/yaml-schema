@@ -33,14 +33,6 @@ pub fn version() -> String {
 // Alias for std::result::Result<T, yaml_schema::Error>
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Because we can't `impl TryFrom<T> for String`, we use an internal trait to allow for
-/// `Into<String>` conversions that can fail.
-trait TryToString {
-    type Error;
-
-    fn try_into(&self) -> Result<String>;
-}
-
 /// A RootSchema represents the root document in a schema document, and includes additional
 /// fields such as `$schema` that are not allowed in subschemas.
 #[derive(Debug, PartialEq)]

@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_contains() {
-        let number_schema = YamlSchema::from(YamlSchema::typed_number(NumberSchema::default()));
+        let number_schema = YamlSchema::typed_number(NumberSchema::default());
         let schema = ArraySchema {
             contains: Some(number_schema),
             ..Default::default()
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_array_schema_contains_fails() {
-        let number_schema = YamlSchema::from(YamlSchema::typed_number(NumberSchema::default()));
+        let number_schema = YamlSchema::typed_number(NumberSchema::default());
         let schema = ArraySchema {
             contains: Some(number_schema),
             ..Default::default()
