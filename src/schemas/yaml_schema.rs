@@ -254,6 +254,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let metadata_and_annotations = MetadataAndAnnotations::try_from(mapping)?;
+
+        // $ref
         let reference: Option<Reference> = mapping
             .get(&MarkedYaml::value_from_str("$ref"))
             .map(|_| {
@@ -261,6 +263,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
                 mapping.try_into()
             })
             .transpose()?;
+
+        // anyOf
         let any_of: Option<AnyOfSchema> = mapping
             .get(&MarkedYaml::value_from_str("anyOf"))
             .map(|_| {
@@ -268,6 +272,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
                 mapping.try_into()
             })
             .transpose()?;
+
+        // allOf
         let all_of: Option<AllOfSchema> = mapping
             .get(&MarkedYaml::value_from_str("allOf"))
             .map(|_| {
@@ -275,6 +281,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
                 mapping.try_into()
             })
             .transpose()?;
+
+        // oneOf
         let one_of: Option<OneOfSchema> = mapping
             .get(&MarkedYaml::value_from_str("oneOf"))
             .map(|_| {
@@ -282,6 +290,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
                 mapping.try_into()
             })
             .transpose()?;
+
+        // not
         let not: Option<NotSchema> = mapping
             .get(&MarkedYaml::value_from_str("not"))
             .map(|_| {
@@ -289,6 +299,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
                 mapping.try_into()
             })
             .transpose()?;
+
+        // type
         let mut r#type: Option<SchemaType> = None;
         if let Some(type_value) = mapping.get(&MarkedYaml::value_from_str("type")) {
             match &type_value.data {
@@ -314,6 +326,24 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
             }
         }
 
+        // const
+        let mut r#const: Option<ConstValue> = None;
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("const")) {
+            r#const = Some(ConstValue::try_from(value)?);
+        }
+
+        // enum
+        let mut r#enum: Option<Vec<ConstValue>> = None;
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("enum"))
+            && let saphyr::YamlData::Sequence(values) = &value.data
+        {
+            let enum_values = values
+                .iter()
+                .map(|marked_yaml| marked_yaml.try_into())
+                .collect::<Result<Vec<ConstValue>>>()?;
+            r#enum = Some(enum_values);
+        }
+
         Ok(Self {
             metadata_and_annotations,
             r#ref: reference,
@@ -322,6 +352,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
             one_of,
             not,
             r#type,
+            r#const,
+            r#enum,
             ..Default::default()
         })
     }

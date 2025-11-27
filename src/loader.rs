@@ -207,23 +207,14 @@ pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BooleanOrSchema> {
 #[cfg(test)]
 mod tests {
     use regex::Regex;
-    use reqwest::Url;
-    use reqwest::blocking::Client;
     use saphyr::LoadableYamlNode;
     use saphyr::MarkedYaml;
-    use saphyr::Scalar;
-    use saphyr::YamlData;
 
     use crate::ConstValue;
     use crate::Engine;
-    use crate::Error;
-    use crate::Number;
     use crate::Result;
-    use crate::RootSchema;
     use crate::Validator as _;
     use crate::loader;
-    use crate::schemas::BooleanOrSchema;
-    use crate::schemas::EnumSchema;
     use crate::schemas::IntegerSchema;
     use crate::schemas::SchemaType;
     use crate::schemas::StringSchema;
