@@ -1,7 +1,6 @@
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
-use saphyr::Scalar;
 use saphyr::YamlData;
 
 use crate::Context;
@@ -26,20 +25,27 @@ impl std::fmt::Display for AnyOfSchema {
     }
 }
 
+impl TryFrom<&MarkedYaml<'_>> for AnyOfSchema {
+    type Error = crate::Error;
+
+    fn try_from(value: &MarkedYaml<'_>) -> Result<Self> {
+        if let YamlData::Mapping(mapping) = &value.data {
+            AnyOfSchema::try_from(mapping)
+        } else {
+            Err(expected_mapping!(value))
+        }
+    }
+}
+
 impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AnyOfSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let mut any_of_schema = AnyOfSchema::default();
-        for (key, value) in mapping.iter() {
-            if let YamlData::Value(Scalar::String(key)) = &key.data {
-                match key.as_ref() {
-                    "anyOf" => {
-                        any_of_schema.any_of = loader::load_array_of_schemas_marked(value)?;
-                    }
-                    _ => return Err(generic_error!("Unsupported key: {}", key)),
-                }
-            }
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("anyOf")) {
+            any_of_schema.any_of = loader::load_array_of_schemas_marked(value)?;
+        } else {
+            debug!("[anyOf] No `anyOf` key found!");
         }
         Ok(any_of_schema)
     }
@@ -97,7 +103,8 @@ mod tests {
     use saphyr::MarkedYaml;
 
     use crate::Context;
-    use crate::loader::load_from_str;
+    use crate::Validator as _;
+    use crate::loader;
 
     #[test]
     fn test_any_of_with_description() {
@@ -107,7 +114,7 @@ mod tests {
           - type: string
           - type: number
         "#;
-        let any_of_schema = load_from_str(schema_str).expect("Failed to load schema");
+        let any_of_schema = loader::load_from_str(schema_str).expect("Failed to load schema");
 
         // Test string
         let value_str = r#""I am a string""#;

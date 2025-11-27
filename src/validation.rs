@@ -1,14 +1,12 @@
-use log::debug;
+//! The validation module contains the logic for validating a YAML schema against a YAML value
 
 use saphyr::Marker;
+
+use crate::Result;
 
 mod context;
 mod objects;
 mod strings;
-
-use crate::Result;
-use crate::Schema;
-use crate::utils::format_yaml_data;
 
 pub use context::Context;
 
@@ -46,32 +44,6 @@ impl std::fmt::Display for ValidationError {
     }
 }
 
-impl Validator for Schema {
-    fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        debug!("[Schema] self: {self}");
-        debug!(
-            "[Schema] Validating value: {}",
-            format_yaml_data(&value.data)
-        );
-        match self {
-            Schema::Empty => Ok(()),
-            Schema::BooleanLiteral(boolean) => {
-                if !*boolean {
-                    context.add_error(value, "Schema is `false`!".to_string());
-                }
-                Ok(())
-            }
-            Schema::Const(const_schema) => const_schema.validate(context, value),
-            Schema::Enum(enum_schema) => enum_schema.validate(context, value),
-            Schema::AllOf(all_of_schema) => all_of_schema.validate(context, value),
-            Schema::AnyOf(any_of_schema) => any_of_schema.validate(context, value),
-            Schema::OneOf(one_of_schema) => one_of_schema.validate(context, value),
-            Schema::Not(not_schema) => not_schema.validate(context, value),
-            Schema::Typed(typed_schema) => typed_schema.validate(context, value),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,7 +52,7 @@ mod tests {
 
     #[test]
     fn test_validate_empty_schema() {
-        let schema = YamlSchema::empty();
+        let schema = YamlSchema::Empty;
         let context = Context::default();
         let docs = saphyr::MarkedYaml::load_from_str("value").unwrap();
         let value = docs.first().unwrap();
@@ -91,7 +63,7 @@ mod tests {
 
     #[test]
     fn test_validate_type_null() {
-        let schema = YamlSchema::null();
+        let schema = YamlSchema::Null;
         let context = Context::default();
         let docs = saphyr::MarkedYaml::load_from_str("value").unwrap();
         let value = docs.first().unwrap();

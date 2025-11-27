@@ -1,36 +1,27 @@
+use std::collections::HashMap;
+
+use log::debug;
 use regex::Regex;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
 
-use crate::ConstValue;
-use crate::Schema;
-use crate::YamlSchema;
 use crate::loader;
-use crate::schemas::SchemaMetadata;
-use crate::schemas::base::BaseSchema;
 use crate::utils::format_hash_map;
 use crate::utils::format_marker;
 
 /// A string schema
 #[derive(Default)]
 pub struct StringSchema {
-    pub base: BaseSchema,
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub pattern: Option<Regex>,
 }
 
-impl SchemaMetadata for StringSchema {
-    fn get_accepted_keys() -> &'static [&'static str] {
-        &["minLength", "maxLength", "pattern"]
-    }
-}
-
 impl std::fmt::Debug for StringSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut h = self.base.as_hash_map();
+        let mut h = HashMap::new();
         if let Some(min_length) = self.min_length {
             h.insert("minLength".to_string(), min_length.to_string());
         }
@@ -45,13 +36,6 @@ impl std::fmt::Debug for StringSchema {
 }
 
 impl StringSchema {
-    pub fn from_base(base: BaseSchema) -> Self {
-        Self {
-            base,
-            ..Default::default()
-        }
-    }
-
     pub fn builder() -> StringSchemaBuilder {
         StringSchemaBuilder::new()
     }
@@ -62,15 +46,6 @@ impl PartialEq for StringSchema {
         self.min_length == other.min_length
             && self.max_length == other.max_length
             && are_patterns_equivalent(&self.pattern, &other.pattern)
-    }
-}
-
-impl From<StringSchema> for YamlSchema {
-    fn from(value: StringSchema) -> Self {
-        YamlSchema {
-            schema: Some(Schema::typed_string(value)),
-            ..Default::default()
-        }
     }
 }
 
@@ -90,66 +65,61 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for StringSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut string_schema = StringSchema::from_base(BaseSchema::try_from(mapping)?);
+        let mut string_schema = StringSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
-                if string_schema.base.handle_key_value(key, value)?.is_none() {
-                    match key.as_ref() {
-                        "minLength" => {
-                            if let Ok(i) = loader::load_integer_marked(value) {
-                                string_schema.min_length = Some(i as usize);
-                            } else {
-                                return Err(unsupported_type!(
-                                    "minLength expected integer, but got: {:?}",
-                                    value
-                                ));
-                            }
-                        }
-                        "maxLength" => {
-                            if let Ok(i) = loader::load_integer_marked(value) {
-                                string_schema.max_length = Some(i as usize);
-                            } else {
-                                return Err(unsupported_type!(
-                                    "maxLength expected integer, but got: {:?}",
-                                    value
-                                ));
-                            }
-                        }
-                        "pattern" => {
-                            if let YamlData::Value(Scalar::String(s)) = &value.data {
-                                let regex = regex::Regex::new(s.as_ref())?;
-                                string_schema.pattern = Some(regex);
-                            } else {
-                                return Err(unsupported_type!(
-                                    "pattern expected string, but got: {:?}",
-                                    value
-                                ));
-                            }
-                        }
-                        // Maybe this should be handled by the base schema?
-                        "type" => {
-                            if let YamlData::Value(Scalar::String(s)) = &value.data {
-                                if s != "string" {
-                                    return Err(unsupported_type!(
-                                        "Expected type: string, but got: {}",
-                                        s
-                                    ));
-                                }
-                            } else {
-                                return Err(expected_type_is_string!(value));
-                            }
-                        }
-                        _ => {
-                            return Err(schema_loading_error!(
-                                "Unsupported key for type: string: {}",
-                                key
+                match key.as_ref() {
+                    "minLength" => {
+                        if let Ok(i) = loader::load_integer_marked(value) {
+                            string_schema.min_length = Some(i as usize);
+                        } else {
+                            return Err(unsupported_type!(
+                                "minLength expected integer, but got: {:?}",
+                                value
                             ));
                         }
+                    }
+                    "maxLength" => {
+                        if let Ok(i) = loader::load_integer_marked(value) {
+                            string_schema.max_length = Some(i as usize);
+                        } else {
+                            return Err(unsupported_type!(
+                                "maxLength expected integer, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "pattern" => {
+                        if let YamlData::Value(Scalar::String(s)) = &value.data {
+                            let regex = regex::Regex::new(s.as_ref())?;
+                            string_schema.pattern = Some(regex);
+                        } else {
+                            return Err(unsupported_type!(
+                                "pattern expected string, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    // Maybe this should be handled by the base schema?
+                    "type" => {
+                        if let YamlData::Value(Scalar::String(s)) = &value.data {
+                            if s != "string" {
+                                return Err(unsupported_type!(
+                                    "Expected type: string, but got: {}",
+                                    s
+                                ));
+                            }
+                        } else {
+                            return Err(expected_type_is_string!(value));
+                        }
+                    }
+                    _ => {
+                        debug!("[StringSchema] Unsupported key for `type: string`: {key}");
                     }
                 }
             } else {
                 return Err(expected_scalar!(
-                    "{} Expected a scalar key, got: {:#?}",
+                    "{} Expected a scalar key, got: {:?}",
                     format_marker(&key.span.start),
                     key
                 ));
@@ -209,45 +179,5 @@ impl StringSchemaBuilder {
     pub fn pattern(&mut self, pattern: Regex) -> &mut Self {
         self.0.pattern = Some(pattern);
         self
-    }
-
-    pub fn r#enum(&mut self, r#enum: Vec<String>) -> &mut Self {
-        self.0.base.r#enum = Some(r#enum.into_iter().map(ConstValue::string).collect());
-        self
-    }
-
-    pub fn add_enum<S>(&mut self, s: S) -> &mut Self
-    where
-        S: Into<String>,
-    {
-        if let Some(r#enum) = self.0.base.r#enum.as_mut() {
-            r#enum.push(ConstValue::string(s.into()));
-            self
-        } else {
-            self.r#enum(vec![s.into()])
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_string_schema_builder() {
-        let schema = StringSchema::builder()
-            .add_enum("foo")
-            .add_enum("bar")
-            .build();
-        assert_eq!(
-            StringSchema {
-                base: BaseSchema {
-                    r#enum: Some(vec![ConstValue::string("foo"), ConstValue::string("bar")]),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            schema
-        );
     }
 }

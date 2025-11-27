@@ -1,15 +1,15 @@
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
-use saphyr::Scalar;
 use saphyr::YamlData;
 
 use crate::Context;
+use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
 
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct NotSchema {
     pub not: Box<YamlSchema>,
 }
@@ -20,23 +20,30 @@ impl std::fmt::Display for NotSchema {
     }
 }
 
+impl TryFrom<&MarkedYaml<'_>> for NotSchema {
+    type Error = crate::Error;
+
+    fn try_from(value: &MarkedYaml<'_>) -> Result<Self> {
+        if let YamlData::Mapping(mapping) = &value.data {
+            NotSchema::try_from(mapping)
+        } else {
+            Err(expected_mapping!(value))
+        }
+    }
+}
+
 impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NotSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut not_schema = NotSchema::default();
-        for (key, value) in mapping.iter() {
-            if let YamlData::Value(Scalar::String(key)) = &key.data {
-                match key.as_ref() {
-                    "not" => {
-                        let schema: YamlSchema = value.try_into()?;
-                        not_schema.not = Box::new(schema);
-                    }
-                    _ => return Err(generic_error!("Unsupported key: {}", key)),
-                }
-            }
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("not")) {
+            let schema: YamlSchema = value.try_into()?;
+            Ok(NotSchema {
+                not: Box::new(schema),
+            })
+        } else {
+            Err(generic_error!("No `not` key found!"))
         }
-        Ok(not_schema)
     }
 }
 

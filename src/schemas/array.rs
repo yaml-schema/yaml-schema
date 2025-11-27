@@ -5,15 +5,12 @@ use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
 
-use crate::BoolOrTypedSchema;
 use crate::Context;
-use crate::Reference;
 use crate::Result;
-use crate::TypedSchema;
 use crate::Validator;
 use crate::YamlSchema;
 use crate::loader;
-use crate::schemas::SchemaMetadata;
+use crate::schemas::BooleanOrSchema;
 use crate::utils::format_marker;
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
@@ -21,31 +18,9 @@ use crate::utils::format_yaml_data;
 /// An array schema represents an array
 #[derive(Debug, Default, PartialEq)]
 pub struct ArraySchema {
-    pub items: Option<BoolOrTypedSchema>,
+    pub items: Option<BooleanOrSchema>,
     pub prefix_items: Option<Vec<YamlSchema>>,
-    pub contains: Option<Box<YamlSchema>>,
-}
-
-impl SchemaMetadata for ArraySchema {
-    fn get_accepted_keys() -> &'static [&'static str] {
-        &["items", "prefixItems", "contains"]
-    }
-}
-
-impl ArraySchema {
-    pub fn with_items_typed(typed_schema: TypedSchema) -> Self {
-        Self {
-            items: Some(BoolOrTypedSchema::TypedSchema(Box::new(typed_schema))),
-            ..Default::default()
-        }
-    }
-
-    pub fn with_items_ref(reference: Reference) -> Self {
-        Self {
-            items: Some(BoolOrTypedSchema::Reference(reference)),
-            ..Default::default()
-        }
-    }
+    pub contains: Option<YamlSchema>,
 }
 
 impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ArraySchema {
@@ -59,10 +34,10 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ArraySchema {
                     "contains" => {
                         if value.data.is_mapping() {
                             let yaml_schema = value.try_into()?;
-                            array_schema.contains = Some(Box::new(yaml_schema));
+                            array_schema.contains = Some(yaml_schema);
                         } else {
                             return Err(generic_error!(
-                                "contains: expected a mapping, but got: {:#?}",
+                                "contains: expected a mapping, but got: {:?}",
                                 value
                             ));
                         }
@@ -141,37 +116,18 @@ impl Validator for ArraySchema {
                         // if the index is not within the prefix items, validate against the array items schema
                         debug!("[ArraySchema] Validating array item {i} with schema: {items}");
                         match items {
-                            BoolOrTypedSchema::Boolean(true) => {
+                            BooleanOrSchema::Boolean(true) => {
                                 // `items: true` allows any items
                                 break;
                             }
-                            BoolOrTypedSchema::Boolean(false) => {
+                            BooleanOrSchema::Boolean(false) => {
                                 context.add_error(
                                     item,
                                     "Additional array items are not allowed!".to_string(),
                                 );
                             }
-                            BoolOrTypedSchema::TypedSchema(typed_schema) => {
-                                typed_schema.validate(context, item)?;
-                            }
-                            BoolOrTypedSchema::Reference(reference) => {
-                                // Grab the reference from the root schema.
-                                let Some(root) = &context.root_schema else {
-                                    context.add_error(
-                                        item,
-                                        "No root schema was provided to look up references"
-                                            .to_string(),
-                                    );
-                                    continue;
-                                };
-                                let Some(def) = root.get_def(&reference.ref_name) else {
-                                    context.add_error(
-                                        item,
-                                        format!("No definition for {} found", reference.ref_name),
-                                    );
-                                    continue;
-                                };
-                                def.validate(context, item)?;
+                            BooleanOrSchema::Schema(yaml_schema) => {
+                                yaml_schema.validate(context, item)?;
                             }
                         }
                     } else {
@@ -182,36 +138,16 @@ impl Validator for ArraySchema {
                 // validate array items
                 if let Some(items) = &self.items {
                     match items {
-                        BoolOrTypedSchema::Boolean(true) => { /* no-op */ }
-                        BoolOrTypedSchema::Boolean(false) => {
+                        BooleanOrSchema::Boolean(true) => { /* no-op */ }
+                        BooleanOrSchema::Boolean(false) => {
                             if self.prefix_items.is_none() && !array.is_empty() {
                                 context
                                     .add_error(value, "Array items are not allowed!".to_string());
                             }
                         }
-                        BoolOrTypedSchema::TypedSchema(typed_schema) => {
+                        BooleanOrSchema::Schema(yaml_schema) => {
                             for item in array {
-                                typed_schema.validate(context, item)?;
-                            }
-                        }
-                        BoolOrTypedSchema::Reference(reference) => {
-                            // Grab the reference from the root schema.
-                            let Some(root) = &context.root_schema else {
-                                context.add_error(
-                                    value,
-                                    "No root schema was provided to look up references".to_string(),
-                                );
-                                return Ok(());
-                            };
-                            let Some(def) = root.get_def(&reference.ref_name) else {
-                                context.add_error(
-                                    value,
-                                    format!("No definition for {} found", reference.ref_name),
-                                );
-                                return Ok(());
-                            };
-                            for item in array {
-                                def.validate(context, item)?;
+                                yaml_schema.validate(context, item)?;
                             }
                         }
                     }
@@ -245,10 +181,8 @@ impl std::fmt::Display for ArraySchema {
 }
 #[cfg(test)]
 mod tests {
-    use crate::NumberSchema;
-    use crate::Schema;
-    use crate::StringSchema;
-    use crate::TypedSchema;
+    use crate::schemas::NumberSchema;
+    use crate::schemas::StringSchema;
     use saphyr::LoadableYamlNode;
 
     use super::*;
@@ -256,11 +190,9 @@ mod tests {
     #[test]
     fn test_array_schema_prefix_items() {
         let schema = ArraySchema {
-            prefix_items: Some(vec![YamlSchema::from(Schema::typed_number(
-                NumberSchema::default(),
-            ))]),
-            items: Some(BoolOrTypedSchema::TypedSchema(Box::new(
-                TypedSchema::string(StringSchema::default()),
+            prefix_items: Some(vec![YamlSchema::typed_number(NumberSchema::default())]),
+            items: Some(BooleanOrSchema::schema(YamlSchema::typed_string(
+                StringSchema::default(),
             ))),
             ..Default::default()
         };
@@ -368,9 +300,9 @@ mod tests {
 
     #[test]
     fn test_contains() {
-        let number_schema = YamlSchema::from(Schema::typed_number(NumberSchema::default()));
+        let number_schema = YamlSchema::from(YamlSchema::typed_number(NumberSchema::default()));
         let schema = ArraySchema {
-            contains: Some(Box::new(number_schema)),
+            contains: Some(number_schema),
             ..Default::default()
         };
         let s = r#"
@@ -390,9 +322,9 @@ mod tests {
 
     #[test]
     fn test_array_schema_contains_fails() {
-        let number_schema = YamlSchema::from(Schema::typed_number(NumberSchema::default()));
+        let number_schema = YamlSchema::from(YamlSchema::typed_number(NumberSchema::default()));
         let schema = ArraySchema {
-            contains: Some(Box::new(number_schema)),
+            contains: Some(number_schema),
             ..Default::default()
         };
         let s = r#"

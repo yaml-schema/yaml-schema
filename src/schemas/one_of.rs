@@ -103,13 +103,12 @@ pub fn validate_one_of(
 
 #[cfg(test)]
 mod tests {
-    use crate::RootSchema;
-    use crate::Schema;
+    use crate::{Validator as _, YamlSchema, loader};
     use saphyr::LoadableYamlNode;
 
     #[test]
     fn test_validate_one_of_with_array_of_schemas() {
-        let root_schema = RootSchema::load_from_str(
+        let root_schema = loader::load_from_str(
             r##"
             $defs:
               schema:
@@ -127,12 +126,14 @@ mod tests {
             "##,
         )
         .unwrap();
-        println!("root_schema: {root_schema:#?}");
-        let root_schema_schema = root_schema.schema.as_ref().schema.as_ref().unwrap();
-        if let Schema::OneOf(one_of_schema) = root_schema_schema {
-            println!("one_of_schema: {one_of_schema:#?}");
+        println!("root_schema: {root_schema:?}");
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        if let Some(one_of) = &subschema.one_of {
+            println!("one_of_schema: {one_of:?}");
         } else {
-            panic!("Expected Schema::OneOf, but got: {root_schema_schema:?}");
+            panic!("Expected Subschema with oneOf, but got: {subschema:?}");
         }
 
         let s = r#"
@@ -142,10 +143,10 @@ mod tests {
         let value = docs.first().unwrap();
         let context = crate::Context::with_root_schema(&root_schema, false);
         let result = root_schema.validate(&context, value);
-        println!("result: {result:#?}");
+        println!("result: {result:?}");
         assert!(result.is_ok());
         for error in context.errors.borrow().iter() {
-            println!("error: {error:#?}");
+            println!("error: {error:?}");
         }
         assert!(!context.has_errors());
     }

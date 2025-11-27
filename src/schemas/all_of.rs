@@ -9,9 +9,10 @@ use saphyr::YamlData;
 use crate::Context;
 use crate::Error;
 use crate::Result;
+use crate::Validator;
 use crate::YamlSchema;
+use crate::loader;
 use crate::utils::format_vec;
-use crate::{Validator, loader};
 
 /// The `allOf` schema is a schema that matches if all of the schemas in the `allOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
@@ -27,6 +28,18 @@ impl std::fmt::Display for AllOfSchema {
     }
 }
 
+impl TryFrom<&MarkedYaml<'_>> for AllOfSchema {
+    type Error = crate::Error;
+
+    fn try_from(value: &MarkedYaml<'_>) -> Result<Self> {
+        if let YamlData::Mapping(mapping) = &value.data {
+            AllOfSchema::try_from(mapping)
+        } else {
+            Err(expected_mapping!(value))
+        }
+    }
+}
+
 impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AllOfSchema {
     type Error = crate::Error;
 
@@ -38,7 +51,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AllOfSchema {
                     "allOf" => {
                         all_of_schema.all_of = loader::load_array_of_schemas_marked(value)?;
                     }
-                    _ => return Err(generic_error!("Unsupported key: {}", key)),
+                    _ => return Err(generic_error!("[allOf] Unsupported key: {}", key)),
                 }
             }
         }
@@ -85,7 +98,7 @@ pub fn validate_all_of(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StringSchema;
+    use crate::schemas::StringSchema;
     use saphyr::LoadableYamlNode;
 
     fn create_test_schema() -> AllOfSchema {

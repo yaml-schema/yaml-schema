@@ -34,7 +34,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for EnumSchema {
                 })
             } else {
                 Err(generic_error!(
-                    "enum: Expected an array, but got: {:#?}",
+                    "enum: Expected an array, but got: {:?}",
                     value
                 ))
             }

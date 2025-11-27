@@ -1,14 +1,13 @@
-use std::rc::Rc;
+//! yaml-schema is a library for validating YAML data against a JSON Schema.
 
-use hashlink::LinkedHashMap;
-use saphyr::LoadableYamlNode;
+use log::debug;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
 
-pub mod engine;
 #[macro_use]
 pub mod error;
+pub mod engine;
 pub mod loader;
 pub mod reference;
 pub mod schemas;
@@ -18,24 +17,13 @@ pub mod validation;
 pub use engine::Engine;
 pub use error::Error;
 pub use reference::Reference;
-pub use schemas::AnyOfSchema;
-pub use schemas::ArraySchema;
-pub use schemas::BoolOrTypedSchema;
-pub use schemas::ConstSchema;
-pub use schemas::EnumSchema;
-pub use schemas::IntegerSchema;
-pub use schemas::NotSchema;
-pub use schemas::NumberSchema;
-pub use schemas::ObjectSchema;
-pub use schemas::OneOfSchema;
-pub use schemas::Schema;
-pub use schemas::StringSchema;
-pub use schemas::TypedSchema;
 pub use schemas::YamlSchema;
 pub use validation::Context;
 pub use validation::Validator;
 
-use crate::utils::format_marker;
+use utils::format_marker;
+
+use crate::loader::marked_yaml_to_string;
 
 // Returns the library version, which reflects the crate version
 pub fn version() -> String {
@@ -45,99 +33,89 @@ pub fn version() -> String {
 // Alias for std::result::Result<T, yaml_schema::Error>
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// A RootSchema represents the root document in a schema file, and can include additional
-/// fields not present in the 'base' YamlSchema
-#[derive(Debug, Default, PartialEq)]
+/// Because we can't `impl TryFrom<T> for String`, we use an internal trait to allow for
+/// `Into<String>` conversions that can fail.
+trait TryToString {
+    type Error;
+
+    fn try_into(&self) -> Result<String>;
+}
+
+/// A RootSchema represents the root document in a schema document, and includes additional
+/// fields such as `$schema` that are not allowed in subschemas.
+#[derive(Debug, PartialEq)]
 pub struct RootSchema {
-    pub id: Option<String>,
     pub meta_schema: Option<String>,
-    pub defs: Option<LinkedHashMap<String, YamlSchema>>,
-    pub schema: Rc<YamlSchema>,
+    pub schema: YamlSchema,
 }
 
 impl RootSchema {
-    /// Create a new RootSchema with a YamlSchema
-    pub fn new(schema: YamlSchema) -> RootSchema {
-        RootSchema {
-            id: None,
+    /// Create an empty RootSchema
+    pub fn empty() -> Self {
+        Self {
             meta_schema: None,
-            defs: None,
-            schema: Rc::new(schema),
+            schema: YamlSchema::Empty,
         }
     }
 
-    /// Builder pattern for RootSchema
-    pub fn builder() -> RootSchemaBuilder {
-        RootSchemaBuilder::new()
-    }
-
-    /// Create a new RootSchema with a Schema
-    pub fn new_with_schema(schema: Schema) -> RootSchema {
-        RootSchema::new(YamlSchema::from(schema))
-    }
-
-    /// Load a RootSchema from a file
-    pub fn load_file(path: &str) -> Result<RootSchema> {
-        loader::load_file(path)
-    }
-
-    pub fn load_from_str(schema: &str) -> Result<RootSchema> {
-        let docs = MarkedYaml::load_from_str(schema)?;
-        if docs.is_empty() {
-            return Ok(RootSchema::new(YamlSchema::empty())); // empty schema
+    /// Create a new RootSchema with a given schema
+    pub fn new(schema: YamlSchema) -> Self {
+        Self {
+            meta_schema: None,
+            schema,
         }
-        loader::load_from_doc(docs.first().expect("should have at least one doc"))
     }
 
-    pub fn validate(&self, context: &Context, value: &MarkedYaml) -> Result<()> {
-        self.schema.validate(context, value)?;
-        Ok(())
-    }
-
-    pub fn get_def(&self, name: &str) -> Option<&YamlSchema> {
-        if let Some(defs) = &self.defs {
-            return defs.get(&name.to_owned());
-        }
-        None
+    pub fn get_def(&self, _name: &str) -> Option<&YamlSchema> {
+        unimplemented!()
     }
 }
 
-pub struct RootSchemaBuilder(RootSchema);
+impl TryFrom<&MarkedYaml<'_>> for RootSchema {
+    type Error = crate::Error;
 
-impl Default for RootSchemaBuilder {
-    fn default() -> Self {
-        Self::new()
+    fn try_from(marked_yaml: &MarkedYaml<'_>) -> Result<Self> {
+        match &marked_yaml.data {
+            YamlData::Value(scalar) => match scalar {
+                Scalar::Boolean(r#bool) => Ok(Self {
+                    meta_schema: None,
+                    schema: YamlSchema::BooleanLiteral(*r#bool),
+                }),
+                Scalar::Null => Ok(RootSchema {
+                    meta_schema: None,
+                    schema: YamlSchema::Null,
+                }),
+                _ => Err(generic_error!(
+                    "[loader#load_from_doc] Don't know how to a handle scalar: {:?}",
+                    scalar
+                )),
+            },
+            YamlData::Mapping(mapping) => {
+                debug!(
+                    "[loader#load_from_doc] Found mapping, trying to load as RootSchema: {mapping:?}"
+                );
+                let meta_schema = mapping
+                    .get(&MarkedYaml::value_from_str("$schema"))
+                    .map(|my| marked_yaml_to_string(my, "$schema must be a string"))
+                    .transpose()?;
+
+                let schema = YamlSchema::try_from(marked_yaml)?;
+                Ok(RootSchema {
+                    meta_schema,
+                    schema,
+                })
+            }
+            _ => Err(generic_error!(
+                "[loader#load_from_doc] Don't know how to load: {:?}",
+                marked_yaml
+            )),
+        }
     }
 }
 
-impl RootSchemaBuilder {
-    /// Construct a RootSchemaBuilder
-    pub fn new() -> Self {
-        Self(RootSchema::default())
-    }
-
-    pub fn build(&mut self) -> RootSchema {
-        std::mem::take(&mut self.0)
-    }
-
-    pub fn id<S: Into<String>>(&mut self, id: S) -> &mut Self {
-        self.0.id = Some(id.into());
-        self
-    }
-
-    pub fn meta_schema<S: Into<String>>(&mut self, meta_schema: S) -> &mut Self {
-        self.0.meta_schema = Some(meta_schema.into());
-        self
-    }
-
-    pub fn defs(&mut self, defs: LinkedHashMap<String, YamlSchema>) -> &mut Self {
-        self.0.defs = Some(defs);
-        self
-    }
-
-    pub fn schema(&mut self, schema: YamlSchema) -> &mut Self {
-        self.0.schema = Rc::new(schema);
-        self
+impl Validator for RootSchema {
+    fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
+        self.schema.validate(context, value)
     }
 }
 

@@ -6,12 +6,15 @@ use cucumber::then;
 use log::{debug, error};
 use std::cell::RefCell;
 use std::rc::Rc;
+use yaml_schema::Engine;
+use yaml_schema::Result;
+use yaml_schema::RootSchema;
+use yaml_schema::loader;
 use yaml_schema::validation::ValidationError;
-use yaml_schema::{Engine, Result, RootSchema};
 
 #[derive(Debug, Default, World)]
 pub struct FeaturesWorld {
-    root_schema: RootSchema,
+    root_schema: Option<RootSchema>,
     yaml_schema_error: Option<yaml_schema::Error>,
     errors: Option<Rc<RefCell<Vec<ValidationError>>>>,
 }
@@ -20,8 +23,8 @@ pub struct FeaturesWorld {
 async fn a_yaml_schema(world: &mut FeaturesWorld, step: &Step) {
     let schema = step.docstring().expect("Expected a docstring");
     debug!("schema: {schema:?}");
-    match RootSchema::load_from_str(schema) {
-        Ok(root_schema) => world.root_schema = root_schema,
+    match loader::load_from_str(schema) {
+        Ok(root_schema) => world.root_schema = Some(root_schema),
         Err(e) => {
             error!("Error: {e:?}");
             world.yaml_schema_error = Some(e);
@@ -30,7 +33,11 @@ async fn a_yaml_schema(world: &mut FeaturesWorld, step: &Step) {
 }
 
 fn evaluate(world: &mut FeaturesWorld, s: &str) -> Result<bool> {
-    let context = Engine::evaluate(&world.root_schema, s, false)?;
+    let context = Engine::evaluate(
+        world.root_schema.as_ref().expect("No root schema"),
+        s,
+        false,
+    )?;
     world.errors = Some(context.errors.clone());
     for error in context.errors.borrow().iter() {
         println!("{error}");

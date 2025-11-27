@@ -4,7 +4,7 @@ use eyre::Context;
 use eyre::Result;
 
 use yaml_schema::Engine;
-use yaml_schema::RootSchema;
+use yaml_schema::loader;
 use yaml_schema::version;
 
 #[derive(Parser, Debug, Default)]
@@ -68,7 +68,7 @@ fn command_validate(opts: Opts) -> Result<i32> {
     }
 
     let schema_filename = opts.schemas.first().expect("No schema file(s) specified");
-    let root_schema = match RootSchema::load_file(schema_filename) {
+    let root_schema = match loader::load_file(schema_filename) {
         Ok(schema) => schema,
         Err(e) => {
             eprintln!("Failed to read YAML schema file: {schema_filename}");

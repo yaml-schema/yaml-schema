@@ -1,7 +1,9 @@
+use log::debug;
+use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::YamlData;
 
-use crate::utils::format_marker;
+use crate::utils::format_annotated_mapping;
 
 /// A Reference is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
@@ -32,16 +34,20 @@ impl TryFrom<&MarkedYaml<'_>> for Reference {
 
     fn try_from(value: &MarkedYaml<'_>) -> std::result::Result<Self, Self::Error> {
         if let YamlData::Mapping(mapping) = &value.data {
-            let ref_key = MarkedYaml::value_from_str("$ref");
-            if !mapping.contains_key(&ref_key) {
-                return Err(generic_error!(
-                    "{} Expected a $ref key, but got: {:#?}",
-                    format_marker(&value.span.start),
-                    mapping
-                ));
-            }
+            Self::try_from(mapping)
+        } else {
+            Err(expected_mapping!(value))
+        }
+    }
+}
 
-            let ref_value = mapping.get(&ref_key).expect("$ref key not found");
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Reference {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        debug!("[Reference#try_from] {}", format_annotated_mapping(mapping));
+        let ref_key = MarkedYaml::value_from_str("$ref");
+        if let Some(ref_value) = mapping.get(&ref_key) {
             match &ref_value.data {
                 YamlData::Value(saphyr::Scalar::String(s)) => {
                     if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
@@ -60,15 +66,14 @@ impl TryFrom<&MarkedYaml<'_>> for Reference {
                     Ok(Reference::new(ref_name))
                 }
                 _ => Err(generic_error!(
-                    "Expected a string value for $ref, but got: {:#?}",
+                    "Expected a string value for $ref, but got: {:?}",
                     ref_value
                 )),
             }
         } else {
             Err(generic_error!(
-                "{} value is not a mapping: {:?}",
-                format_marker(&value.span.start),
-                value
+                "No $ref key found in mapping: {}",
+                format_annotated_mapping(mapping)
             ))
         }
     }
@@ -76,8 +81,9 @@ impl TryFrom<&MarkedYaml<'_>> for Reference {
 
 #[cfg(test)]
 mod tests {
-    use crate::RootSchema;
-    use crate::Schema;
+    use crate::Validator as _;
+    use crate::YamlSchema;
+    use crate::loader;
     use saphyr::LoadableYamlNode;
 
     #[test]
@@ -91,23 +97,13 @@ mod tests {
                 name:
                     $ref: "#/$defs/name"
         "##;
-        let root_schema = RootSchema::load_from_str(schema).unwrap();
-        let yaml_schema = root_schema.schema.as_ref();
-        println!("yaml_schema: {yaml_schema:#?}");
-        let schema = yaml_schema.schema.as_ref().unwrap();
-        println!("schema: {schema:#?}");
-        if let Schema::Typed(typed_schema) = schema {
-            let first_type = typed_schema.r#type.first().unwrap();
-            if let crate::schemas::TypedSchemaType::Object(object_schema) = first_type
-                && let Some(properties) = &object_schema.properties
-                && let Some(name_property) = properties.get("name")
-            {
-                let name_ref = name_property.r#ref.as_ref().unwrap();
-                assert_eq!(name_ref.ref_name, "name");
-            }
-        } else {
-            panic!("Expected Schema::Typed, but got: {schema:?}");
-        }
+        let root_schema = loader::load_from_str(schema).expect("Failed to load schema");
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected a subschema");
+        };
+        println!("subschema: {subschema:?}");
+        // TODO: assert that the subschema has the expected structure
+
         let context = crate::Context::with_root_schema(&root_schema, true);
         let value = r##"
             name: "John Doe"

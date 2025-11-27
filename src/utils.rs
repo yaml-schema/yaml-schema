@@ -1,4 +1,5 @@
-// Various utility functions
+//! Various utility functions
+
 use crate::Result;
 use hashlink::linked_hash_map;
 use saphyr::{MarkedYaml, Scalar, YamlData};
@@ -60,27 +61,36 @@ pub fn format_scalar(scalar: &saphyr::Scalar) -> String {
     }
 }
 
+pub fn format_marked_yaml(marked_yaml: &saphyr::MarkedYaml) -> String {
+    format!(
+        "{} {}",
+        format_marker(&marked_yaml.span.start),
+        format_yaml_data(&marked_yaml.data)
+    )
+}
+
+pub fn format_annotated_mapping(
+    mapping: &saphyr::AnnotatedMapping<'_, saphyr::MarkedYaml<'_>>,
+) -> String {
+    let items: Vec<String> = mapping
+        .iter()
+        .map(|(k, v)| format!("{}: {}", format_yaml_data(&k.data), format_marked_yaml(v)))
+        .collect();
+    format!("{{ {} }}", items.join(", "))
+}
+
 /// Formats a saphyr::YamlData as a string
 pub fn format_yaml_data<'a>(data: &saphyr::YamlData<'a, saphyr::MarkedYaml<'a>>) -> String {
     match data {
         saphyr::YamlData::Value(scalar) => format_scalar(scalar),
         saphyr::YamlData::Sequence(seq) => {
-            let items: Vec<String> = seq.iter().map(|v| format_yaml_data(&v.data)).collect();
-            format!("[{}]", items.join(", "))
-        }
-        saphyr::YamlData::Mapping(mapping) => {
-            let items: Vec<String> = mapping
+            let items: Vec<String> = seq
                 .iter()
-                .map(|(k, v)| {
-                    format!(
-                        "{}: {}",
-                        format_yaml_data(&k.data),
-                        format_yaml_data(&v.data)
-                    )
-                })
+                .map(|marked_yaml| format_marked_yaml(marked_yaml))
                 .collect();
             format!("[{}]", items.join(", "))
         }
+        saphyr::YamlData::Mapping(mapping) => format_annotated_mapping(mapping),
         _ => format!("<unsupported type: {data:?}>"),
     }
 }
@@ -97,6 +107,21 @@ where
 {
     let items: Vec<String> = vec.iter().map(|v| format!("{v}")).collect();
     format!("[{}]", items.join(", "))
+}
+
+/// Formats a LinkedHashMap as a string, ala JSON
+pub fn format_linked_hash_map<K, V>(
+    linked_hash_map: &linked_hash_map::LinkedHashMap<K, V>,
+) -> String
+where
+    K: std::fmt::Display,
+    V: std::fmt::Display,
+{
+    let items: Vec<String> = linked_hash_map
+        .iter()
+        .map(|(k, v)| format!("{}: {}", k, v))
+        .collect();
+    format!("{{ {} }}", items.join(", "))
 }
 
 /// Formats a HashMap as a string, ala JSON

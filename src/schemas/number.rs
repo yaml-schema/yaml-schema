@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use log::debug;
 use saphyr::AnnotatedMapping;
@@ -6,11 +7,8 @@ use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
 
-use crate::ConstValue;
 use crate::Number;
 use crate::Result;
-use crate::schemas::BaseSchema;
-use crate::schemas::SchemaMetadata;
 use crate::utils::format_hash_map;
 use crate::utils::format_marker;
 use crate::validation::Context;
@@ -19,24 +17,11 @@ use crate::validation::Validator;
 /// A number schema
 #[derive(Default, PartialEq)]
 pub struct NumberSchema {
-    pub base: BaseSchema,
     pub minimum: Option<Number>,
     pub maximum: Option<Number>,
     pub exclusive_minimum: Option<Number>,
     pub exclusive_maximum: Option<Number>,
     pub multiple_of: Option<Number>,
-}
-
-impl SchemaMetadata for NumberSchema {
-    fn get_accepted_keys() -> &'static [&'static str] {
-        &[
-            "minimum",
-            "maximum",
-            "exclusiveMinimum",
-            "exclusiveMaximum",
-            "multipleOf",
-        ]
-    }
 }
 
 impl Validator for NumberSchema {
@@ -46,33 +31,13 @@ impl Validator for NumberSchema {
         debug!("[NumberSchema#validate] data: {data:?}");
         if let YamlData::Value(scalar) = data {
             if let Scalar::Integer(i) = scalar {
-                let enum_values = self.base.r#enum.as_ref().map(|r#enum| {
-                    r#enum
-                        .iter()
-                        .filter_map(|v| {
-                            if let ConstValue::Number(Number::Integer(i)) = v {
-                                Some(*i)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<i64>>()
-                });
+                // TODO: add enum validation
+                let enum_values = None;
                 self.validate_number_i64(context, &enum_values, value, *i)
-            } else if let Scalar::FloatingPoint(o) = scalar {
-                let enum_values = self.base.r#enum.as_ref().map(|r#enum| {
-                    r#enum
-                        .iter()
-                        .filter_map(|v| {
-                            if let ConstValue::Number(Number::Float(f)) = v {
-                                Some(*f)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<f64>>()
-                });
-                self.validate_number_f64(context, &enum_values, value, o.into_inner())
+            } else if let Scalar::FloatingPoint(ordered_float) = scalar {
+                // TODO: add enum validation
+                let enum_values = None;
+                self.validate_number_f64(context, &enum_values, value, ordered_float.into_inner())
             } else {
                 context.add_error(value, format!("Expected a number, but got: {data:?}"));
             }
@@ -87,13 +52,6 @@ impl Validator for NumberSchema {
 }
 
 impl NumberSchema {
-    pub fn from_base(base: BaseSchema) -> Self {
-        Self {
-            base,
-            ..Default::default()
-        }
-    }
-
     // TODO: This duplicates IntegerSchema::validate_integer(), so, find a neat way to dedupe this
     fn validate_number_i64(
         &self,
@@ -273,45 +231,43 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NumberSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut number_schema = NumberSchema::from_base(BaseSchema::try_from(mapping)?);
+        let mut number_schema = NumberSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
-                if number_schema.base.handle_key_value(key, value)?.is_none() {
-                    match key.as_ref() {
-                        "minimum" => {
-                            number_schema.minimum = Some(value.try_into()?);
-                        }
-                        "maximum" => {
-                            number_schema.maximum = Some(value.try_into()?);
-                        }
-                        "exclusiveMinimum" => {
-                            number_schema.exclusive_minimum = Some(value.try_into()?);
-                        }
-                        "exclusiveMaximum" => {
-                            number_schema.exclusive_maximum = Some(value.try_into()?);
-                        }
-                        "multipleOf" => {
-                            number_schema.multiple_of = Some(value.try_into()?);
-                        }
-                        // Maybe this should be handled by the base schema?
-                        "type" => {
-                            if let YamlData::Value(Scalar::String(s)) = &value.data {
-                                if s != "number" {
-                                    return Err(unsupported_type!(
-                                        "Expected type: number, but got: {}",
-                                        s
-                                    ));
-                                }
-                            } else {
-                                return Err(expected_type_is_string!(value));
+                match key.as_ref() {
+                    "minimum" => {
+                        number_schema.minimum = Some(value.try_into()?);
+                    }
+                    "maximum" => {
+                        number_schema.maximum = Some(value.try_into()?);
+                    }
+                    "exclusiveMinimum" => {
+                        number_schema.exclusive_minimum = Some(value.try_into()?);
+                    }
+                    "exclusiveMaximum" => {
+                        number_schema.exclusive_maximum = Some(value.try_into()?);
+                    }
+                    "multipleOf" => {
+                        number_schema.multiple_of = Some(value.try_into()?);
+                    }
+                    // Maybe this should be handled by the base schema?
+                    "type" => {
+                        if let YamlData::Value(Scalar::String(s)) = &value.data {
+                            if s != "number" {
+                                return Err(unsupported_type!(
+                                    "Expected type: number, but got: {}",
+                                    s
+                                ));
                             }
+                        } else {
+                            return Err(expected_type_is_string!(value));
                         }
-                        _ => {
-                            return Err(schema_loading_error!(
-                                "Unsupported key for type: number: {}",
-                                key
-                            ));
-                        }
+                    }
+                    _ => {
+                        return Err(schema_loading_error!(
+                            "Unsupported key for type: number: {}",
+                            key
+                        ));
                     }
                 }
             } else {
@@ -334,7 +290,7 @@ impl std::fmt::Display for NumberSchema {
 
 impl std::fmt::Debug for NumberSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut h = self.base.as_hash_map();
+        let mut h = HashMap::new();
         if let Some(minimum) = self.minimum {
             h.insert("minimum".to_string(), minimum.to_string());
         }
