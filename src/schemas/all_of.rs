@@ -1,5 +1,4 @@
 use log::debug;
-use log::error;
 
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
@@ -62,8 +61,9 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AllOfSchema {
 impl Validator for AllOfSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let all_of_is_valid = validate_all_of(&self.all_of, context, value)?;
+        debug!("[AllOf#validate] all_of_is_valid: {all_of_is_valid}");
         if !all_of_is_valid {
-            error!("AllOf: Not all of the schemas in `allOf` matched!");
+            debug!("[AllOf#validate] Not all of the schemas in `allOf` matched!");
             context.add_error(value, "Not all of the schemas in `allOf` matched!");
             fail_fast!(context);
         }
@@ -77,12 +77,17 @@ pub fn validate_all_of(
     value: &saphyr::MarkedYaml,
 ) -> Result<bool> {
     for schema in schemas {
-        debug!("AllOf: Validating value: {value:?} against schema: {schema}");
+        debug!("[AllOf#validate_all_of] Validating value: {value:?} against schema: {schema:?}");
         // We can short circuit as soon as any sub schema fails to validate
         let sub_context = context.get_sub_context();
         let sub_result = schema.validate(&sub_context, value);
         match sub_result {
             Ok(()) => {
+                debug!("[AllOf#validate_all_of] schema {schema:?} validated");
+                debug!(
+                    "[AllOf#validate_all_of] sub_context.has_errors(): {}",
+                    sub_context.has_errors()
+                );
                 if sub_context.has_errors() {
                     return Ok(false);
                 }

@@ -146,7 +146,11 @@ impl Validator for YamlSchema {
                 }
                 Ok(())
             }
-            YamlSchema::Subschema(subschema) => subschema.validate(context, value),
+            YamlSchema::Subschema(subschema) => {
+                debug!("[YamlSchema#validate] Validating subschema: {subschema:?}");
+                subschema.validate(context, value)?;
+                Ok(())
+            }
         }
     }
 }
@@ -262,6 +266,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
         let metadata_and_annotations = MetadataAndAnnotations::try_from(mapping)?;
+        debug!("[Subschema#try_from] metadata_and_annotations: {metadata_and_annotations}");
 
         // $ref
         let reference: Option<Reference> = mapping
@@ -458,6 +463,27 @@ impl Validator for Subschema {
                 ));
             }
         }
+
+        if let Some(string_schema) = &self.string_schema {
+            debug!("[Subschema] Validating string schema: {string_schema:?}");
+            string_schema.validate(context, value)?;
+        }
+
+        if let Some(number_schema) = &self.number_schema {
+            debug!("[Subschema] Validating number schema: {number_schema:?}");
+            number_schema.validate(context, value)?;
+        }
+
+        if let Some(integer_schema) = &self.integer_schema {
+            debug!("[Subschema] Validating integer schema: {integer_schema:?}");
+            integer_schema.validate(context, value)?;
+        }
+
+        if let Some(object_schema) = &self.object_schema {
+            debug!("[Subschema] Validating object schema: {object_schema:?}");
+            object_schema.validate(context, value)?;
+        }
+
         Ok(())
     }
 }
@@ -486,7 +512,9 @@ impl MetadataAndAnnotations {
 
 impl std::fmt::Display for MetadataAndAnnotations {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
         if !self.is_empty() {
+            write!(f, " ")?;
             if let Some(id) = &self.id {
                 write!(f, "id: {id}, ")?;
             }
@@ -499,7 +527,9 @@ impl std::fmt::Display for MetadataAndAnnotations {
             if let Some(description) = &self.description {
                 write!(f, "description: {description}, ")?;
             }
+            write!(f, " ")?;
         }
+        write!(f, "}}")?;
         Ok(())
     }
 }

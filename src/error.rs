@@ -19,7 +19,7 @@ pub enum Error {
     RegexParsingError(#[from] regex::Error),
     #[error("Error loading schema: {0}")]
     SchemaLoadingError(String),
-    #[error("Unsupported type '{0}'!")]
+    #[error("Unsupported type: {0}")]
     UnsupportedType(String),
     #[error("Generic YAML schema error: {0}")]
     GenericError(String),
@@ -62,7 +62,7 @@ macro_rules! unsupported_type {
         $crate::Error::UnsupportedType(format!($s, $($e),+))
     };
     ($e:expr) => {
-        $crate::Error::UnsupportedType($e)
+        $crate::Error::UnsupportedType()
     };
 }
 

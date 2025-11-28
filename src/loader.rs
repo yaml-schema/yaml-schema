@@ -259,7 +259,7 @@ mod tests {
         assert!(root_schema.is_err());
         assert_eq!(
             root_schema.unwrap_err().to_string(),
-            "Unsupported type 'foo'!"
+            "Unsupported type: Expected type: string, number, integer, or object, but got: foo"
         );
     }
 
@@ -299,14 +299,7 @@ mod tests {
             .as_ref()
             .expect("Expected properties")
             .get("name")
-            .expect("Expected name property");
-
-        let description = subschema
-            .metadata_and_annotations
-            .description
-            .as_ref()
-            .expect("Expected description");
-        assert_eq!(description, "This is a description");
+            .expect("Expected `name` property");
 
         let YamlSchema::Subschema(name_property_schema) = &name_property else {
             panic!(
@@ -321,6 +314,10 @@ mod tests {
         assert_eq!(
             name_property_schema.string_schema,
             Some(StringSchema::default())
+        );
+        assert_eq!(
+            name_property_schema.metadata_and_annotations.description,
+            Some("This is a description".to_string())
         );
     }
 

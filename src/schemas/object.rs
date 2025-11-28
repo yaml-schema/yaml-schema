@@ -12,6 +12,7 @@ use crate::YamlSchema;
 use crate::loader::load_integer_marked;
 use crate::schemas::BooleanOrSchema;
 use crate::schemas::StringSchema;
+use crate::utils::format_annotated_mapping;
 use crate::utils::format_marker;
 use crate::utils::linked_hash_map;
 
@@ -50,6 +51,10 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ObjectSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+        debug!(
+            "[ObjectSchema#try_from] Mapping: {}",
+            format_annotated_mapping(mapping)
+        );
         let mut object_schema = ObjectSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(s)) = &key.data {
