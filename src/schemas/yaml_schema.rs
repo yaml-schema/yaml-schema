@@ -131,7 +131,15 @@ impl Validator for YamlSchema {
         );
         match self {
             YamlSchema::Empty => Ok(()),
-            YamlSchema::Null => Ok(()),
+            YamlSchema::Null => {
+                if !matches!(&value.data, YamlData::Value(Scalar::Null)) {
+                    context.add_error(
+                        value,
+                        format!("Expected null, but got: {}", format_yaml_data(&value.data)),
+                    );
+                }
+                Ok(())
+            }
             YamlSchema::BooleanLiteral(boolean) => {
                 if !*boolean {
                     context.add_error(value, "YamlSchema is `false`!");
@@ -300,32 +308,6 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
             })
             .transpose()?;
 
-        // type
-        let mut r#type: Option<SchemaType> = None;
-        if let Some(type_value) = mapping.get(&MarkedYaml::value_from_str("type")) {
-            match &type_value.data {
-                YamlData::Value(Scalar::String(s)) => {
-                    r#type = Some(SchemaType::Single(s.to_string()))
-                }
-                YamlData::Sequence(values) => {
-                    r#type = Some(SchemaType::Multiple(
-                        values
-                            .iter()
-                            .map(|marked_yaml| {
-                                marked_yaml_to_string(marked_yaml, "type must be a string")
-                            })
-                            .collect::<Result<Vec<String>>>()?,
-                    ))
-                }
-                _ => {
-                    return Err(generic_error!(
-                        "[Subschema#try_from] Expected a string or sequence for `type`, but got: {:?}",
-                        type_value.data
-                    ));
-                }
-            }
-        }
-
         // const
         let mut r#const: Option<ConstValue> = None;
         if let Some(value) = mapping.get(&MarkedYaml::value_from_str("const")) {
@@ -344,6 +326,63 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
             r#enum = Some(enum_values);
         }
 
+        // type
+        let mut r#type: Option<SchemaType> = None;
+        if let Some(type_value) = mapping.get(&MarkedYaml::value_from_str("type")) {
+            match &type_value.data {
+                YamlData::Value(Scalar::String(s)) => {
+                    r#type = Some(SchemaType::Single(s.to_string()))
+                }
+                YamlData::Sequence(values) => {
+                    r#type = Some(SchemaType::Multiple(
+                        values
+                            .iter()
+                            .map(|marked_yaml| {
+                                marked_yaml_to_string(marked_yaml, "type must be a string")
+                            })
+                            .collect::<Result<Vec<String>>>()?,
+                    ))
+                }
+                _ => {
+                    return Err(schema_loading_error!(
+                        "[Subschema#try_from] Expected a string or sequence for `type`, but got: {:?}",
+                        type_value.data
+                    ));
+                }
+            }
+        }
+
+        // Instantiate the appropriate schema based on the type
+        let mut string_schema = None;
+        let mut number_schema = None;
+        let mut integer_schema = None;
+        let mut object_schema = None;
+        if let Some(type_value) = &r#type
+            && let SchemaType::Single(s) = type_value
+        {
+            match s.as_ref() {
+                "string" => {
+                    string_schema = StringSchema::try_from(mapping).ok();
+                }
+                "number" => {
+                    number_schema = NumberSchema::try_from(mapping).ok();
+                }
+                "integer" => {
+                    integer_schema = IntegerSchema::try_from(mapping).ok();
+                }
+                "object" => {
+                    object_schema = ObjectSchema::try_from(mapping).ok();
+                }
+                "boolean" => {}
+                _ => {
+                    return Err(unsupported_type!(
+                        "Expected type: string, number, integer, or object, but got: {}",
+                        s
+                    ));
+                }
+            }
+        }
+
         Ok(Self {
             metadata_and_annotations,
             r#ref: reference,
@@ -354,6 +393,10 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Subschema {
             r#type,
             r#const,
             r#enum,
+            string_schema,
+            number_schema,
+            integer_schema,
+            object_schema,
             ..Default::default()
         })
     }

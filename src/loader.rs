@@ -44,8 +44,7 @@ pub fn load_from_docs(docs: Vec<MarkedYaml>) -> Result<RootSchema> {
     load_from_doc(first_doc)
 }
 
-/// Load a YAML schema from a document.
-/// This function is used to load the schema from the first document of a YAML file.
+/// Load a YAML schema from a document. Basically just a wrapper around the TryFrom<&MarkedYaml<'_>> for RootSchema.
 pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
     RootSchema::try_from(doc)
 }
@@ -427,9 +426,14 @@ mod tests {
         assert_eq!(one_of.one_of.len(), 2);
         assert_eq!(
             one_of.one_of[0],
-            YamlSchema::typed_string(StringSchema::default())
+            YamlSchema::typed_string(StringSchema::default()),
+            "one_of[0] should be a string schema"
         );
-        assert_eq!(one_of.one_of[1], YamlSchema::ref_str("foo"));
+        assert_eq!(
+            one_of.one_of[1],
+            YamlSchema::ref_str("foo"),
+            "one_of[1] should be a reference to 'foo'"
+        );
 
         let s = r#"
         false

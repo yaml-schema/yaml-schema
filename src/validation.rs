@@ -72,9 +72,6 @@ mod tests {
         assert!(context.has_errors());
         let errors = context.errors.borrow();
         let error = errors.first().unwrap();
-        assert_eq!(
-            error.error,
-            "Expected null, but got: Value(String(\"value\"))"
-        );
+        assert_eq!(error.error, r#"Expected null, but got: "value""#);
     }
 }

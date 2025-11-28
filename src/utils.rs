@@ -130,6 +130,9 @@ where
     K: std::fmt::Display,
     V: std::fmt::Display,
 {
+    if hash_map.is_empty() {
+        return "{}".to_string();
+    }
     let items: Vec<String> = hash_map
         .iter()
         .map(|(k, v)| format!("{}: {}", k, v))
