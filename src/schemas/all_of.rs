@@ -17,20 +17,20 @@ use crate::utils::format_vec;
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
 /// to the context.
 #[derive(Debug, Default, PartialEq)]
-pub struct AllOfSchema {
-    pub all_of: Vec<YamlSchema>,
+pub struct AllOfSchema<'r> {
+    pub all_of: Vec<YamlSchema<'r>>,
 }
 
-impl std::fmt::Display for AllOfSchema {
+impl std::fmt::Display for AllOfSchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "allOf:{}", format_vec(&self.all_of))
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for AllOfSchema {
+impl<'r> TryFrom<&MarkedYaml<'r>> for AllOfSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(value: &MarkedYaml<'_>) -> Result<Self> {
+    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
         if let YamlData::Mapping(mapping) = &value.data {
             AllOfSchema::try_from(mapping)
         } else {
@@ -39,10 +39,10 @@ impl TryFrom<&MarkedYaml<'_>> for AllOfSchema {
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AllOfSchema {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for AllOfSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
         let mut all_of_schema = AllOfSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
@@ -58,7 +58,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AllOfSchema {
     }
 }
 
-impl Validator for AllOfSchema {
+impl Validator for AllOfSchema<'_> {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let all_of_is_valid = validate_all_of(&self.all_of, context, value)?;
         debug!("[AllOf#validate] all_of_is_valid: {all_of_is_valid}");
@@ -106,7 +106,7 @@ mod tests {
     use crate::schemas::StringSchema;
     use saphyr::LoadableYamlNode;
 
-    fn create_test_schema() -> AllOfSchema {
+    fn create_test_schema() -> AllOfSchema<'static> {
         AllOfSchema {
             all_of: vec![
                 StringSchema::builder().min_length(1).build().into(),

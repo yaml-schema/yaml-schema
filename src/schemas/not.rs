@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
@@ -10,20 +12,20 @@ use crate::YamlSchema;
 
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
 #[derive(Debug, PartialEq)]
-pub struct NotSchema {
-    pub not: Box<YamlSchema>,
+pub struct NotSchema<'r> {
+    pub not: Box<YamlSchema<'r>>,
 }
 
-impl std::fmt::Display for NotSchema {
+impl Display for NotSchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "not: {}", self.not)
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for NotSchema {
+impl<'r> TryFrom<&MarkedYaml<'r>> for NotSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(value: &MarkedYaml<'_>) -> Result<Self> {
+    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
         if let YamlData::Mapping(mapping) = &value.data {
             NotSchema::try_from(mapping)
         } else {
@@ -32,12 +34,12 @@ impl TryFrom<&MarkedYaml<'_>> for NotSchema {
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NotSchema {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for NotSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
         if let Some(value) = mapping.get(&MarkedYaml::value_from_str("not")) {
-            let schema: YamlSchema = value.try_into()?;
+            let schema: YamlSchema<'r> = value.try_into()?;
             Ok(NotSchema {
                 not: Box::new(schema),
             })
@@ -47,7 +49,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NotSchema {
     }
 }
 
-impl Validator for NotSchema {
+impl Validator for NotSchema<'_> {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> crate::Result<()> {
         debug!(
             "Not: Validating value: {:?} against schema: {}",

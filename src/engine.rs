@@ -11,7 +11,7 @@ use crate::validation::Context;
 
 #[derive(Debug)]
 pub struct Engine<'a> {
-    pub root_schema: &'a RootSchema,
+    pub root_schema: &'a RootSchema<'a>,
     pub context: Rc<RefCell<Context<'a>>>,
 }
 

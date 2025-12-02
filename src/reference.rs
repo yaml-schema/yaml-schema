@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
@@ -8,31 +10,26 @@ use crate::utils::format_annotated_mapping;
 /// A Reference is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Reference {
-    pub ref_name: String,
+pub struct Reference<'r> {
+    pub ref_name: Cow<'r, str>,
 }
 
-impl std::fmt::Display for Reference {
+impl std::fmt::Display for Reference<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "$ref: {}", self.ref_name)
     }
 }
 
-impl Reference {
-    pub fn new<S>(ref_name: S) -> Reference
-    where
-        S: Into<String>,
-    {
-        Reference {
-            ref_name: ref_name.into(),
-        }
+impl<'r> Reference<'r> {
+    pub fn new(ref_name: Cow<'r, str>) -> Reference<'r> {
+        Reference { ref_name }
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for Reference {
+impl<'r> TryFrom<&MarkedYaml<'r>> for Reference<'r> {
     type Error = crate::Error;
 
-    fn try_from(value: &MarkedYaml<'_>) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &MarkedYaml<'r>) -> std::result::Result<Self, Self::Error> {
         if let YamlData::Mapping(mapping) = &value.data {
             Self::try_from(mapping)
         } else {
@@ -41,10 +38,12 @@ impl TryFrom<&MarkedYaml<'_>> for Reference {
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Reference {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Reference<'r> {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+    fn try_from<'a>(
+        mapping: &AnnotatedMapping<'a, MarkedYaml<'a>>,
+    ) -> crate::Result<Reference<'a>> {
         debug!("[Reference#try_from] {}", format_annotated_mapping(mapping));
         let ref_key = MarkedYaml::value_from_str("$ref");
         if let Some(ref_value) = mapping.get(&ref_key) {
@@ -56,14 +55,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for Reference {
                             s
                         ));
                     }
-                    let ref_name = match s.strip_prefix("#/$defs/") {
-                        Some(ref_name) => ref_name,
-                        _ => s
-                            .strip_prefix("#/definitions/")
-                            .expect("#/definitions/ prefix not found"),
-                    };
-
-                    Ok(Reference::new(ref_name))
+                    Ok(Reference::new(s.clone()))
                 }
                 _ => Err(generic_error!(
                     "Expected a string value for $ref, but got: {:?}",
@@ -113,5 +105,14 @@ mod tests {
         let result = root_schema.validate(&context, value);
         assert!(result.is_ok());
         assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_json_ptr() {
+        let ptr = jsonptr::Pointer::parse("/$defs/schema").expect("Failed to parse JSON pointer");
+        println!("ptr: {ptr:?}");
+        for component in ptr.components() {
+            println!("component: {component:?}");
+        }
     }
 }

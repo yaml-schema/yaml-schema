@@ -16,20 +16,20 @@ use crate::utils::format_vec;
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
 /// to the context.
 #[derive(Debug, Default, PartialEq)]
-pub struct OneOfSchema {
-    pub one_of: Vec<YamlSchema>,
+pub struct OneOfSchema<'r> {
+    pub one_of: Vec<YamlSchema<'r>>,
 }
 
-impl std::fmt::Display for OneOfSchema {
+impl std::fmt::Display for OneOfSchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "oneOf:{}", format_vec(&self.one_of))
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for OneOfSchema {
+impl<'r> TryFrom<&MarkedYaml<'r>> for OneOfSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(value: &MarkedYaml) -> Result<Self> {
+    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
         if let YamlData::Mapping(mapping) = &value.data {
             OneOfSchema::try_from(mapping)
         } else {
@@ -38,10 +38,10 @@ impl TryFrom<&MarkedYaml<'_>> for OneOfSchema {
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for OneOfSchema {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for OneOfSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> Result<Self> {
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> Result<Self> {
         match mapping.get(&MarkedYaml::value_from_str("oneOf")) {
             Some(value) => {
                 let one_of = loader::load_array_of_schemas_marked(value)?;
@@ -52,7 +52,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for OneOfSchema {
     }
 }
 
-impl Validator for crate::schemas::OneOfSchema {
+impl Validator for crate::schemas::OneOfSchema<'_> {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let one_of_is_valid = validate_one_of(context, &self.one_of, value)?;
         if !one_of_is_valid {
@@ -65,7 +65,7 @@ impl Validator for crate::schemas::OneOfSchema {
 
 pub fn validate_one_of(
     context: &Context,
-    schemas: &Vec<YamlSchema>,
+    schemas: &Vec<YamlSchema<'_>>,
     value: &saphyr::MarkedYaml,
 ) -> Result<bool> {
     let mut one_of_is_valid = false;

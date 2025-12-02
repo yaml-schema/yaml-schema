@@ -114,12 +114,12 @@ pub fn format_linked_hash_map<K, V>(
     linked_hash_map: &linked_hash_map::LinkedHashMap<K, V>,
 ) -> String
 where
-    K: std::fmt::Display,
+    K: AsRef<str>,
     V: std::fmt::Display,
 {
     let items: Vec<String> = linked_hash_map
         .iter()
-        .map(|(k, v)| format!("{}: {}", k, v))
+        .map(|(k, v)| format!("{}: {}", k.as_ref(), v))
         .collect();
     format!("{{ {} }}", items.join(", "))
 }
@@ -127,7 +127,7 @@ where
 /// Formats a HashMap as a string, ala JSON
 pub fn format_hash_map<K, V>(hash_map: &HashMap<K, V>) -> String
 where
-    K: std::fmt::Display,
+    K: AsRef<str>,
     V: std::fmt::Display,
 {
     if hash_map.is_empty() {
@@ -135,7 +135,7 @@ where
     }
     let items: Vec<String> = hash_map
         .iter()
-        .map(|(k, v)| format!("{}: {}", k, v))
+        .map(|(k, v)| format!("\"{}\": {}", k.as_ref(), v))
         .collect();
     format!("{{ {} }}", items.join(", "))
 }
@@ -178,9 +178,11 @@ pub fn filter_mapping<'a>(
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{format_scalar, hash_map, scalar_to_string};
     use ordered_float::OrderedFloat;
+    use saphyr::LoadableYamlNode as _;
     use std::collections::HashMap;
+
+    use super::*;
 
     #[test]
     fn test_hash_map() {
@@ -225,6 +227,21 @@ mod tests {
         assert_eq!(
             "\"foo\"",
             format_scalar(&saphyr::Scalar::String("foo".into()))
+        );
+    }
+
+    #[test]
+    fn test_format_linked_hash_map() {
+        let docs = MarkedYaml::load_from_str("foo: bar").unwrap();
+        let doc = docs.first().expect("Expected a document");
+        let mapping = doc.data.as_mapping().expect("Expected a mapping");
+        let linked_hash_map = mapping
+            .into_iter()
+            .map(|(k, v)| (format_yaml_data(&k.data), format_yaml_data(&v.data)))
+            .collect::<linked_hash_map::LinkedHashMap<String, String>>();
+        assert_eq!(
+            "{ \"foo\": \"bar\" }",
+            format_linked_hash_map(&linked_hash_map)
         );
     }
 }

@@ -1,5 +1,6 @@
-use log::debug;
+use std::fmt::Display;
 
+use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
@@ -17,16 +18,16 @@ use crate::utils::format_yaml_data;
 
 /// An array schema represents an array
 #[derive(Debug, Default, PartialEq)]
-pub struct ArraySchema {
-    pub items: Option<BooleanOrSchema>,
-    pub prefix_items: Option<Vec<YamlSchema>>,
-    pub contains: Option<YamlSchema>,
+pub struct ArraySchema<'r> {
+    pub items: Option<BooleanOrSchema<'r>>,
+    pub prefix_items: Option<Vec<YamlSchema<'r>>>,
+    pub contains: Option<YamlSchema<'r>>,
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ArraySchema {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
         let mut array_schema = ArraySchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(s)) = &key.data {
@@ -76,7 +77,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ArraySchema {
     }
 }
 
-impl Validator for ArraySchema {
+impl Validator for ArraySchema<'_> {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         debug!("[ArraySchema] self: {self:?}");
         let data = &value.data;
@@ -170,7 +171,7 @@ impl Validator for ArraySchema {
     }
 }
 
-impl std::fmt::Display for ArraySchema {
+impl Display for ArraySchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

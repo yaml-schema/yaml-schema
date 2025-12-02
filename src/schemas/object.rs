@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use hashlink::LinkedHashMap;
 use log::debug;
 use regex::Regex;
@@ -18,26 +20,26 @@ use crate::utils::linked_hash_map;
 
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
-pub struct ObjectSchema {
-    pub properties: Option<LinkedHashMap<String, YamlSchema>>,
+pub struct ObjectSchema<'r> {
+    pub properties: Option<LinkedHashMap<String, YamlSchema<'r>>>,
     pub required: Option<Vec<String>>,
-    pub additional_properties: Option<BooleanOrSchema>,
-    pub pattern_properties: Option<LinkedHashMap<String, YamlSchema>>,
+    pub additional_properties: Option<BooleanOrSchema<'r>>,
+    pub pattern_properties: Option<LinkedHashMap<String, YamlSchema<'r>>>,
     pub property_names: Option<StringSchema>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
 }
 
-impl ObjectSchema {
-    pub fn builder() -> ObjectSchemaBuilder {
+impl<'r> ObjectSchema<'r> {
+    pub fn builder() -> ObjectSchemaBuilder<'r> {
         ObjectSchemaBuilder::new()
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
+impl<'r> TryFrom<&MarkedYaml<'r>> for ObjectSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(marked_yaml: &MarkedYaml<'_>) -> Result<Self> {
+    fn try_from(marked_yaml: &MarkedYaml<'r>) -> Result<Self> {
         debug!("[ObjectSchema]: TryFrom {marked_yaml:?}");
         if let YamlData::Mapping(mapping) = &marked_yaml.data {
             Ok(ObjectSchema::try_from(mapping)?)
@@ -47,10 +49,10 @@ impl TryFrom<&MarkedYaml<'_>> for ObjectSchema {
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ObjectSchema {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
         debug!(
             "[ObjectSchema#try_from] Mapping: {}",
             format_annotated_mapping(mapping)
@@ -155,7 +157,9 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for ObjectSchema {
     }
 }
 
-fn load_properties_marked(value: &MarkedYaml) -> Result<LinkedHashMap<String, YamlSchema>> {
+fn load_properties_marked<'r>(
+    value: &MarkedYaml<'r>,
+) -> Result<LinkedHashMap<String, YamlSchema<'r>>> {
     if let YamlData::Mapping(mapping) = &value.data {
         let mut properties = LinkedHashMap::new();
         for (key, value) in mapping.iter() {
@@ -188,7 +192,9 @@ fn load_properties_marked(value: &MarkedYaml) -> Result<LinkedHashMap<String, Ya
     }
 }
 
-fn load_additional_properties_marked(marked_yaml: &MarkedYaml) -> Result<BooleanOrSchema> {
+fn load_additional_properties_marked<'input>(
+    marked_yaml: &MarkedYaml<'input>,
+) -> Result<BooleanOrSchema<'input>> {
     match &marked_yaml.data {
         YamlData::Value(scalar) => match scalar {
             Scalar::Boolean(b) => Ok(BooleanOrSchema::Boolean(*b)),
@@ -198,7 +204,9 @@ fn load_additional_properties_marked(marked_yaml: &MarkedYaml) -> Result<Boolean
                 scalar
             )),
         },
-        YamlData::Mapping(_mapping) => marked_yaml.try_into().map(BooleanOrSchema::schema),
+        YamlData::Mapping(_mapping) => marked_yaml
+            .try_into()
+            .map(|schema| BooleanOrSchema::schema(schema)),
         _ => Err(unsupported_type!(
             "Expected type: boolean or mapping, but got: {:?}",
             marked_yaml
@@ -206,39 +214,39 @@ fn load_additional_properties_marked(marked_yaml: &MarkedYaml) -> Result<Boolean
     }
 }
 
-impl std::fmt::Display for ObjectSchema {
+impl Display for ObjectSchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Object {self:?}")
     }
 }
 
-pub struct ObjectSchemaBuilder(ObjectSchema);
+pub struct ObjectSchemaBuilder<'r>(ObjectSchema<'r>);
 
-impl Default for ObjectSchemaBuilder {
+impl Default for ObjectSchemaBuilder<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ObjectSchemaBuilder {
+impl<'r> ObjectSchemaBuilder<'r> {
     pub fn new() -> Self {
         Self(ObjectSchema::default())
     }
 
-    pub fn build(&mut self) -> ObjectSchema {
+    pub fn build(&mut self) -> ObjectSchema<'r> {
         std::mem::take(&mut self.0)
     }
 
-    pub fn boxed(&mut self) -> Box<ObjectSchema> {
+    pub fn boxed(&mut self) -> Box<ObjectSchema<'r>> {
         Box::new(self.build())
     }
 
-    pub fn properties(&mut self, properties: LinkedHashMap<String, YamlSchema>) -> &mut Self {
+    pub fn properties(&mut self, properties: LinkedHashMap<String, YamlSchema<'r>>) -> &mut Self {
         self.0.properties = Some(properties);
         self
     }
 
-    pub fn property<K>(&mut self, key: K, value: YamlSchema) -> &mut Self
+    pub fn property<K>(&mut self, key: K, value: YamlSchema<'r>) -> &mut Self
     where
         K: Into<String>,
     {
@@ -267,20 +275,20 @@ impl ObjectSchemaBuilder {
         self
     }
 
-    pub fn additional_property_types(&mut self, typed_schema: YamlSchema) -> &mut Self {
+    pub fn additional_property_types(&mut self, typed_schema: YamlSchema<'r>) -> &mut Self {
         self.0.additional_properties = Some(BooleanOrSchema::schema(typed_schema));
         self
     }
 
     pub fn pattern_properties(
         &mut self,
-        pattern_properties: LinkedHashMap<String, YamlSchema>,
+        pattern_properties: LinkedHashMap<String, YamlSchema<'r>>,
     ) -> &mut Self {
         self.0.pattern_properties = Some(pattern_properties);
         self
     }
 
-    pub fn pattern_property<K>(&mut self, key: K, value: YamlSchema) -> &mut Self
+    pub fn pattern_property<K>(&mut self, key: K, value: YamlSchema<'r>) -> &mut Self
     where
         K: Into<String>,
     {

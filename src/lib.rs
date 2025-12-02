@@ -1,5 +1,6 @@
 //! yaml-schema is a library for validating YAML data against a JSON Schema.
 
+use jsonptr::Pointer;
 use log::debug;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
@@ -34,14 +35,15 @@ pub fn version() -> String {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A RootSchema represents the root document in a schema document, and includes additional
-/// fields such as `$schema` that are not allowed in subschemas.
+/// fields such as `$schema` that are not allowed in subschemas. It also provides a way to
+/// resolve references to other schemas.
 #[derive(Debug, PartialEq)]
-pub struct RootSchema {
+pub struct RootSchema<'r> {
     pub meta_schema: Option<String>,
-    pub schema: YamlSchema,
+    pub schema: YamlSchema<'r>,
 }
 
-impl RootSchema {
+impl<'r> RootSchema<'r> {
     /// Create an empty RootSchema
     pub fn empty() -> Self {
         Self {
@@ -51,31 +53,53 @@ impl RootSchema {
     }
 
     /// Create a new RootSchema with a given schema
-    pub fn new(schema: YamlSchema) -> Self {
+    pub fn new(schema: YamlSchema<'r>) -> Self {
         Self {
             meta_schema: None,
             schema,
         }
     }
 
-    pub fn get_def(&self, _name: &str) -> Option<&YamlSchema> {
-        unimplemented!()
+    /// Resolve a JSON Pointer to an element in the schema.
+    pub fn resolve(&self, pointer: &Pointer) -> Option<&YamlSchema<'_>> {
+        let components = pointer.components().collect::<Vec<_>>();
+        debug!("[RootSchema#resolve] components: {components:?}");
+        components.first().and_then(|component| {
+            debug!("[RootSchema#resolve] component: {component:?}");
+            match component {
+                jsonptr::Component::Root => {
+                    let components = &components[1..];
+                    components.first().and_then(|component| {
+                        debug!("[RootSchema#resolve] component: {component:?}");
+                        match component {
+                            jsonptr::Component::Root => unimplemented!(),
+                            jsonptr::Component::Token(token) => {
+                                self.schema.resolve(Some(token), &components[1..])
+                            }
+                        }
+                    })
+                }
+                jsonptr::Component::Token(token) => {
+                    self.schema.resolve(Some(token), &components[1..])
+                }
+            }
+        })
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for RootSchema {
+impl<'r> TryFrom<&MarkedYaml<'r>> for RootSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(marked_yaml: &MarkedYaml<'_>) -> Result<Self> {
+    fn try_from(marked_yaml: &MarkedYaml<'r>) -> Result<Self> {
         match &marked_yaml.data {
             YamlData::Value(scalar) => match scalar {
                 Scalar::Boolean(r#bool) => Ok(Self {
                     meta_schema: None,
-                    schema: YamlSchema::BooleanLiteral(*r#bool),
+                    schema: YamlSchema::<'r>::BooleanLiteral(*r#bool),
                 }),
                 Scalar::Null => Ok(RootSchema {
                     meta_schema: None,
-                    schema: YamlSchema::Null,
+                    schema: YamlSchema::<'r>::Null,
                 }),
                 _ => Err(generic_error!(
                     "[loader#load_from_doc] Don't know how to a handle scalar: {:?}",
@@ -105,7 +129,7 @@ impl TryFrom<&MarkedYaml<'_>> for RootSchema {
     }
 }
 
-impl Validator for RootSchema {
+impl Validator for RootSchema<'_> {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         self.schema.validate(context, value)
     }

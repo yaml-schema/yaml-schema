@@ -20,7 +20,7 @@ use crate::utils::try_unwrap_saphyr_scalar;
 
 /// Load a YAML schema from a file.
 /// Delegates to the `load_from_doc` function to load the schema from the first document.
-pub fn load_file<S: AsRef<str>>(path: S) -> Result<RootSchema> {
+pub fn load_file<'f, S: AsRef<str>>(path: S) -> Result<RootSchema<'f>> {
     let fs_metadata = std::fs::metadata(path.as_ref())?;
     if !fs_metadata.is_file() {
         return Err(Error::FileNotFound(path.as_ref().to_string()));
@@ -30,13 +30,13 @@ pub fn load_file<S: AsRef<str>>(path: S) -> Result<RootSchema> {
 }
 
 /// Load a YAML schema from a &str.
-pub fn load_from_str(s: &str) -> Result<RootSchema> {
+pub fn load_from_str<'f>(s: &str) -> Result<RootSchema<'f>> {
     let docs = MarkedYaml::load_from_str(s).map_err(Error::YamlParsingError)?;
     load_from_docs(docs)
 }
 
 /// Load a RootSchema from Vec of docs.
-pub fn load_from_docs(docs: Vec<MarkedYaml>) -> Result<RootSchema> {
+pub fn load_from_docs<'f>(docs: Vec<MarkedYaml<'f>>) -> Result<RootSchema<'f>> {
     if docs.is_empty() {
         return Ok(RootSchema::empty()); // empty schema
     }
@@ -45,7 +45,7 @@ pub fn load_from_docs(docs: Vec<MarkedYaml>) -> Result<RootSchema> {
 }
 
 /// Load a YAML schema from a document. Basically just a wrapper around the TryFrom<&MarkedYaml<'_>> for RootSchema.
-pub fn load_from_doc(doc: &MarkedYaml) -> Result<RootSchema> {
+pub fn load_from_doc<'f>(doc: &MarkedYaml<'f>) -> Result<RootSchema<'f>> {
     RootSchema::try_from(doc)
 }
 
@@ -86,7 +86,7 @@ impl From<reqwest::Error> for crate::Error {
 ///
 /// let schema = download_from_url("https://example.com/schema.yaml", None).unwrap();
 /// ```
-pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<RootSchema> {
+pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<RootSchema<'_>> {
     // Create a new HTTP client with a custom timeout
     let timeout = Duration::from_secs(timeout_seconds.unwrap_or(30));
     let client = Client::builder()
@@ -124,7 +124,7 @@ pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) 
     }
 }
 
-pub fn load_array_of_schemas_marked(value: &MarkedYaml) -> Result<Vec<YamlSchema>> {
+pub fn load_array_of_schemas_marked<'f>(value: &MarkedYaml<'f>) -> Result<Vec<YamlSchema<'f>>> {
     if let YamlData::Sequence(values) = &value.data {
         values
             .iter()
@@ -180,7 +180,9 @@ pub fn load_number(value: &saphyr::Yaml) -> Result<Number> {
     }
 }
 
-pub fn load_array_items_marked(value: &MarkedYaml) -> Result<BooleanOrSchema> {
+pub fn load_array_items_marked<'input>(
+    value: &MarkedYaml<'input>,
+) -> Result<BooleanOrSchema<'input>> {
     match &value.data {
         YamlData::Value(scalar) => {
             if let Scalar::Boolean(b) = scalar {
@@ -400,6 +402,27 @@ mod tests {
     }
 
     #[test]
+    fn test_defs() {
+        let root_schema = loader::load_from_str(
+            r##"
+            $defs:
+              foo:
+                type: boolean
+            "##,
+        )
+        .unwrap();
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        assert!(subschema.defs.is_some());
+        let Some(defs) = &subschema.defs else {
+            panic!("Expected defs, but got: {:?}", &subschema.defs);
+        };
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs.get("foo"), Some(&YamlSchema::typed_boolean()));
+    }
+
+    #[test]
     fn test_one_of_with_ref() {
         let root_schema = loader::load_from_str(
             r##"
@@ -428,8 +451,8 @@ mod tests {
         );
         assert_eq!(
             one_of.one_of[1],
-            YamlSchema::ref_str("foo"),
-            "one_of[1] should be a reference to 'foo'"
+            YamlSchema::ref_str("#/$defs/foo"),
+            "one_of[1] should be a reference to '#/$defs/foo'"
         );
 
         let s = r#"

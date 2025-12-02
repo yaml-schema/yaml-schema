@@ -14,7 +14,7 @@ use yaml_schema::validation::ValidationError;
 
 #[derive(Debug, Default, World)]
 pub struct FeaturesWorld {
-    root_schema: Option<RootSchema>,
+    root_schema: Option<RootSchema<'static>>,
     yaml_schema_error: Option<yaml_schema::Error>,
     errors: Option<Rc<RefCell<Vec<ValidationError>>>>,
 }

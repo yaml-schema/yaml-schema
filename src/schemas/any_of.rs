@@ -15,20 +15,20 @@ use crate::utils::format_vec;
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
 /// to the context.
 #[derive(Debug, Default, PartialEq)]
-pub struct AnyOfSchema {
-    pub any_of: Vec<YamlSchema>,
+pub struct AnyOfSchema<'r> {
+    pub any_of: Vec<YamlSchema<'r>>,
 }
 
-impl std::fmt::Display for AnyOfSchema {
+impl std::fmt::Display for AnyOfSchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "anyOf:{}", format_vec(&self.any_of))
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for AnyOfSchema {
+impl<'r> TryFrom<&MarkedYaml<'r>> for AnyOfSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(value: &MarkedYaml<'_>) -> Result<Self> {
+    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
         if let YamlData::Mapping(mapping) = &value.data {
             AnyOfSchema::try_from(mapping)
         } else {
@@ -37,10 +37,10 @@ impl TryFrom<&MarkedYaml<'_>> for AnyOfSchema {
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AnyOfSchema {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for AnyOfSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
         let mut any_of_schema = AnyOfSchema::default();
         if let Some(value) = mapping.get(&MarkedYaml::value_from_str("anyOf")) {
             any_of_schema.any_of = loader::load_array_of_schemas_marked(value)?;
@@ -51,7 +51,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for AnyOfSchema {
     }
 }
 
-impl Validator for crate::schemas::AnyOfSchema {
+impl Validator for crate::schemas::AnyOfSchema<'_> {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let any_of_is_valid = validate_any_of(&self.any_of, context, value)?;
         debug!("any_of_is_valid: {any_of_is_valid}");
