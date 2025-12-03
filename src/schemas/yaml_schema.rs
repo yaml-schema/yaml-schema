@@ -16,6 +16,7 @@ use crate::Validator;
 use crate::loader::marked_yaml_to_string;
 use crate::schemas::AllOfSchema;
 use crate::schemas::AnyOfSchema;
+use crate::schemas::ArraySchema;
 use crate::schemas::IntegerSchema;
 use crate::schemas::NotSchema;
 use crate::schemas::NumberSchema;
@@ -27,6 +28,7 @@ use crate::utils::format_linked_hash_map;
 use crate::utils::format_marked_yaml;
 use crate::utils::format_marker;
 use crate::utils::format_scalar;
+use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
 
 /// YamlSchema is the base of the validation model
@@ -239,6 +241,15 @@ impl SchemaType {
     }
 }
 
+impl Display for SchemaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SchemaType::Single(value) => write!(f, "{value}"),
+            SchemaType::Multiple(values) => write!(f, "{}", format_vec(values)),
+        }
+    }
+}
+
 /// A Subschema contains the core schema elements and validation
 #[derive(Debug, Default, PartialEq)]
 pub struct Subschema<'r> {
@@ -265,6 +276,7 @@ pub struct Subschema<'r> {
     /// `enum`
     pub r#enum: Option<Vec<ConstValue>>,
 
+    pub array_schema: Option<ArraySchema<'r>>,
     pub integer_schema: Option<IntegerSchema>,
     pub number_schema: Option<NumberSchema>,
     pub object_schema: Option<ObjectSchema<'r>>,
@@ -354,6 +366,14 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
     type Error = Error;
 
     fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
+        debug!(
+            "[Subschema#try_from] mapping has {} keys",
+            mapping.keys().len()
+        );
+        for key in mapping.keys() {
+            debug!("[Subschema#try_from] key: {:?}", key.data);
+        }
+
         let metadata_and_annotations = MetadataAndAnnotations::try_from(mapping)?;
         debug!("[Subschema#try_from] metadata_and_annotations: {metadata_and_annotations}");
 
@@ -457,30 +477,34 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
         }
 
         // Instantiate the appropriate schema based on the type
-        let mut string_schema = None;
-        let mut number_schema = None;
+        let mut array_schema = None;
         let mut integer_schema = None;
+        let mut number_schema = None;
         let mut object_schema = None;
+        let mut string_schema = None;
         if let Some(type_value) = &r#type
             && let SchemaType::Single(s) = type_value
         {
             match s.as_ref() {
-                "string" => {
-                    string_schema = StringSchema::try_from(mapping).ok();
+                "array" => {
+                    array_schema = ArraySchema::try_from(mapping).ok();
+                }
+                "boolean" => {}
+                "integer" => {
+                    integer_schema = IntegerSchema::try_from(mapping).ok();
                 }
                 "number" => {
                     number_schema = NumberSchema::try_from(mapping).ok();
                 }
-                "integer" => {
-                    integer_schema = IntegerSchema::try_from(mapping).ok();
-                }
                 "object" => {
                     object_schema = ObjectSchema::try_from(mapping).ok();
                 }
-                "boolean" => {}
+                "string" => {
+                    string_schema = StringSchema::try_from(mapping).ok();
+                }
                 _ => {
                     return Err(unsupported_type!(
-                        "Expected type: string, number, integer, or object, but got: {}",
+                        "Expected type: string, number, integer, object, or array, but got: {}",
                         s
                     ));
                 }
@@ -498,10 +522,11 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
             r#type,
             r#const,
             r#enum,
-            string_schema,
-            number_schema,
+            array_schema,
             integer_schema,
+            number_schema,
             object_schema,
+            string_schema,
             anchor: None,
         })
     }
@@ -510,7 +535,15 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
 impl Display for Subschema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
-        self.metadata_and_annotations.fmt(f)?;
+        if !self.metadata_and_annotations.is_empty() {
+            write!(f, " ")?;
+            self.metadata_and_annotations.fmt(f)?;
+            write!(f, " ")?;
+        }
+        if let Some(r#type) = &self.r#type {
+            write!(f, "type: ")?;
+            r#type.fmt(f)?;
+        }
         if let Some(r#ref) = &self.r#ref {
             write!(f, "$ref: ")?;
             r#ref.fmt(f)?;
@@ -591,6 +624,26 @@ impl Validator for Subschema<'_> {
         if let Some(object_schema) = &self.object_schema {
             debug!("[Subschema] Validating object schema: {object_schema:?}");
             object_schema.validate(context, value)?;
+        }
+
+        if let Some(any_of) = &self.any_of {
+            debug!("[Subschema] Validating anyOf schema: {any_of:?}");
+            any_of.validate(context, value)?;
+        }
+
+        if let Some(all_of) = &self.all_of {
+            debug!("[Subschema] Validating allOf schema: {all_of:?}");
+            all_of.validate(context, value)?;
+        }
+
+        if let Some(one_of) = &self.one_of {
+            debug!("[Subschema] Validating oneOf schema: {one_of:?}");
+            one_of.validate(context, value)?;
+        }
+
+        if let Some(not) = &self.not {
+            debug!("[Subschema] Validating not schema: {not:?}");
+            not.validate(context, value)?;
         }
 
         Ok(())
@@ -687,6 +740,26 @@ mod tests {
     use saphyr::LoadableYamlNode;
 
     use super::*;
+
+    #[test]
+    fn test_type_boolean() {
+        let yaml = r#"
+        type: boolean
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).expect("Failed to load YAML");
+        let marked_yaml = doc.first().unwrap();
+        let yaml_schema = YamlSchema::try_from(marked_yaml).unwrap();
+        let YamlSchema::Subschema(subschema) = yaml_schema else {
+            panic!("Expected a subschema");
+        };
+        assert!(subschema.r#type.is_some());
+        let types = subschema.r#type.expect("Expected a type");
+        assert!(types.is_single());
+        let SchemaType::Single(type_value) = types else {
+            panic!("Expected a single type");
+        };
+        assert_eq!(type_value, "boolean");
+    }
 
     #[test]
     fn test_metadata_and_annotations_try_from() {

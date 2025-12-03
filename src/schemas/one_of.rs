@@ -11,6 +11,7 @@ use crate::Validator;
 use crate::YamlSchema;
 use crate::loader;
 use crate::utils::format_vec;
+use crate::utils::format_yaml_data;
 
 /// The `oneOf` schema is a schema that matches if one, and only one of the schemas in the `oneOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
@@ -42,9 +43,14 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for OneOfSchema<'r> {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> Result<Self> {
+        debug!("[OneOfSchema#try_from] mapping: {mapping:?}");
         match mapping.get(&MarkedYaml::value_from_str("oneOf")) {
-            Some(value) => {
-                let one_of = loader::load_array_of_schemas_marked(value)?;
+            Some(marked_yaml) => {
+                debug!(
+                    "[OneOfSchema#try_from] marked_yaml: {}",
+                    format_yaml_data(&marked_yaml.data)
+                );
+                let one_of = loader::load_array_of_schemas_marked(marked_yaml)?;
                 Ok(OneOfSchema { one_of })
             }
             None => Err(generic_error!("No `oneOf` key found!")),
@@ -103,8 +109,51 @@ pub fn validate_one_of(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Validator as _, YamlSchema, loader};
     use saphyr::LoadableYamlNode;
+    use saphyr::MarkedYaml;
+
+    use crate::YamlSchema;
+    use crate::loader;
+    use crate::schemas::SchemaType;
+
+    use super::*;
+
+    #[test]
+    fn test_one_of_schema() {
+        let yaml = r#"
+        oneOf:
+          - type: boolean
+          - type: integer
+        "#;
+        let docs = MarkedYaml::load_from_str(yaml).expect("Failed to load YAML");
+        let marked_yaml = docs.first().unwrap();
+        let one_of_schema = OneOfSchema::try_from(marked_yaml).unwrap();
+        assert!(one_of_schema.one_of.len() == 2);
+
+        if let YamlSchema::Subschema(subschema) = &one_of_schema.one_of[0]
+            && let Some(r#type) = &subschema.r#type
+            && let SchemaType::Single(type_value) = r#type
+        {
+            assert_eq!(type_value, "boolean");
+        } else {
+            panic!(
+                "Expected Subschema with type: boolean, but got: {:?}",
+                &one_of_schema.one_of[0]
+            );
+        }
+
+        if let YamlSchema::Subschema(subschema) = &one_of_schema.one_of[1]
+            && let Some(r#type) = &subschema.r#type
+            && let SchemaType::Single(type_value) = r#type
+        {
+            assert_eq!(type_value, "integer");
+        } else {
+            panic!(
+                "Expected Subschema with type: integer, but got: {:?}",
+                &one_of_schema.one_of[1]
+            );
+        }
+    }
 
     #[test]
     fn test_validate_one_of_with_array_of_schemas() {
@@ -125,7 +174,7 @@ mod tests {
               - $ref: "#/$defs/array_of_schemas"
             "##,
         )
-        .unwrap();
+        .expect("Failed to load schema");
         println!("root_schema: {root_schema:?}");
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
@@ -139,7 +188,7 @@ mod tests {
         let s = r#"
             false
             "#;
-        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let docs = MarkedYaml::load_from_str(s).unwrap();
         let value = docs.first().unwrap();
         let context = crate::Context::with_root_schema(&root_schema, false);
         let result = root_schema.validate(&context, value);
