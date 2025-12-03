@@ -68,7 +68,7 @@ Feature: Basic YAML schema
       ```
       type: foo
       ```
-    Then it should fail with "Unsupported type 'foo'!"
+    Then it should fail with "Unsupported type: Expected type: string, number, integer, object, or array, but got: foo"
 
   Scenario: "type: string" should accept strings
     Given a YAML schema:

@@ -298,7 +298,7 @@ impl<'r> Subschema<'r> {
                 "$defs" => {
                     debug!("[Subschema#resolve] Resolving $defs");
                     if let Some(defs) = self.defs.as_ref() {
-                        debug!("[Subschema#resolve] defs: {:?}", defs);
+                        debug!("[Subschema#resolve] defs: {}", format_linked_hash_map(defs));
                         if let Some(component) = components.first() {
                             debug!("[Subschema#resolve] component: {component:?}");
                             if let jsonptr::Component::Token(next_token) = component {

@@ -63,7 +63,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema<'r> {
                         let prefix_items = loader::load_array_of_schemas_marked(value)?;
                         array_schema.prefix_items = Some(prefix_items);
                     }
-                    _ => unimplemented!("Unsupported key for ArraySchema: {}", s),
+                    _ => debug!("Unsupported key for ArraySchema: {}", s),
                 }
             } else {
                 return Err(generic_error!(
