@@ -125,10 +125,13 @@ mod tests {
           - type: boolean
           - type: integer
         "#;
-        let docs = MarkedYaml::load_from_str(yaml).expect("Failed to load YAML");
-        let marked_yaml = docs.first().unwrap();
-        let one_of_schema = OneOfSchema::try_from(marked_yaml).unwrap();
-        assert!(one_of_schema.one_of.len() == 2);
+        let root_schema = loader::load_from_str(yaml).expect("Failed to load schema");
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        let Some(one_of_schema) = &subschema.one_of else {
+            panic!("Expected Subschema with oneOf, but got: {subschema:?}");
+        };
 
         if let YamlSchema::Subschema(subschema) = &one_of_schema.one_of[0]
             && let Some(r#type) = &subschema.r#type
@@ -153,6 +156,17 @@ mod tests {
                 &one_of_schema.one_of[1]
             );
         }
+
+        let s = r#"
+            false
+            "#;
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::with_root_schema(&root_schema, false);
+        let result = root_schema.validate(&context, value);
+
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
     }
 
     #[test]

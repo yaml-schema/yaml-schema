@@ -606,6 +606,11 @@ impl Validator for Subschema<'_> {
             }
         }
 
+        if let Some(array_schema) = &self.array_schema {
+            debug!("[Subschema] Validating array schema: {array_schema:?}");
+            array_schema.validate(context, value)?;
+        }
+
         if let Some(string_schema) = &self.string_schema {
             debug!("[Subschema] Validating string schema: {string_schema:?}");
             string_schema.validate(context, value)?;

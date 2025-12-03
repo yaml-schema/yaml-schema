@@ -261,7 +261,7 @@ mod tests {
         assert!(root_schema.is_err());
         assert_eq!(
             root_schema.unwrap_err().to_string(),
-            "Unsupported type: Expected type: string, number, integer, or object, but got: foo"
+            "Unsupported type: Expected type: string, number, integer, object, or array, but got: foo"
         );
     }
 
