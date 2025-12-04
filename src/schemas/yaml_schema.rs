@@ -725,6 +725,17 @@ impl Subschema<'_> {
                     context.add_error(value, format!("No array schema found for type: {}", r#type));
                 }
             }
+            "boolean" => {
+                if !matches!(&value.data, YamlData::Value(Scalar::Boolean(_))) {
+                    context.add_error(
+                        value,
+                        format!(
+                            "Expected boolean, but got: {}",
+                            format_yaml_data(&value.data)
+                        ),
+                    );
+                }
+            }
             "string" => {
                 if let Some(string_schema) = &self.string_schema {
                     debug!("[Subschema] Validating string schema: {string_schema:?}");
