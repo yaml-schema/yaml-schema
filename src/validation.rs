@@ -62,7 +62,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_type_null() {
+    fn test_validate_null() {
         let schema = YamlSchema::Null;
         let context = Context::default();
         let docs = saphyr::MarkedYaml::load_from_str("value").unwrap();

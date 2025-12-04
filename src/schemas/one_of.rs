@@ -134,8 +134,7 @@ mod tests {
         };
 
         if let YamlSchema::Subschema(subschema) = &one_of_schema.one_of[0]
-            && let Some(r#type) = &subschema.r#type
-            && let SchemaType::Single(type_value) = r#type
+            && let SchemaType::Single(type_value) = &subschema.r#type
         {
             assert_eq!(type_value, "boolean");
         } else {
@@ -146,8 +145,7 @@ mod tests {
         }
 
         if let YamlSchema::Subschema(subschema) = &one_of_schema.one_of[1]
-            && let Some(r#type) = &subschema.r#type
-            && let SchemaType::Single(type_value) = r#type
+            && let SchemaType::Single(type_value) = &subschema.r#type
         {
             assert_eq!(type_value, "integer");
         } else {
@@ -211,6 +209,36 @@ mod tests {
         for error in context.errors.borrow().iter() {
             println!("error: {error:?}");
         }
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_validate_one_of_with_null_and_object() {
+        let root_schema = loader::load_from_str(
+            r#"
+            oneOf:
+              - type: null
+              - type: object
+            "#,
+        )
+        .expect("Failed to load schema");
+
+        let s = "null";
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::with_root_schema(&root_schema, false);
+        let result = root_schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
+
+        let s = r#"
+        name: "John Doe"
+        "#;
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::with_root_schema(&root_schema, false);
+        let result = root_schema.validate(&context, value);
+        assert!(result.is_ok());
         assert!(!context.has_errors());
     }
 }

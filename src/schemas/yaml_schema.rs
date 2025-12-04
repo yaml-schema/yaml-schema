@@ -55,7 +55,7 @@ impl<'r> YamlSchema<'r> {
     /// Create a YamlSchema with a single type: `boolean`
     pub fn typed_boolean() -> Self {
         Self::subschema(Subschema {
-            r#type: Some(SchemaType::Single("boolean".to_string())),
+            r#type: SchemaType::new("boolean"),
             ..Default::default()
         })
     }
@@ -68,7 +68,7 @@ impl<'r> YamlSchema<'r> {
     /// Create a YamlSchema with a single type: `string`
     pub fn typed_string(string_schema: StringSchema) -> Self {
         Self::subschema(Subschema {
-            r#type: Some(SchemaType::Single("string".to_string())),
+            r#type: SchemaType::new("string"),
             string_schema: Some(string_schema),
             ..Default::default()
         })
@@ -77,7 +77,7 @@ impl<'r> YamlSchema<'r> {
     /// Create a YamlSchema with a single type: `object`
     pub fn typed_object(object_schema: ObjectSchema<'r>) -> Self {
         Self::subschema(Subschema {
-            r#type: Some(SchemaType::Single("object".to_string())),
+            r#type: SchemaType::new("object"),
             object_schema: Some(object_schema),
             ..Default::default()
         })
@@ -124,7 +124,7 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for YamlSchema<'r> {
 impl<'r> From<NumberSchema> for YamlSchema<'r> {
     fn from(number_schema: NumberSchema) -> Self {
         YamlSchema::subschema(Subschema {
-            r#type: Some(SchemaType::Single("number".to_string())),
+            r#type: SchemaType::new("number"),
             number_schema: Some(number_schema),
             ..Default::default()
         })
@@ -134,7 +134,7 @@ impl<'r> From<NumberSchema> for YamlSchema<'r> {
 impl<'r> From<IntegerSchema> for YamlSchema<'r> {
     fn from(integer_schema: IntegerSchema) -> Self {
         YamlSchema::subschema(Subschema {
-            r#type: Some(SchemaType::Single("integer".to_string())),
+            r#type: SchemaType::new("integer"),
             integer_schema: Some(integer_schema),
             ..Default::default()
         })
@@ -144,7 +144,7 @@ impl<'r> From<IntegerSchema> for YamlSchema<'r> {
 impl<'r> From<StringSchema> for YamlSchema<'r> {
     fn from(string_schema: StringSchema) -> Self {
         YamlSchema::subschema(Subschema {
-            r#type: Some(SchemaType::Single("string".to_string())),
+            r#type: SchemaType::new("string"),
             string_schema: Some(string_schema),
             ..Default::default()
         })
@@ -223,27 +223,48 @@ impl Display for BooleanOrSchema<'_> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub enum SchemaType {
+    #[default]
+    /// No `type:` was provided
+    None,
+    /// A single type
     Single(String),
+    /// Multiple types
     Multiple(Vec<String>),
 }
 
 impl SchemaType {
-    pub fn single<S: Into<String>>(value: S) -> Self {
+    /// Create a new SchemaType with a single value
+    pub fn new<S: Into<String>>(value: S) -> Self {
         SchemaType::Single(value.into())
     }
+
+    pub fn is_none(&self) -> bool {
+        matches!(self, SchemaType::None)
+    }
+
     pub fn is_single(&self) -> bool {
         matches!(self, SchemaType::Single(_))
     }
+
     pub fn is_multiple(&self) -> bool {
         matches!(self, SchemaType::Multiple(_))
+    }
+
+    pub fn is_or_contains(&self, r#type: &str) -> bool {
+        match self {
+            SchemaType::None => false,
+            SchemaType::Single(s) => s == r#type,
+            SchemaType::Multiple(values) => values.contains(&r#type.to_string()),
+        }
     }
 }
 
 impl Display for SchemaType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            SchemaType::None => Ok(()), // No `type:` was provided
             SchemaType::Single(value) => write!(f, "{value}"),
             SchemaType::Multiple(values) => write!(f, "{}", format_vec(values)),
         }
@@ -270,7 +291,7 @@ pub struct Subschema<'r> {
     /// `not`
     pub not: Option<NotSchema<'r>>,
     /// `type`
-    pub r#type: Option<SchemaType>,
+    pub r#type: SchemaType,
     /// `const`
     pub r#const: Option<ConstValue>,
     /// `enum`
@@ -451,21 +472,22 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
         }
 
         // type
-        let mut r#type: Option<SchemaType> = None;
+        let mut r#type: SchemaType = SchemaType::None;
         if let Some(type_value) = mapping.get(&MarkedYaml::value_from_str("type")) {
             match &type_value.data {
-                YamlData::Value(Scalar::String(s)) => {
-                    r#type = Some(SchemaType::Single(s.to_string()))
+                YamlData::Value(Scalar::Null) => {
+                    r#type = SchemaType::new("null");
                 }
+                YamlData::Value(Scalar::String(s)) => r#type = SchemaType::new(s.as_ref()),
                 YamlData::Sequence(values) => {
-                    r#type = Some(SchemaType::Multiple(
+                    r#type = SchemaType::Multiple(
                         values
                             .iter()
                             .map(|marked_yaml| {
                                 marked_yaml_to_string(marked_yaml, "type must be a string")
                             })
                             .collect::<Result<Vec<String>>>()?,
-                    ))
+                    )
                 }
                 _ => {
                     return Err(schema_loading_error!(
@@ -476,32 +498,43 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
             }
         }
 
-        // Instantiate the appropriate schema based on the type
+        // Instantiate the appropriate schema based on the type(s)
         let mut array_schema = None;
         let mut integer_schema = None;
         let mut number_schema = None;
         let mut object_schema = None;
         let mut string_schema = None;
-        if let Some(type_value) = &r#type
-            && let SchemaType::Single(s) = type_value
-        {
-            match s.as_ref() {
+
+        let types: Vec<&str> = match r#type {
+            SchemaType::None => vec![],
+            SchemaType::Single(ref s) => vec![s],
+            SchemaType::Multiple(ref values) => values.iter().map(|s| s.as_ref()).collect(),
+        };
+
+        for s in types {
+            match s {
                 "array" => {
-                    array_schema = ArraySchema::try_from(mapping).ok();
+                    debug!("[Subschema#try_from] Instantiating array schema");
+                    array_schema = ArraySchema::try_from(mapping).map(Some)?;
                 }
                 "boolean" => {}
                 "integer" => {
-                    integer_schema = IntegerSchema::try_from(mapping).ok();
+                    debug!("[Subschema#try_from] Instantiating integer schema");
+                    integer_schema = IntegerSchema::try_from(mapping).map(Some)?;
                 }
                 "number" => {
-                    number_schema = NumberSchema::try_from(mapping).ok();
+                    debug!("[Subschema#try_from] Instantiating number schema");
+                    number_schema = NumberSchema::try_from(mapping).map(Some)?;
                 }
                 "object" => {
-                    object_schema = ObjectSchema::try_from(mapping).ok();
+                    debug!("[Subschema#try_from] Instantiating object schema");
+                    object_schema = ObjectSchema::try_from(mapping).map(Some)?;
                 }
                 "string" => {
-                    string_schema = StringSchema::try_from(mapping).ok();
+                    debug!("[Subschema#try_from] Instantiating string schema");
+                    string_schema = StringSchema::try_from(mapping).map(Some)?;
                 }
+                "null" => (),
                 _ => {
                     return Err(unsupported_type!(
                         "Expected type: string, number, integer, object, or array, but got: {}",
@@ -510,6 +543,12 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
                 }
             }
         }
+
+        debug!("[Subschema#try_from] array_schema: {array_schema:?}");
+        debug!("[Subschema#try_from] integer_schema: {integer_schema:?}");
+        debug!("[Subschema#try_from] number_schema: {number_schema:?}");
+        debug!("[Subschema#try_from] object_schema: {object_schema:?}");
+        debug!("[Subschema#try_from] string_schema: {string_schema:?}");
 
         Ok(Self {
             metadata_and_annotations,
@@ -540,9 +579,9 @@ impl Display for Subschema<'_> {
             self.metadata_and_annotations.fmt(f)?;
             write!(f, " ")?;
         }
-        if let Some(r#type) = &self.r#type {
+        if !self.r#type.is_none() {
             write!(f, "type: ")?;
-            r#type.fmt(f)?;
+            self.r#type.fmt(f)?;
         }
         if let Some(r#ref) = &self.r#ref {
             write!(f, "$ref: ")?;
@@ -579,6 +618,7 @@ impl Validator for Subschema<'_> {
             "[Subschema] Validating value: {}",
             format_yaml_data(&value.data)
         );
+
         if let Some(reference) = &self.r#ref {
             debug!("[Subschema] Reference found: {reference}");
             let ref_name = &reference.ref_name;
@@ -599,6 +639,7 @@ impl Validator for Subschema<'_> {
                     error!("[Subschema] Cannot find definition: {ref_name}");
                     context.add_error(value, format!("Schema {ref_name} not found"));
                 }
+                return Ok(());
             } else {
                 return Err(generic_error!(
                     "Subschema has a reference, but no root schema was provided!"
@@ -606,29 +647,15 @@ impl Validator for Subschema<'_> {
             }
         }
 
-        if let Some(array_schema) = &self.array_schema {
-            debug!("[Subschema] Validating array schema: {array_schema:?}");
-            array_schema.validate(context, value)?;
-        }
-
-        if let Some(string_schema) = &self.string_schema {
-            debug!("[Subschema] Validating string schema: {string_schema:?}");
-            string_schema.validate(context, value)?;
-        }
-
-        if let Some(number_schema) = &self.number_schema {
-            debug!("[Subschema] Validating number schema: {number_schema:?}");
-            number_schema.validate(context, value)?;
-        }
-
-        if let Some(integer_schema) = &self.integer_schema {
-            debug!("[Subschema] Validating integer schema: {integer_schema:?}");
-            integer_schema.validate(context, value)?;
-        }
-
-        if let Some(object_schema) = &self.object_schema {
-            debug!("[Subschema] Validating object schema: {object_schema:?}");
-            object_schema.validate(context, value)?;
+        // Short-circuit for type: null
+        if self.r#type.is_or_contains("null") {
+            if !matches!(&value.data, YamlData::Value(Scalar::Null)) {
+                context.add_error(
+                    value,
+                    format!("Expected null, but got: {}", format_yaml_data(&value.data)),
+                );
+            }
+            return Ok(());
         }
 
         if let Some(any_of) = &self.any_of {
@@ -651,6 +678,106 @@ impl Validator for Subschema<'_> {
             not.validate(context, value)?;
         }
 
+        match &self.r#type {
+            SchemaType::None => (),
+            SchemaType::Single(s) => self.validate_by_type(context, s.as_ref(), value)?,
+            SchemaType::Multiple(values) => {
+                debug!(
+                    "[Subschema] Validating multiple types: {}",
+                    values.join(", ")
+                );
+                let mut any_matched = false;
+                for s in values {
+                    let sub_context = context.get_sub_context();
+                    self.validate_by_type(&sub_context, s.as_ref(), value)?;
+                    if !sub_context.has_errors() {
+                        any_matched = true;
+                        break;
+                    }
+                }
+                if !any_matched {
+                    context.add_error(
+                        value,
+                        format!("None of type: [{}] matched", values.join(", ")),
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Subschema<'_> {
+    fn validate_by_type(
+        &self,
+        context: &Context,
+        r#type: &str,
+        value: &saphyr::MarkedYaml,
+    ) -> Result<()> {
+        debug!("[Subschema#validate_by_type] r#type: {}", r#type);
+        match r#type {
+            "array" => {
+                if let Some(array_schema) = &self.array_schema {
+                    debug!("[Subschema] Validating array schema: {array_schema:?}");
+                    array_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No array schema found");
+                    context.add_error(value, format!("No array schema found for type: {}", r#type));
+                }
+            }
+            "string" => {
+                if let Some(string_schema) = &self.string_schema {
+                    debug!("[Subschema] Validating string schema: {string_schema:?}");
+                    string_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No string schema found");
+                    context.add_error(
+                        value,
+                        format!("No string schema found for type: {}", r#type),
+                    );
+                }
+            }
+            "number" => {
+                if let Some(number_schema) = &self.number_schema {
+                    debug!("[Subschema] Validating number schema: {number_schema:?}");
+                    number_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No number schema found");
+                    context.add_error(
+                        value,
+                        format!("No number schema found for type: {}", r#type),
+                    );
+                }
+            }
+            "integer" => {
+                if let Some(integer_schema) = &self.integer_schema {
+                    debug!("[Subschema] Validating integer schema: {integer_schema:?}");
+                    integer_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No integer schema found");
+                    context.add_error(
+                        value,
+                        format!("No integer schema found for type: {}", r#type),
+                    );
+                }
+            }
+            "object" => {
+                if let Some(object_schema) = &self.object_schema {
+                    debug!("[Subschema] Validating object schema: {object_schema:?}");
+                    object_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No object schema found");
+                    context.add_error(
+                        value,
+                        format!("No object schema found for type: {}", r#type),
+                    );
+                }
+            }
+            _ => {
+                error!("[Subschema#validate_by_type] Unsupported type: {}", r#type);
+                context.add_error(value, format!("Unsupported type: {}", r#type));
+            }
+        }
         Ok(())
     }
 }
@@ -744,6 +871,8 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for MetadataAndAnnotations {
 mod tests {
     use saphyr::LoadableYamlNode;
 
+    use crate::loader;
+
     use super::*;
 
     #[test]
@@ -757,10 +886,9 @@ mod tests {
         let YamlSchema::Subschema(subschema) = yaml_schema else {
             panic!("Expected a subschema");
         };
-        assert!(subschema.r#type.is_some());
-        let types = subschema.r#type.expect("Expected a type");
-        assert!(types.is_single());
-        let SchemaType::Single(type_value) = types else {
+        assert!(!subschema.r#type.is_none());
+        assert!(subschema.r#type.is_single());
+        let SchemaType::Single(type_value) = subschema.r#type else {
             panic!("Expected a single type");
         };
         assert_eq!(type_value, "boolean");
@@ -814,12 +942,48 @@ mod tests {
         let YamlSchema::Subschema(subschema) = yaml_schema else {
             panic!("Expected a subschema");
         };
-        assert!(subschema.r#type.is_some());
-        let types = subschema.r#type.expect("Expected a type");
-        assert!(types.is_multiple());
-        let SchemaType::Multiple(type_values) = types else {
+        assert!(!subschema.r#type.is_none());
+        assert!(subschema.r#type.is_multiple());
+        let SchemaType::Multiple(type_values) = subschema.r#type else {
             panic!("Expected a multiple type");
         };
         assert_eq!(type_values, vec!["boolean", "number", "integer", "string"]);
+    }
+
+    #[test]
+    fn test_multiple_types() {
+        let schema = r#"
+        type:
+          - string
+          - number
+        "#;
+        let schema = loader::load_from_str(schema).unwrap();
+
+        let s = "I'm a string";
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
+
+        let s = "42";
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
+
+        let s = "null";
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(context.has_errors());
+        let errors = context.errors.borrow();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].error, "None of type: [string, number] matched");
     }
 }

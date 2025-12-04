@@ -109,6 +109,16 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for StringSchema {
                                     s
                                 ));
                             }
+                        } else if let YamlData::Sequence(values) = &value.data {
+                            if !values
+                                .iter()
+                                .any(|v| v.data == MarkedYaml::value_from_str("string").data)
+                            {
+                                return Err(unsupported_type!(
+                                    "Expected type: string, but got: {:?}",
+                                    value
+                                ));
+                            }
                         } else {
                             return Err(expected_type_is_string!(value));
                         }

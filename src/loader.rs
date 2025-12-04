@@ -272,7 +272,7 @@ mod tests {
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
         };
-        assert_eq!(subschema.r#type, Some(SchemaType::single("string")));
+        assert_eq!(subschema.r#type, SchemaType::new("string"));
     }
 
     #[test]
@@ -309,10 +309,7 @@ mod tests {
                 &name_property
             );
         };
-        assert_eq!(
-            name_property_schema.r#type,
-            Some(SchemaType::single("string"))
-        );
+        assert_eq!(name_property_schema.r#type, SchemaType::new("string"));
         assert_eq!(
             name_property_schema.string_schema,
             Some(StringSchema::default())
@@ -335,7 +332,7 @@ mod tests {
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
         };
-        assert_eq!(subschema.r#type, Some(SchemaType::single("string")));
+        assert_eq!(subschema.r#type, SchemaType::new("string"));
         let expected = StringSchema {
             pattern: Some(Regex::new("^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$").unwrap()),
             ..Default::default()
@@ -514,7 +511,7 @@ mod tests {
             let YamlSchema::Subschema(subschema) = &root_schema.schema else {
                 panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
             };
-            assert_eq!(subschema.r#type, Some(SchemaType::single("object")));
+            assert_eq!(subschema.r#type, SchemaType::new("object"));
             assert!(subschema.object_schema.is_some());
 
             // Verify the local schema is valid against the downloaded schema
