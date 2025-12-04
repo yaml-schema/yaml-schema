@@ -1,6 +1,8 @@
 use log::debug;
 
-use saphyr::{AnnotatedMapping, AnnotatedSequence, MarkedYaml};
+use saphyr::AnnotatedSequence;
+use saphyr::MarkedYaml;
+use saphyr::YamlData;
 
 use crate::ConstValue;
 use crate::Context;
@@ -22,24 +24,20 @@ impl std::fmt::Display for EnumSchema {
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for EnumSchema {
+impl TryFrom<&MarkedYaml<'_>> for EnumSchema {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("enum")) {
-            if let saphyr::YamlData::Sequence(values) = &value.data {
-                let enum_values = load_enum_values(values)?;
-                Ok(EnumSchema {
-                    r#enum: enum_values,
-                })
-            } else {
-                Err(generic_error!(
-                    "enum: Expected an array, but got: {:?}",
-                    value
-                ))
-            }
+    fn try_from(value: &MarkedYaml<'_>) -> crate::Result<Self> {
+        if let YamlData::Sequence(values) = &value.data {
+            let enum_values = load_enum_values(values)?;
+            Ok(EnumSchema {
+                r#enum: enum_values,
+            })
         } else {
-            Err(generic_error!("No \"enum\" key found!"))
+            Err(generic_error!(
+                "enum: Expected a sequence, but got: {}",
+                format_yaml_data(&value.data)
+            ))
         }
     }
 }
@@ -54,7 +52,10 @@ impl Validator for EnumSchema {
         let data = &value.data;
         debug!("[EnumSchema] Validating value: {data:?}");
         let const_value: ConstValue = data.try_into().map_err(|_| {
-            Error::GenericError(format!("Unable to convert value: {data:?} to ConstValue"))
+            Error::GenericError(format!(
+                "Unable to convert value: {} to ConstValue",
+                format_yaml_data(data)
+            ))
         })?;
         debug!("[EnumSchema] const_value: {const_value}");
         for value in &self.r#enum {
@@ -81,6 +82,8 @@ impl Validator for EnumSchema {
 
 #[cfg(test)]
 mod tests {
+    use crate::loader;
+
     use super::*;
     use saphyr::LoadableYamlNode;
 
@@ -94,5 +97,46 @@ mod tests {
         let context = Context::default();
         let result = schema.validate(&context, value);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_loading_enum_schema() {
+        let schema = r#"
+        enum:
+          - red
+          - amber
+          - green
+        "#;
+        let schema = loader::load_from_str(schema).expect("Failed to load schema");
+
+        let docs = MarkedYaml::load_from_str(
+            r#"
+        red
+        "#,
+        )
+        .unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
+
+        let docs = MarkedYaml::load_from_str(
+            r#"
+        blue
+        "#,
+        )
+        .unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(context.has_errors());
+        let errors = context.errors.borrow();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(
+            errors[0].error,
+            "Value \"blue\" is not in the enum: [\"red\", \"amber\", \"green\"]"
+        );
     }
 }

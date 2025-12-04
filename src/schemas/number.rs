@@ -274,10 +274,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NumberSchema {
                         }
                     }
                     _ => {
-                        return Err(schema_loading_error!(
-                            "Unsupported key for type: number: {}",
-                            key
-                        ));
+                        debug!("Unsupported key for type: number: {}", key);
                     }
                 }
             } else {

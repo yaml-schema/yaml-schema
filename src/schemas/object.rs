@@ -309,7 +309,7 @@ impl<'r> ObjectSchemaBuilder<'r> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Validator;
+    use crate::{Validator, loader};
     use saphyr::LoadableYamlNode;
 
     #[test]
@@ -390,5 +390,32 @@ office_number: 201",
             object_schema.metadata_and_annotations.description,
             Some("The description".to_string())
         );
+    }
+
+    #[test]
+    fn test_object_schema_with_const_property() {
+        let yaml = r#"
+        type: object
+        properties:
+          const:
+            type:
+              - string
+              - integer
+              - number
+              - boolean
+        "#;
+        let root_schema = loader::load_from_str(yaml).unwrap();
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        let Some(object_schema) = &subschema.object_schema else {
+            panic!(
+                "Expected ObjectSchema, but got: {:?}",
+                &subschema.object_schema
+            );
+        };
+        for (key, value) in object_schema.properties.as_ref().unwrap().iter() {
+            println!("key: {key}, value: {value}");
+        }
     }
 }

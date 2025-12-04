@@ -213,6 +213,34 @@ impl ConstValue {
     pub fn string<V: Into<String>>(value: V) -> ConstValue {
         ConstValue::String(value.into())
     }
+
+    pub fn accepts(&self, value: &saphyr::MarkedYaml) -> bool {
+        match self {
+            ConstValue::Null => return matches!(&value.data, YamlData::Value(Scalar::Null)),
+            ConstValue::Boolean(expected) => {
+                if let YamlData::Value(Scalar::Boolean(actual)) = &value.data {
+                    return *expected == *actual;
+                }
+            }
+            ConstValue::Number(number) => {
+                if let Number::Integer(expected) = number
+                    && let YamlData::Value(Scalar::Integer(actual)) = &value.data
+                {
+                    return *actual == *expected;
+                } else if let Number::Float(expected) = number
+                    && let YamlData::Value(Scalar::FloatingPoint(ordered_float)) = &value.data
+                {
+                    return ordered_float.into_inner() == *expected;
+                }
+            }
+            ConstValue::String(expected) => {
+                if let YamlData::Value(Scalar::String(actual)) = &value.data {
+                    return expected == actual.as_ref();
+                }
+            }
+        }
+        false
+    }
 }
 
 impl TryFrom<&Scalar<'_>> for ConstValue {

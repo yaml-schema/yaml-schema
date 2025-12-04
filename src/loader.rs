@@ -216,6 +216,7 @@ mod tests {
     use crate::Result;
     use crate::Validator as _;
     use crate::loader;
+    use crate::schemas::EnumSchema;
     use crate::schemas::IntegerSchema;
     use crate::schemas::SchemaType;
     use crate::schemas::StringSchema;
@@ -365,11 +366,16 @@ mod tests {
         let enum_values = ["foo", "bar", "baz"]
             .iter()
             .map(|s| ConstValue::string(s.to_string()))
-            .collect();
+            .collect::<Vec<ConstValue>>();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
         };
-        assert_eq!(subschema.r#enum, Some(enum_values));
+        assert_eq!(
+            subschema.r#enum,
+            Some(EnumSchema {
+                r#enum: enum_values
+            })
+        );
     }
 
     #[test]
@@ -395,7 +401,12 @@ mod tests {
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
         };
-        assert_eq!(subschema.r#enum, Some(enum_values));
+        assert_eq!(
+            subschema.r#enum,
+            Some(EnumSchema {
+                r#enum: enum_values
+            })
+        );
     }
 
     #[test]

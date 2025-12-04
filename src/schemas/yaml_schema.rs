@@ -17,6 +17,7 @@ use crate::loader::marked_yaml_to_string;
 use crate::schemas::AllOfSchema;
 use crate::schemas::AnyOfSchema;
 use crate::schemas::ArraySchema;
+use crate::schemas::EnumSchema;
 use crate::schemas::IntegerSchema;
 use crate::schemas::NotSchema;
 use crate::schemas::NumberSchema;
@@ -295,7 +296,7 @@ pub struct Subschema<'r> {
     /// `const`
     pub r#const: Option<ConstValue>,
     /// `enum`
-    pub r#enum: Option<Vec<ConstValue>>,
+    pub r#enum: Option<EnumSchema>,
 
     pub array_schema: Option<ArraySchema<'r>>,
     pub integer_schema: Option<IntegerSchema>,
@@ -460,15 +461,9 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
         }
 
         // enum
-        let mut r#enum: Option<Vec<ConstValue>> = None;
-        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("enum"))
-            && let saphyr::YamlData::Sequence(values) = &value.data
-        {
-            let enum_values = values
-                .iter()
-                .map(|marked_yaml| marked_yaml.try_into())
-                .collect::<Result<Vec<ConstValue>>>()?;
-            r#enum = Some(enum_values);
+        let mut r#enum: Option<EnumSchema> = None;
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("enum")) {
+            r#enum = Some(value.try_into()?);
         }
 
         // type
@@ -517,6 +512,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
                     debug!("[Subschema#try_from] Instantiating array schema");
                     array_schema = ArraySchema::try_from(mapping).map(Some)?;
                 }
+                // No subschema needed for boolean, we handle it in the validate_by_type method
                 "boolean" => {}
                 "integer" => {
                     debug!("[Subschema#try_from] Instantiating integer schema");
@@ -703,6 +699,25 @@ impl Validator for Subschema<'_> {
                 }
             }
         }
+
+        if let Some(r#const) = &self.r#const
+            && !r#const.accepts(value)
+        {
+            context.add_error(
+                value,
+                format!(
+                    "Expected const: {:#?}, but got: {}",
+                    r#const,
+                    format_yaml_data(&value.data)
+                ),
+            );
+        }
+
+        if let Some(r#enum) = &self.r#enum {
+            debug!("[Subschema] Validating enum schema: {}", r#enum);
+            r#enum.validate(context, value)?;
+        }
+
         Ok(())
     }
 }
@@ -996,5 +1011,33 @@ mod tests {
         let errors = context.errors.borrow();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].error, "None of type: [string, number] matched");
+    }
+
+    #[test]
+    fn test_object_schema_with_const_property() {
+        let schema = r#"
+        type: object
+        properties:
+          const:
+            description: A scalar value that must match the value
+            type:
+              - string
+              - integer
+              - number
+              - boolean
+        "#;
+        let schema = loader::load_from_str(schema).expect("Failed to load schema");
+
+        let docs = MarkedYaml::load_from_str(
+            r#"
+        const: "I'm a string"
+        "#,
+        )
+        .unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
     }
 }
