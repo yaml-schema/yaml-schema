@@ -6,7 +6,6 @@ use saphyr::YamlData;
 
 use crate::ConstValue;
 use crate::Context;
-use crate::Error;
 use crate::Result;
 use crate::Validator;
 use crate::utils::format_vec;
@@ -51,12 +50,19 @@ impl Validator for EnumSchema {
         debug!("[EnumSchema] self: {self}");
         let data = &value.data;
         debug!("[EnumSchema] Validating value: {data:?}");
-        let const_value: ConstValue = data.try_into().map_err(|_| {
-            Error::GenericError(format!(
-                "Unable to convert value: {} to ConstValue",
-                format_yaml_data(data)
-            ))
-        })?;
+        let const_value: ConstValue = match ConstValue::try_from(data) {
+            Ok(const_value) => const_value,
+            Err(_) => {
+                context.add_error(
+                    value,
+                    format!(
+                        "Unable to convert value: {} to ConstValue",
+                        format_yaml_data(data)
+                    ),
+                );
+                return Ok(());
+            }
+        };
         debug!("[EnumSchema] const_value: {const_value}");
         for value in &self.r#enum {
             debug!("[EnumSchema] value: {value}");
