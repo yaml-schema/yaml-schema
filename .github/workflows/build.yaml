@@ -47,8 +47,8 @@ jobs:
       matrix:
         # a list of all the targets
         include:
-          - TARGET: x86_64-unknown-linux-gnu # tested in a debian container on a mac
-            OS: ubuntu-latest
+          # - TARGET: x86_64-unknown-linux-gnu # tested in a debian container on a mac
+          #   OS: ubuntu-latest
           - TARGET: x86_64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
             OS: macos-latest
           - TARGET: aarch64-apple-darwin # tested on a mac
@@ -82,9 +82,9 @@ jobs:
           fi
 
           # some additional configuration for cross-compilation on linux
+          # [target.aarch64-unknown-linux-gnu]
+          # linker = "aarch64-linux-gnu-gcc"
           cat >>~/.cargo/config <<EOF
-          [target.aarch64-unknown-linux-gnu]
-          linker = "aarch64-linux-gnu-gcc"
           [target.aarch64-unknown-linux-musl]
           linker = "aarch64-linux-gnu-gcc"
           [target.armv7-unknown-linux-gnueabihf]
