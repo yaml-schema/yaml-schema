@@ -6,7 +6,7 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 
 fn bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("ys vs boon");
+    let mut group = c.benchmark_group("ys_vs_boon");
     group.sample_size(1000);
     group.bench_function("boon", |b| b.iter(boon));
     group.bench_function("ys", |b| b.iter(ys));
