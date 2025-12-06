@@ -32,8 +32,11 @@ tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 url = "2.5.7"
 
 [dev-dependencies]
+boon = "0.6.1"
+criterion = "0.5.1"
 ctor = "0.4.2"
 cucumber = "0.21.0"
+serde_json = "~1.0"
 tokio = { version = "1.43.1", features = ["full"] }
 
 [[test]]
@@ -42,3 +45,7 @@ harness = false
 
 [lints.clippy]
 unwrap_used = "deny"
+
+[[bench]]
+name = "ys_vs_boon"
+harness = false
