@@ -364,10 +364,8 @@ office_number: 201",
 
         let context = crate::Context::default();
         let result = schema.validate(&context, yaml);
-        if result.is_err() {
-            println!("{:?}", result.as_ref().unwrap());
-            panic!("Validation failed: {:?}", result.as_ref().unwrap());
-        }
+        assert!(result.is_ok(), "Validation failed: {result:?}");
+
         assert!(context.has_errors());
         for error in context.errors.as_ref().borrow().iter() {
             println!("{error:?}");
