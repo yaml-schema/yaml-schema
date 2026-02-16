@@ -38,7 +38,7 @@ fn boon() {
     let sch_index = compiler
         .compile("yaml-schema.yaml", &mut schemas)
         .expect("Failed to compile schema");
-    let instance: serde_json::Value =
+    let instance =
         serde_yaml::from_reader(File::open("yaml-schema.yaml").expect("Failed to open YAML file"))
             .expect("Failed to read YAML file");
     let valid = schemas.validate(&instance, sch_index).is_ok();
