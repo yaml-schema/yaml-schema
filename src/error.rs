@@ -5,24 +5,22 @@ use crate::loader::UrlLoadError;
 /// Unexpected errors that can occur during the validation of a YAML schema
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Not yet implemented!")]
-    NotYetImplemented,
-    #[error("IO error: {0}")]
+    #[error("Generic YAML schema error: {0}")]
+    GenericError(String),
+    #[error(transparent)]
     IOError(#[from] std::io::Error),
     #[error("File not found: {0}")]
     FileNotFound(String),
-    #[error("YAML parsing error: {0}")]
+    #[error(transparent)]
     YamlParsingError(#[from] saphyr::ScanError),
-    #[error("Float parsing error: {0}")]
+    #[error(transparent)]
     FloatParsingError(#[from] std::num::ParseFloatError),
-    #[error("Regex parsing error: {0}")]
+    #[error(transparent)]
     RegexParsingError(#[from] regex::Error),
     #[error("Error loading schema: {0}")]
     SchemaLoadingError(String),
     #[error("Unsupported type: {0}")]
     UnsupportedType(String),
-    #[error("Generic YAML schema error: {0}")]
-    GenericError(String),
     #[error("{0} Expected mapping, but got: {1}")]
     ExpectedMapping(String, String),
     #[error("Expected YAML scalar: {0}")]
@@ -33,8 +31,12 @@ pub enum Error {
     FailFast,
     #[error("Invalid regular expression: {0}")]
     InvalidRegularExpression(String),
-    #[error("Failed to download from URL: {0}")]
+    #[error(transparent)]
     UrlLoadError(#[from] UrlLoadError),
+    #[error(transparent)]
+    JsonPtrError(#[from] jsonptr::ParseError),
+    #[error("Not yet implemented!")]
+    NotYetImplemented,
 }
 
 #[macro_export]

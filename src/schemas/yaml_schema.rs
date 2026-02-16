@@ -620,8 +620,7 @@ impl Validator for Subschema<'_> {
             let ref_name = &reference.ref_name;
             if let Some(root_schema) = context.root_schema {
                 if let Some(ref_name) = ref_name.strip_prefix("#") {
-                    let pointer =
-                        jsonptr::Pointer::parse(ref_name).expect("Failed to parse reference name");
+                    let pointer = jsonptr::Pointer::parse(ref_name)?;
                     debug!("[Subschema] Pointer: {pointer}");
                     let schema = root_schema.resolve(pointer);
                     if let Some(schema) = schema {
