@@ -443,7 +443,6 @@ mod tests {
             "##,
         )
         .unwrap();
-        println!("root_schema: {root_schema:?}");
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
         };
@@ -470,11 +469,7 @@ mod tests {
         let value = docs.first().unwrap();
         let context = crate::Context::with_root_schema(&root_schema, true);
         let result = root_schema.validate(&context, value);
-        println!("result: {result:?}");
         assert!(result.is_ok());
-        for error in context.errors.borrow().iter() {
-            println!("error: {error:?}");
-        }
         assert!(!context.has_errors());
     }
 

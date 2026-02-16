@@ -253,6 +253,36 @@ impl SchemaType {
         matches!(self, SchemaType::Multiple(_))
     }
 
+    /// Checks if this SchemaType matches or contains the given type string.
+    ///
+    /// Returns `true` if:
+    /// - The schema type is `Single` and matches the given type string, or
+    /// - The schema type is `Multiple` and contains the given type string
+    ///
+    /// Returns `false` if:
+    /// - The schema type is `None`, or
+    /// - The schema type doesn't match/contain the given type string
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use yaml_schema::schemas::SchemaType;
+    ///
+    /// // Test with a single type
+    /// let single = SchemaType::new("string");
+    /// assert!(single.is_or_contains("string"));
+    /// assert!(!single.is_or_contains("number"));
+    ///
+    /// // Test with multiple types
+    /// let multiple = SchemaType::Multiple(vec!["string".to_string(), "number".to_string()]);
+    /// assert!(multiple.is_or_contains("string"));
+    /// assert!(multiple.is_or_contains("number"));
+    /// assert!(!multiple.is_or_contains("boolean"));
+    ///
+    /// // Test with None (no type specified)
+    /// let none = SchemaType::None;
+    /// assert!(!none.is_or_contains("string"));
+    /// ```
     pub fn is_or_contains(&self, r#type: &str) -> bool {
         match self {
             SchemaType::None => false,

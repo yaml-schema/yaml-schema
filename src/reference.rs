@@ -93,8 +93,56 @@ mod tests {
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected a subschema");
         };
-        println!("subschema: {subschema:?}");
-        // TODO: assert that the subschema has the expected structure
+
+        // Assert that the subschema has the expected structure
+        // 1. Verify it's an object type
+        assert!(
+            subschema.r#type.is_or_contains("object"),
+            "Expected object type"
+        );
+
+        // 2. Verify $defs contains "name" definition
+        let defs = subschema
+            .defs
+            .as_ref()
+            .expect("Expected $defs to be present");
+        let name_def = defs.get("name").expect("Expected 'name' in $defs");
+
+        // 3. Verify the "name" definition is a string schema
+        let YamlSchema::Subschema(name_subschema) = name_def else {
+            panic!("Expected name definition to be a subschema");
+        };
+        assert!(
+            name_subschema.r#type.is_or_contains("string"),
+            "Expected name definition to be a string type"
+        );
+
+        // 4. Verify object_schema exists with properties
+        let object_schema = subschema
+            .object_schema
+            .as_ref()
+            .expect("Expected object_schema");
+        let properties = object_schema
+            .properties
+            .as_ref()
+            .expect("Expected properties");
+
+        // 5. Verify properties contains "name" with a reference
+        let name_property = properties.get("name").expect("Expected 'name' property");
+        let YamlSchema::Subschema(name_prop_subschema) = name_property else {
+            panic!("Expected name property to be a subschema");
+        };
+
+        // 6. Verify the name property is a reference to "#/$defs/name"
+        let ref_value = name_prop_subschema
+            .r#ref
+            .as_ref()
+            .expect("Expected $ref in name property");
+        assert_eq!(
+            ref_value.ref_name.as_ref(),
+            "#/$defs/name",
+            "Expected reference to '#/$defs/name'"
+        );
 
         let context = crate::Context::with_root_schema(&root_schema, true);
         let value = r##"
@@ -110,9 +158,7 @@ mod tests {
     #[test]
     fn test_json_ptr() {
         let ptr = jsonptr::Pointer::parse("/$defs/schema").expect("Failed to parse JSON pointer");
-        println!("ptr: {ptr:?}");
-        for component in ptr.components() {
-            println!("component: {component:?}");
-        }
+        let components: Vec<_> = ptr.components().collect();
+        assert!(!components.is_empty());
     }
 }

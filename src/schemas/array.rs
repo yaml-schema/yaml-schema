@@ -206,9 +206,7 @@ mod tests {
         let value = docs.first().unwrap();
         let context = crate::Context::default();
         let result = schema.validate(&context, value);
-        if result.is_err() {
-            println!("{}", result.unwrap_err());
-        }
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -247,9 +245,7 @@ mod tests {
             let value = docs.first().unwrap();
             let context = crate::Context::default();
             let result = schema.validate(&context, value);
-            if result.is_err() {
-                println!("{}", result.unwrap_err());
-            }
+            assert!(result.is_ok());
         } else {
             panic!("Expected first_schema to be a Mapping, but got {first_schema:?}");
         }
@@ -291,9 +287,7 @@ mod tests {
             let value = docs.first().unwrap();
             let context = crate::Context::default();
             let result = schema.validate(&context, value);
-            if result.is_err() {
-                println!("{}", result.unwrap_err());
-            }
+            assert!(result.is_ok());
         } else {
             panic!("Expected first_doc to be a Mapping, but got {first_doc:?}");
         }

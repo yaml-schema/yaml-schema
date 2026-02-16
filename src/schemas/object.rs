@@ -367,9 +367,6 @@ office_number: 201",
         assert!(result.is_ok(), "Validation failed: {result:?}");
 
         assert!(context.has_errors());
-        for error in context.errors.as_ref().borrow().iter() {
-            println!("{error:?}");
-        }
     }
 
     #[test]
@@ -412,8 +409,7 @@ office_number: 201",
                 &subschema.object_schema
             );
         };
-        for (key, value) in object_schema.properties.as_ref().unwrap().iter() {
-            println!("key: {key}, value: {value}");
-        }
+        // Verify properties were loaded correctly
+        assert!(object_schema.properties.as_ref().unwrap().contains_key("const"));
     }
 }

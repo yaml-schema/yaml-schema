@@ -333,14 +333,11 @@ mod tests {
             minimum: Some(Number::Integer(1)),
             ..Default::default()
         };
-        println!("number_schema: {number_schema:?}");
         let marked_yaml = MarkedYaml::value_from_str("1");
-        println!("marked_yaml: {marked_yaml:?}");
         let context = Context::default();
         number_schema
             .validate(&context, &marked_yaml)
             .expect("validate() failed!");
-        println!("context: {context:?}");
         assert!(!context.has_errors());
     }
 
@@ -353,7 +350,6 @@ mod tests {
         number_schema
             .validate(&context, &marked_yaml)
             .expect("validate() failed!");
-        println!("context: {context:?}");
         assert!(context.has_errors());
     }
 }

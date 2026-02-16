@@ -80,10 +80,6 @@ pub fn validate_any_of(
         debug!("[AnyOf] sub_context: {sub_context:?}");
         match schema.validate(&sub_context, marked_yaml) {
             Ok(()) | Err(Error::FailFast) => {
-                println!(
-                    "[AnyOf] sub_context.has_errors(): {}",
-                    sub_context.has_errors()
-                );
                 if sub_context.has_errors() {
                     continue;
                 }

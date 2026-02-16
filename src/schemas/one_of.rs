@@ -187,12 +187,11 @@ mod tests {
             "##,
         )
         .expect("Failed to load schema");
-        println!("root_schema: {root_schema:?}");
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
             panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
         };
-        if let Some(one_of) = &subschema.one_of {
-            println!("one_of_schema: {one_of:?}");
+        if let Some(_one_of) = &subschema.one_of {
+            // oneOf schema loaded successfully
         } else {
             panic!("Expected Subschema with oneOf, but got: {subschema:?}");
         }
@@ -204,11 +203,8 @@ mod tests {
         let value = docs.first().unwrap();
         let context = crate::Context::with_root_schema(&root_schema, false);
         let result = root_schema.validate(&context, value);
-        println!("result: {result:?}");
         assert!(result.is_ok());
-        for error in context.errors.borrow().iter() {
-            println!("error: {error:?}");
-        }
+        assert!(!context.has_errors());
         assert!(!context.has_errors());
     }
 
