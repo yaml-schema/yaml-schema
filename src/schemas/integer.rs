@@ -205,7 +205,7 @@ impl IntegerSchema {
                     if i >= exclusive_max {
                         context.add_error(
                             value,
-                            format!("Number must be less than than {exclusive_max}"),
+                            format!("Number must be less than {exclusive_max}"),
                         );
                     }
                 }
@@ -213,7 +213,7 @@ impl IntegerSchema {
                     if (i as f64).partial_cmp(&exclusive_max) != Some(Ordering::Less) {
                         context.add_error(
                             value,
-                            format!("Number must be less than than {exclusive_max}"),
+                            format!("Number must be less than {exclusive_max}"),
                         );
                     }
                 }
