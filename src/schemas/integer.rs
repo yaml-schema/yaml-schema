@@ -180,7 +180,7 @@ impl IntegerSchema {
         } else if let Some(minimum) = self.minimum {
             match minimum {
                 Number::Integer(min) => {
-                    if i <= min {
+                    if i < min {
                         context.add_error(
                             value,
                             format!("Number must be greater than or equal to {min}"),
@@ -221,7 +221,7 @@ impl IntegerSchema {
         } else if let Some(maximum) = self.maximum {
             match maximum {
                 Number::Integer(max) => {
-                    if i >= max {
+                    if i > max {
                         context.add_error(
                             value,
                             format!("Number must be less than or equal to {max}"),
