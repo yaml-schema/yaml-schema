@@ -203,18 +203,14 @@ impl IntegerSchema {
             match exclusive_max {
                 Number::Integer(exclusive_max) => {
                     if i >= exclusive_max {
-                        context.add_error(
-                            value,
-                            format!("Number must be less than {exclusive_max}"),
-                        );
+                        context
+                            .add_error(value, format!("Number must be less than {exclusive_max}"));
                     }
                 }
                 Number::Float(exclusive_max) => {
                     if (i as f64).partial_cmp(&exclusive_max) != Some(Ordering::Less) {
-                        context.add_error(
-                            value,
-                            format!("Number must be less than {exclusive_max}"),
-                        );
+                        context
+                            .add_error(value, format!("Number must be less than {exclusive_max}"));
                     }
                 }
             }
