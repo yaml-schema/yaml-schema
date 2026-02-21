@@ -410,6 +410,12 @@ office_number: 201",
             );
         };
         // Verify properties were loaded correctly
-        assert!(object_schema.properties.as_ref().unwrap().contains_key("const"));
+        assert!(
+            object_schema
+                .properties
+                .as_ref()
+                .unwrap()
+                .contains_key("const")
+        );
     }
 }
