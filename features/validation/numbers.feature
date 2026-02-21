@@ -49,10 +49,46 @@ Feature: Numeric types
       23
       ```
 
-  Scenario: Range
+  Scenario: Range of numbers
     Given a YAML schema:
       ```
       type: number
+      minimum: 0
+      exclusiveMaximum: 10
+      ```
+    # Less than `minimum`
+    Then it should not accept:
+      ```
+      -1
+      ```
+    # `minimum` is inclusive, so 0 is valid
+    But it should accept:
+      ```
+      0
+      ```
+    And it should accept:
+      ```
+      10
+      ```
+    And it should accept:
+      ```
+      99
+      ```
+    # `exclusiveMaximum` is exclusive, so 100 is not valid
+    But it should not accept:
+      ```
+      100
+      ```
+    # Greater than `maximum`
+    And it should not accept:
+      ```
+      101
+      ```
+
+  Scenario: Range of integers
+    Given a YAML schema:
+      ```
+      type: integer
       minimum: 0
       exclusiveMaximum: 10
       ```
