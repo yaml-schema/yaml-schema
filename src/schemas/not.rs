@@ -1,46 +1,55 @@
+use std::fmt::Display;
+
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
-use saphyr::Scalar;
 use saphyr::YamlData;
 
 use crate::Context;
+use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
 
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
-#[derive(Debug, Default, PartialEq)]
-pub struct NotSchema {
-    pub not: Box<YamlSchema>,
+#[derive(Debug, PartialEq)]
+pub struct NotSchema<'r> {
+    pub not: Box<YamlSchema<'r>>,
 }
 
-impl std::fmt::Display for NotSchema {
+impl Display for NotSchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "not: {}", self.not)
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NotSchema {
+impl<'r> TryFrom<&MarkedYaml<'r>> for NotSchema<'r> {
     type Error = crate::Error;
 
-    fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut not_schema = NotSchema::default();
-        for (key, value) in mapping.iter() {
-            if let YamlData::Value(Scalar::String(key)) = &key.data {
-                match key.as_ref() {
-                    "not" => {
-                        let schema: YamlSchema = value.try_into()?;
-                        not_schema.not = Box::new(schema);
-                    }
-                    _ => return Err(generic_error!("Unsupported key: {}", key)),
-                }
-            }
+    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
+        if let YamlData::Mapping(mapping) = &value.data {
+            NotSchema::try_from(mapping)
+        } else {
+            Err(expected_mapping!(value))
         }
-        Ok(not_schema)
     }
 }
 
-impl Validator for NotSchema {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for NotSchema<'r> {
+    type Error = crate::Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("not")) {
+            let schema: YamlSchema<'r> = value.try_into()?;
+            Ok(NotSchema {
+                not: Box::new(schema),
+            })
+        } else {
+            Err(generic_error!("No `not` key found!"))
+        }
+    }
+}
+
+impl Validator for NotSchema<'_> {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> crate::Result<()> {
         debug!(
             "Not: Validating value: {:?} against schema: {}",

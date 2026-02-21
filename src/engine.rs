@@ -5,12 +5,13 @@ use std::rc::Rc;
 use crate::Error;
 use crate::Result;
 use crate::RootSchema;
-use crate::Schema;
+use crate::Validator as _;
+use crate::YamlSchema;
 use crate::validation::Context;
 
 #[derive(Debug)]
 pub struct Engine<'a> {
-    pub root_schema: &'a RootSchema,
+    pub root_schema: &'a RootSchema<'a>,
     pub context: Rc<RefCell<Context<'a>>>,
 }
 
@@ -30,28 +31,23 @@ impl<'a> Engine<'a> {
         let context = Context::with_root_schema(root_schema, fail_fast);
         let engine = Engine::new(root_schema, context);
         let docs = saphyr::MarkedYaml::load_from_str(value).map_err(Error::YamlParsingError)?;
-        if docs.is_empty() {
-            if let Some(sub_schema) = &engine.root_schema.schema.as_ref().schema {
-                match sub_schema {
-                    Schema::Empty => (),
-                    Schema::BooleanLiteral(false) => {
-                        engine
-                            .context
-                            .borrow_mut()
-                            .add_doc_error("Empty YAML document is not allowed");
-                    }
-                    Schema::BooleanLiteral(true) => (),
+        match docs.first() {
+            Some(yaml) => {
+                engine
+                    .root_schema
+                    .validate(&engine.context.borrow(), yaml)?;
+            }
+            None => {
+                // docs.is_empty()
+                match &engine.root_schema.schema {
+                    YamlSchema::Empty | YamlSchema::BooleanLiteral(true) => (),
+                    // YamlSchema::Null or YamlSchema::Subschema(_)
                     _ => engine
                         .context
-                        .borrow_mut()
+                        .borrow()
                         .add_doc_error("Empty YAML document is not allowed"),
                 }
             }
-        } else {
-            let yaml = docs.first().unwrap();
-            engine
-                .root_schema
-                .validate(&engine.context.borrow(), yaml)?;
         }
         Ok(engine.context.take())
     }
@@ -64,21 +60,21 @@ mod tests {
 
     #[test]
     fn test_engine_empty_schema() {
-        let root_schema = RootSchema::new(YamlSchema::empty());
+        let root_schema = RootSchema::new(YamlSchema::Empty);
         let context = Engine::evaluate(&root_schema, "", false).unwrap();
         assert!(!context.has_errors());
     }
 
     #[test]
     fn test_engine_boolean_literal_true() {
-        let root_schema = RootSchema::new(YamlSchema::boolean_literal(true));
+        let root_schema = RootSchema::new(YamlSchema::BooleanLiteral(true));
         let context = Engine::evaluate(&root_schema, "", false).unwrap();
         assert!(!context.has_errors());
     }
 
     #[test]
     fn test_engine_boolean_literal_false() {
-        let root_schema = RootSchema::new(YamlSchema::boolean_literal(false));
+        let root_schema = RootSchema::new(YamlSchema::BooleanLiteral(false));
         let context = Engine::evaluate(&root_schema, "", false).unwrap();
         assert!(context.has_errors());
     }

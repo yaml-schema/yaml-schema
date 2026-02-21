@@ -1,6 +1,6 @@
 [package]
 name = "yaml-schema"
-version = "0.8.0"
+version = "0.9.0-rc1"
 edition = "2024"
 description = "A YAML schema validator"
 license = "MIT"
@@ -19,6 +19,7 @@ clap = { version = "4.5.42", features = ["cargo", "derive"] }
 env_logger = "0.11.3"
 eyre = "0.6.8"
 hashlink = "0.10.0"
+jsonptr = "0.7.1"
 log = "0.4.21"
 ordered-float = "5.0.0"
 regex = "1.10.4"
@@ -28,12 +29,23 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 thiserror = "2.0"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+url = "2.5.7"
 
 [dev-dependencies]
+boon = "0.6.1"
+criterion = "0.5.1"
 ctor = "0.4.2"
 cucumber = "0.21.0"
+serde_json = "~1.0"
 tokio = { version = "1.43.1", features = ["full"] }
 
 [[test]]
 name = "features"
+harness = false
+
+[lints.clippy]
+unwrap_used = "deny"
+
+[[bench]]
+name = "ys_vs_boon"
 harness = false

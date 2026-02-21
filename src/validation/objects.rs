@@ -2,16 +2,16 @@
 use hashlink::LinkedHashMap;
 use log::{debug, error};
 
-use crate::BoolOrTypedSchema;
 use crate::Error;
-use crate::ObjectSchema;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
+use crate::schemas::BooleanOrSchema;
+use crate::schemas::ObjectSchema;
 use crate::utils::{format_marker, format_yaml_data, scalar_to_string};
 use crate::validation::Context;
 
-impl Validator for ObjectSchema {
+impl Validator for ObjectSchema<'_> {
     /// Validate the object according to the schema rules
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
@@ -20,7 +20,7 @@ impl Validator for ObjectSchema {
             self.validate_object_mapping(context, value, mapping)
         } else {
             let error_message = format!(
-                "[ObjectSchema] {} Expected an object, but got: {data:#?}",
+                "[ObjectSchema] {} Expected an object, but got: {data:?}",
                 format_marker(&value.span.start)
             );
             error!("{error_message}");
@@ -34,7 +34,7 @@ pub fn try_validate_value_against_properties(
     context: &Context,
     key: &String,
     value: &saphyr::MarkedYaml,
-    properties: &LinkedHashMap<String, YamlSchema>,
+    properties: &LinkedHashMap<String, YamlSchema<'_>>,
 ) -> Result<bool> {
     let sub_context = context.append_path(key);
     if let Some(schema) = properties.get(key) {
@@ -55,15 +55,15 @@ pub fn try_validate_value_against_additional_properties(
     context: &Context,
     key: &String,
     value: &saphyr::MarkedYaml,
-    additional_properties: &BoolOrTypedSchema,
+    additional_properties: &BooleanOrSchema,
 ) -> Result<bool> {
     let sub_context = context.append_path(key);
 
     match additional_properties {
         // if additional_properties: true, then any additional properties are allowed
-        BoolOrTypedSchema::Boolean(true) => { /* noop */ }
+        BooleanOrSchema::Boolean(true) => { /* noop */ }
         // if additional_properties: false, then no additional properties are allowed
-        BoolOrTypedSchema::Boolean(false) => {
+        BooleanOrSchema::Boolean(false) => {
             context.add_error(
                 value,
                 format!("Additional property '{key}' is not allowed!"),
@@ -72,38 +72,19 @@ pub fn try_validate_value_against_additional_properties(
             return Ok(false);
         }
         // if additional_properties: a schema, then validate against it
-        BoolOrTypedSchema::TypedSchema(schema) => {
+        BooleanOrSchema::Schema(schema) => {
             schema.validate(&sub_context, value)?;
-        }
-        BoolOrTypedSchema::Reference(reference) => {
-            // Grab the reference from the root schema.
-            let Some(root) = &context.root_schema else {
-                context.add_error(
-                    value,
-                    "No root schema was provided to look up references".to_string(),
-                );
-                return Ok(false);
-            };
-            let Some(def) = root.get_def(&reference.ref_name) else {
-                context.add_error(
-                    value,
-                    format!("No definition for {} found", reference.ref_name),
-                );
-                return Ok(false);
-            };
-
-            def.validate(context, value)?;
         }
     }
     Ok(true)
 }
 
-impl ObjectSchema {
-    fn validate_object_mapping<'a>(
+impl ObjectSchema<'_> {
+    fn validate_object_mapping<'r>(
         &self,
-        context: &Context,
+        context: &Context<'r>,
         object: &saphyr::MarkedYaml,
-        mapping: &saphyr::AnnotatedMapping<'a, saphyr::MarkedYaml<'a>>,
+        mapping: &saphyr::AnnotatedMapping<'r, saphyr::MarkedYaml<'r>>,
     ) -> Result<()> {
         for (k, value) in mapping {
             let key_string = match &k.data {
@@ -178,17 +159,13 @@ impl ObjectSchema {
                 }
             }
         }
-        // If we have any AnyOf specification, check the object format against one of them.
-        if let Some(any_of) = &self.any_of {
-            any_of.validate(context, object)?;
-        }
 
         // Validate required properties
         if let Some(required) = &self.required {
             for required_property in required {
                 if !mapping
                     .keys()
-                    .map(|k| k.data.as_str().unwrap())
+                    .filter_map(|k| k.data.as_str())
                     .any(|s| s == required_property)
                 {
                     context.add_error(
@@ -227,11 +204,11 @@ impl ObjectSchema {
 
 #[cfg(test)]
 mod tests {
-    use crate::NumberSchema;
     use crate::RootSchema;
-    use crate::Schema;
-    use crate::StringSchema;
+    use crate::YamlSchema;
     use crate::engine;
+    use crate::schemas::NumberSchema;
+    use crate::schemas::StringSchema;
     use hashlink::LinkedHashMap;
 
     use super::*;
@@ -241,17 +218,17 @@ mod tests {
         let mut properties = LinkedHashMap::new();
         properties.insert(
             "foo".to_string(),
-            YamlSchema::from(Schema::typed_string(StringSchema::default())),
+            YamlSchema::typed_string(StringSchema::default()),
         );
         properties.insert(
             "bar".to_string(),
-            YamlSchema::from(Schema::typed_number(NumberSchema::default())),
+            YamlSchema::typed_number(NumberSchema::default()),
         );
         let object_schema = ObjectSchema {
             properties: Some(properties),
             ..Default::default()
         };
-        let root_schema = RootSchema::new_with_schema(Schema::typed_object(object_schema));
+        let root_schema = RootSchema::new(YamlSchema::typed_object(object_schema));
         let value = r#"
             foo: "I'm a string"
             bar: 42

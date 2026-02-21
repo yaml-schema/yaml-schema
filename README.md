@@ -74,13 +74,19 @@ See the [features](features/) folder for all examples.
 Currently, **yaml-schema** requires Git, Rust and Cargo to build and
 install: [https://doc.rust-lang.org/cargo/](https://doc.rust-lang.org/cargo/)
 
-To install the `ys` binary, simply issue the command:
+To install the stable release from [crates.io](https://crates.io/crates/yaml-schema):
 
 ```
 cargo install yaml-schema
 ```
 
 That should build and install the executable at `$HOME/.cargo/bin/ys` (which should be in your PATH)
+
+Alternatively, one can install from latest source:
+
+```
+cargo install --git https://github.com/yaml-schema/yaml-schema
+```
 
 ## Usage
 

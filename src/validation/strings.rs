@@ -1,11 +1,10 @@
 use log::debug;
 use regex::Regex;
 
-use crate::ConstValue;
 use crate::Context;
 use crate::Result;
-use crate::StringSchema;
 use crate::Validator;
+use crate::schemas::StringSchema;
 
 impl Validator for StringSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
@@ -27,18 +26,8 @@ impl StringSchema {
         if let saphyr::YamlData::Value(scalar) = &value.data
             && let saphyr::Scalar::String(s) = scalar
         {
-            let enum_strings = self.base.r#enum.as_ref().map(|enum_values| {
-                enum_values
-                    .iter()
-                    .filter_map(|v| {
-                        if let ConstValue::String(s) = v {
-                            Some(s.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            });
+            // TODO: add enum validation
+            let enum_strings = None;
             debug!("enum_strings: {enum_strings:?}");
             validate_string(
                 &mut errors,
@@ -93,7 +82,7 @@ pub fn validate_string(
 mod tests {
     use crate::Engine;
     use crate::RootSchema;
-    use crate::Schema;
+    use crate::YamlSchema;
     use saphyr::LoadableYamlNode;
 
     use super::*;
@@ -101,7 +90,7 @@ mod tests {
     #[test]
     fn test_engine_validate_string() {
         let schema = StringSchema::default();
-        let root_schema = RootSchema::new_with_schema(Schema::typed_string(schema));
+        let root_schema = RootSchema::new(YamlSchema::typed_string(schema));
         let context = Engine::evaluate(&root_schema, "some string", false).unwrap();
         assert!(!context.has_errors());
     }
@@ -112,7 +101,7 @@ mod tests {
             min_length: Some(5),
             ..Default::default()
         };
-        let root_schema = RootSchema::new_with_schema(Schema::typed_string(schema));
+        let root_schema = RootSchema::new(YamlSchema::typed_string(schema));
         let context = Engine::evaluate(&root_schema, "hello", false).unwrap();
         assert!(!context.has_errors());
         let context = Engine::evaluate(&root_schema, "hell", false).unwrap();
@@ -156,7 +145,7 @@ mod tests {
         let marked_yaml = doc.first().unwrap();
         let string_schema: StringSchema = StringSchema::default();
         let context = Context::default();
-        let result = string_schema.validate(&context, &marked_yaml);
+        let result = string_schema.validate(&context, marked_yaml);
         assert!(result.is_ok());
         assert!(context.has_errors());
     }

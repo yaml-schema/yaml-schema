@@ -9,8 +9,8 @@ use crate::validation::ValidationError;
 #[derive(Debug, Default)]
 pub struct Context<'r> {
     /// We use an Option here so tests can be run without a root schema
-    pub root_schema: Option<&'r RootSchema>,
-    pub current_schema: Option<Rc<YamlSchema>>,
+    pub root_schema: Option<&'r RootSchema<'r>>,
+    pub current_schema: Option<&'r YamlSchema<'r>>,
     pub current_path: Vec<String>,
     pub stream_started: bool,
     pub stream_ended: bool,
@@ -39,7 +39,7 @@ impl<'r> Context<'r> {
     pub fn get_sub_context(&self) -> Context<'r> {
         Context {
             root_schema: self.root_schema,
-            current_schema: self.current_schema.clone(),
+            current_schema: self.current_schema,
             current_path: self.current_path.clone(),
             stream_started: self.stream_started,
             stream_ended: self.stream_ended,
@@ -90,7 +90,7 @@ impl<'r> Context<'r> {
         new_path.push(path.into());
         Context {
             root_schema: self.root_schema,
-            current_schema: self.current_schema.clone(),
+            current_schema: self.current_schema,
             current_path: new_path,
             errors: self.errors.clone(),
             fail_fast: self.fail_fast,

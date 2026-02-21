@@ -1,4 +1,4 @@
-$schema: https://yaml-schema.net/yaml-schema.yaml
+$schema: https://json-schema.org/draft/2020-12/schema
 $id: https://yaml-schema.net/draft/2025-11/meta-schema
 title: YAML Schema meta-schema
 description: Meta-schema for YAML Schema, based on JSON Schema meta-schema
@@ -18,11 +18,6 @@ $defs:
       - array
       - enum
       - object
-      # Composition Types
-      - allOf
-      - anyOf
-      - not
-      - oneOf
   schema_type:
     description: >-
       The type of the schema
@@ -98,4 +93,12 @@ properties:
     oneOf:
       - type: boolean
       - $ref: "#/$defs/array_of_schemas"
+  not:
+    $ref: "#/$defs/schema"
+  oneOf:
+    $ref: "#/$defs/array_of_schemas"
+  allOf:
+    $ref: "#/$defs/array_of_schemas"
+  anyOf:
+    $ref: "#/$defs/array_of_schemas"
 additionalProperties: false

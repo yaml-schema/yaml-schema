@@ -1,215 +1,385 @@
+use std::borrow::Cow;
+use std::fmt::Display;
+
 use hashlink::LinkedHashMap;
+use jsonptr::Token;
 use log::debug;
 use log::error;
 use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 
-use crate::ArraySchema;
+use crate::ConstValue;
 use crate::Context;
 use crate::Error;
-use crate::IntegerSchema;
-use crate::NumberSchema;
-use crate::ObjectSchema;
 use crate::Reference;
-use crate::Schema;
-use crate::StringSchema;
+use crate::Result;
 use crate::Validator;
 use crate::loader::marked_yaml_to_string;
+use crate::schemas::AllOfSchema;
+use crate::schemas::AnyOfSchema;
+use crate::schemas::ArraySchema;
+use crate::schemas::EnumSchema;
+use crate::schemas::IntegerSchema;
+use crate::schemas::NotSchema;
+use crate::schemas::NumberSchema;
+use crate::schemas::ObjectSchema;
+use crate::schemas::OneOfSchema;
+use crate::schemas::StringSchema;
+use crate::utils::format_annotated_mapping;
+use crate::utils::format_linked_hash_map;
+use crate::utils::format_marked_yaml;
 use crate::utils::format_marker;
+use crate::utils::format_scalar;
+use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
-use crate::utils::linked_hash_map;
 
-/// YamlSchema is the core of the validation model
-#[derive(Debug, Default, PartialEq)]
-pub struct YamlSchema {
-    pub metadata: Option<LinkedHashMap<String, String>>,
-    pub r#ref: Option<Reference>,
-    pub schema: Option<Schema>,
+/// YamlSchema is the base of the validation model
+#[derive(Debug, PartialEq)]
+pub enum YamlSchema<'r> {
+    Empty,                // no value
+    Null,                 // `null`
+    BooleanLiteral(bool), // `true` or `false`
+    Subschema(Box<Subschema<'r>>),
 }
 
-impl YamlSchema {
-    /// Create an empty YamlSchema, which accepts any value
-    pub fn empty() -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::Empty),
+impl<'r> YamlSchema<'r> {
+    pub fn subschema(subschema: Subschema<'r>) -> Self {
+        Self::Subschema(Box::new(subschema))
+    }
+
+    pub fn ref_str(ref_name: impl Into<Cow<'r, str>>) -> Self {
+        Self::subschema(Subschema {
+            r#ref: Some(Reference::new(ref_name.into())),
             ..Default::default()
+        })
+    }
+
+    /// Create a YamlSchema with a single type: `boolean`
+    pub fn typed_boolean() -> Self {
+        Self::subschema(Subschema {
+            r#type: SchemaType::new("boolean"),
+            ..Default::default()
+        })
+    }
+
+    /// Create a YamlSchema with a single type: `number`
+    pub fn typed_number(number_schema: NumberSchema) -> Self {
+        number_schema.into()
+    }
+
+    /// Create a YamlSchema with a single type: `string`
+    pub fn typed_string(string_schema: StringSchema) -> Self {
+        Self::subschema(Subschema {
+            r#type: SchemaType::new("string"),
+            string_schema: Some(string_schema),
+            ..Default::default()
+        })
+    }
+
+    /// Create a YamlSchema with a single type: `object`
+    pub fn typed_object(object_schema: ObjectSchema<'r>) -> Self {
+        Self::subschema(Subschema {
+            r#type: SchemaType::new("object"),
+            object_schema: Some(object_schema),
+            ..Default::default()
+        })
+    }
+
+    /// Resolve a portion of a JSON Pointer to an element in the schema.
+    pub fn resolve(
+        &self,
+        key: Option<&Token>,
+        components: &[jsonptr::Component],
+    ) -> Option<&YamlSchema<'_>> {
+        debug!("[YamlSchema#resolve] self: {self}, key: {key:?}, components: {components:?}");
+        if components.is_empty() {
+            return Some(self);
         }
-    }
-
-    /// Create a YamlSchema that accepts only null values
-    pub fn null() -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::typed_null()),
-            ..Default::default()
-        }
-    }
-
-    /// Create a `true` or `false` YamlSchema, which will accept
-    /// or reject any value based on the boolean value
-    pub fn boolean_literal(value: bool) -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::BooleanLiteral(value)),
-            ..Default::default()
-        }
-    }
-
-    /// Create a YamlSchema that accepts only objects
-    pub fn type_object(object_schema: ObjectSchema) -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::typed_object(object_schema)),
-            ..Default::default()
-        }
-    }
-
-    /// Create a YamlSchema that accepts only arrays
-    pub fn type_array(array_schema: ArraySchema) -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::typed_array(array_schema)),
-            ..Default::default()
-        }
-    }
-
-    /// Create a YamlSchema that accepts only booleans
-    pub fn type_boolean() -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::typed_boolean()),
-            ..Default::default()
-        }
-    }
-
-    /// Create a YamlSchema that accepts only integers
-    pub fn type_integer(integer_schema: IntegerSchema) -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::typed_integer(integer_schema)),
-            ..Default::default()
-        }
-    }
-
-    /// Create a YamlSchema that accepts only numbers
-    pub fn type_number(number_schema: NumberSchema) -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::typed_number(number_schema)),
-            ..Default::default()
-        }
-    }
-
-    /// Create a YamlSchema that accepts only strings
-    pub fn type_string(string_schema: StringSchema) -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::typed_string(string_schema)),
-            ..Default::default()
-        }
-    }
-
-    /// Create a reference to a `$defs` definition
-    pub fn reference(reference: Reference) -> YamlSchema {
-        YamlSchema {
-            r#ref: Some(reference),
-            ..Default::default()
-        }
-    }
-
-    /// Create a reference from a `String` or `&str`
-    pub fn ref_str<S>(ref_name: S) -> YamlSchema
-    where
-        S: Into<String>,
-    {
-        Self::reference(Reference::new(ref_name))
-    }
-
-    /// Create a YamlSchema that accepts only strings
-    pub fn string() -> YamlSchema {
-        YamlSchema {
-            schema: Some(Schema::typed_string(StringSchema::default())),
-            ..Default::default()
-        }
-    }
-
-    /// Create a YamlSchemaBuilder, which can be used to build a YamlSchema step by step
-    pub fn builder() -> YamlSchemaBuilder {
-        YamlSchemaBuilder::new()
-    }
-}
-
-impl From<Schema> for YamlSchema {
-    fn from(schema: Schema) -> Self {
-        YamlSchema {
-            schema: Some(schema),
-            ..Default::default()
+        match self {
+            YamlSchema::Subschema(subschema) => subschema.resolve(key, components),
+            _ => None,
         }
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for YamlSchema {
+impl<'r> TryFrom<&MarkedYaml<'r>> for YamlSchema<'r> {
     type Error = crate::Error;
-    fn try_from(marked_yaml: &MarkedYaml<'_>) -> crate::Result<Self> {
-        if let YamlData::Mapping(mapping) = &marked_yaml.data {
-            let mut metadata: LinkedHashMap<String, String> = LinkedHashMap::new();
-            let mut reference: Option<Reference> = None;
-            let mut data = AnnotatedMapping::new();
+    fn try_from(marked_yaml: &MarkedYaml<'r>) -> crate::Result<Self> {
+        match &marked_yaml.data {
+            YamlData::Value(scalar) => match scalar {
+                Scalar::Boolean(value) => Ok(YamlSchema::BooleanLiteral(*value)),
+                Scalar::Null => Ok(YamlSchema::Null),
+                _ => Err(generic_error!(
+                    "[YamlSchema#try_from] Expected a boolean or null, but got: {}",
+                    format_scalar(scalar)
+                )),
+            },
+            YamlData::Mapping(_) => Subschema::try_from(marked_yaml).map(YamlSchema::subschema),
+            _ => Err(generic_error!(
+                "[YamlSchema#try_from] Expected a boolean, null, or a mapping, but got: {}",
+                format_marked_yaml(marked_yaml)
+            )),
+        }
+    }
+}
 
-            for (key, value) in mapping.iter() {
-                match &key.data {
-                    YamlData::Value(Scalar::String(s)) => match s.as_ref() {
-                        "$id" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "$id must be a string")?,
-                            );
-                        }
-                        "$schema" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "$schema must be a string")?,
-                            );
-                        }
-                        "$ref" => match marked_yaml.try_into() {
-                            Ok(r) => _ = reference.replace(r),
-                            Err(_) => {
-                                return Err(generic_error!(
-                                    "[YamlSchema] Could not load as Reference: {:?}",
-                                    marked_yaml
-                                ));
+impl<'r> From<NumberSchema> for YamlSchema<'r> {
+    fn from(number_schema: NumberSchema) -> Self {
+        YamlSchema::subschema(Subschema {
+            r#type: SchemaType::new("number"),
+            number_schema: Some(number_schema),
+            ..Default::default()
+        })
+    }
+}
+
+impl<'r> From<IntegerSchema> for YamlSchema<'r> {
+    fn from(integer_schema: IntegerSchema) -> Self {
+        YamlSchema::subschema(Subschema {
+            r#type: SchemaType::new("integer"),
+            integer_schema: Some(integer_schema),
+            ..Default::default()
+        })
+    }
+}
+
+impl<'r> From<StringSchema> for YamlSchema<'r> {
+    fn from(string_schema: StringSchema) -> Self {
+        YamlSchema::subschema(Subschema {
+            r#type: SchemaType::new("string"),
+            string_schema: Some(string_schema),
+            ..Default::default()
+        })
+    }
+}
+
+impl Validator for YamlSchema<'_> {
+    fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
+        debug!("[YamlSchema] self: {self}");
+        debug!(
+            "[YamlSchema] Validating value: {}",
+            format_yaml_data(&value.data)
+        );
+        match self {
+            YamlSchema::Empty => Ok(()),
+            YamlSchema::Null => {
+                if !matches!(&value.data, YamlData::Value(Scalar::Null)) {
+                    context.add_error(
+                        value,
+                        format!("Expected null, but got: {}", format_yaml_data(&value.data)),
+                    );
+                }
+                Ok(())
+            }
+            YamlSchema::BooleanLiteral(boolean) => {
+                if !*boolean {
+                    context.add_error(value, "YamlSchema is `false`!");
+                }
+                Ok(())
+            }
+            YamlSchema::Subschema(subschema) => {
+                debug!("[YamlSchema#validate] Validating subschema: {subschema:?}");
+                subschema.validate(context, value)?;
+                Ok(())
+            }
+        }
+    }
+}
+
+impl<'r> From<Subschema<'r>> for YamlSchema<'r> {
+    fn from(subschema: Subschema<'r>) -> Self {
+        YamlSchema::subschema(subschema)
+    }
+}
+
+impl Display for YamlSchema<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            YamlSchema::Empty => write!(f, "<empty>"),
+            YamlSchema::Null => write!(f, "null"),
+            YamlSchema::BooleanLiteral(value) => write!(f, "{value}"),
+            YamlSchema::Subschema(subschema) => subschema.fmt(f),
+        }
+    }
+}
+
+/// Represents either a literal boolean value or a YamlSchema
+#[derive(Debug, PartialEq)]
+pub enum BooleanOrSchema<'r> {
+    Boolean(bool),
+    Schema(YamlSchema<'r>),
+}
+
+impl BooleanOrSchema<'_> {
+    pub fn schema<'r>(schema: YamlSchema<'r>) -> BooleanOrSchema<'r> {
+        BooleanOrSchema::Schema(schema)
+    }
+}
+
+impl Display for BooleanOrSchema<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BooleanOrSchema::Boolean(value) => write!(f, "{value}"),
+            BooleanOrSchema::Schema(schema) => schema.fmt(f),
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub enum SchemaType {
+    #[default]
+    /// No `type:` was provided
+    None,
+    /// A single type
+    Single(String),
+    /// Multiple types
+    Multiple(Vec<String>),
+}
+
+impl SchemaType {
+    /// Create a new SchemaType with a single value
+    pub fn new<S: Into<String>>(value: S) -> Self {
+        SchemaType::Single(value.into())
+    }
+
+    pub fn is_none(&self) -> bool {
+        matches!(self, SchemaType::None)
+    }
+
+    pub fn is_single(&self) -> bool {
+        matches!(self, SchemaType::Single(_))
+    }
+
+    pub fn is_multiple(&self) -> bool {
+        matches!(self, SchemaType::Multiple(_))
+    }
+
+    /// Checks if this SchemaType matches or contains the given type string.
+    ///
+    /// Returns `true` if:
+    /// - The schema type is `Single` and matches the given type string, or
+    /// - The schema type is `Multiple` and contains the given type string
+    ///
+    /// Returns `false` if:
+    /// - The schema type is `None`, or
+    /// - The schema type doesn't match/contain the given type string
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use yaml_schema::schemas::SchemaType;
+    ///
+    /// // Test with a single type
+    /// let single = SchemaType::new("string");
+    /// assert!(single.is_or_contains("string"));
+    /// assert!(!single.is_or_contains("number"));
+    ///
+    /// // Test with multiple types
+    /// let multiple = SchemaType::Multiple(vec!["string".to_string(), "number".to_string()]);
+    /// assert!(multiple.is_or_contains("string"));
+    /// assert!(multiple.is_or_contains("number"));
+    /// assert!(!multiple.is_or_contains("boolean"));
+    ///
+    /// // Test with None (no type specified)
+    /// let none = SchemaType::None;
+    /// assert!(!none.is_or_contains("string"));
+    /// ```
+    pub fn is_or_contains(&self, r#type: &str) -> bool {
+        match self {
+            SchemaType::None => false,
+            SchemaType::Single(s) => s == r#type,
+            SchemaType::Multiple(values) => values.contains(&r#type.to_string()),
+        }
+    }
+}
+
+impl Display for SchemaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SchemaType::None => Ok(()), // No `type:` was provided
+            SchemaType::Single(value) => write!(f, "{value}"),
+            SchemaType::Multiple(values) => write!(f, "{}", format_vec(values)),
+        }
+    }
+}
+
+/// A Subschema contains the core schema elements and validation
+#[derive(Debug, Default, PartialEq)]
+pub struct Subschema<'r> {
+    /// `$id` and `$schema` metadata and `title` and `description` annotations
+    pub metadata_and_annotations: MetadataAndAnnotations,
+    /// `$anchor` metadata
+    pub anchor: Option<String>,
+    /// `$ref`
+    pub r#ref: Option<Reference<'r>>,
+    /// `$defs`
+    pub defs: Option<LinkedHashMap<String, YamlSchema<'r>>>,
+    /// `anyOf`
+    pub any_of: Option<AnyOfSchema<'r>>,
+    /// `allOf`
+    pub all_of: Option<AllOfSchema<'r>>,
+    /// `oneOf`
+    pub one_of: Option<OneOfSchema<'r>>,
+    /// `not`
+    pub not: Option<NotSchema<'r>>,
+    /// `type`
+    pub r#type: SchemaType,
+    /// `const`
+    pub r#const: Option<ConstValue>,
+    /// `enum`
+    pub r#enum: Option<EnumSchema>,
+
+    pub array_schema: Option<ArraySchema<'r>>,
+    pub integer_schema: Option<IntegerSchema>,
+    pub number_schema: Option<NumberSchema>,
+    pub object_schema: Option<ObjectSchema<'r>>,
+    pub string_schema: Option<StringSchema>,
+}
+
+impl<'r> Subschema<'r> {
+    /// Resolve a portion of a JSON Pointer to an element in the schema.
+    pub fn resolve(
+        &self,
+        token: Option<&Token>,
+        components: &[jsonptr::Component],
+    ) -> Option<&YamlSchema<'_>> {
+        debug!("[Subschema#resolve] self: {self}, token: {token:?}, components: {components:?}");
+        if let Some(token) = token {
+            let s = token.decoded();
+            debug!("[Subschema#resolve] key: {s}");
+            match s.as_ref() {
+                "$defs" => {
+                    debug!("[Subschema#resolve] Resolving $defs");
+                    if let Some(defs) = self.defs.as_ref() {
+                        debug!("[Subschema#resolve] defs: {}", format_linked_hash_map(defs));
+                        if let Some(component) = components.first() {
+                            debug!("[Subschema#resolve] component: {component:?}");
+                            if let jsonptr::Component::Token(next_token) = component {
+                                let decoded = next_token.decoded();
+                                debug!("[Subschema#resolve] decoded: {decoded}");
+                                debug!("[Subschema#resolve] defs: {defs:?}");
+                                if let Some(schema) = defs.get(decoded.as_ref()) {
+                                    debug!("[Subschema#resolve] schema: {schema:?}");
+                                    return schema.resolve(Some(next_token), &components[1..]);
+                                }
                             }
-                        },
-                        "title" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "title must be a string")?,
-                            );
                         }
-                        "description" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "description must be a string")?,
-                            );
-                        }
-                        _ => {
-                            data.insert(key.clone(), value.clone());
-                        }
-                    },
-                    _ => {
-                        data.insert(key.clone(), value.clone());
                     }
                 }
+                "anyOf" => {}
+                _ => (),
             }
-            if let Some(reference) = reference {
-                Ok(YamlSchema::reference(reference))
-            } else {
-                let my = MarkedYaml {
-                    span: marked_yaml.span,
-                    data: YamlData::Mapping(data),
-                };
-                let schema: Schema = (&my).try_into()?;
-                Ok(YamlSchema {
-                    metadata: if metadata.is_empty() {
-                        None
-                    } else {
-                        Some(metadata)
-                    },
-                    schema: Some(schema),
-                    r#ref: None,
-                })
-            }
+        }
+        None
+    }
+}
+
+// Try to load a Subschema from a MarkedYaml. Delegate to the TryFrom<&AnnotatedMapping<'_>> for mappings.
+// If the MarkedYaml is not a mapping, returns an error.
+impl<'r> TryFrom<&MarkedYaml<'r>> for Subschema<'r> {
+    type Error = crate::Error;
+    fn try_from(marked_yaml: &MarkedYaml<'r>) -> crate::Result<Self> {
+        if let YamlData::Mapping(mapping) = &marked_yaml.data {
+            Self::try_from(mapping)
         } else {
             Err(generic_error!(
                 "{} Expected a mapping, but got: {:?}",
@@ -220,174 +390,535 @@ impl TryFrom<&MarkedYaml<'_>> for YamlSchema {
     }
 }
 
-impl std::fmt::Display for YamlSchema {
+fn try_load_defs<'r>(
+    marked_yaml: &MarkedYaml<'r>,
+) -> Result<LinkedHashMap<String, YamlSchema<'r>>> {
+    debug!(
+        "[try_load_defs] marked_yaml: {}",
+        format_yaml_data(&marked_yaml.data)
+    );
+    if let YamlData::Mapping(mapping) = &marked_yaml.data {
+        debug!(
+            "[try_load_defs] mapping: {}",
+            format_annotated_mapping(mapping)
+        );
+        mapping
+            .iter()
+            .try_fold(LinkedHashMap::new(), |mut acc, (key, value)| {
+                let key = marked_yaml_to_string(key, "key must be a string")?;
+                acc.insert(key, value.try_into()?);
+                Ok(acc)
+            })
+    } else {
+        Err(expected_mapping!(marked_yaml))
+    }
+}
+
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
+    type Error = Error;
+
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
+        debug!(
+            "[Subschema#try_from] mapping has {} keys",
+            mapping.keys().len()
+        );
+        for key in mapping.keys() {
+            debug!("[Subschema#try_from] key: {:?}", key.data);
+        }
+
+        let metadata_and_annotations = MetadataAndAnnotations::try_from(mapping)?;
+        debug!("[Subschema#try_from] metadata_and_annotations: {metadata_and_annotations}");
+
+        // $defs
+        let defs: Option<LinkedHashMap<String, YamlSchema<'r>>> = mapping
+            .get(&MarkedYaml::value_from_str("$defs"))
+            .map(|x| {
+                debug!("[Subschema#try_from] x: {}", format_yaml_data(&x.data));
+                debug!("[Subschema#try_from] Trying to load `$defs` as LinkedHashMap<String, YamlSchema<'r>>");
+                try_load_defs(x)
+            })
+            .transpose()?;
+
+        // $ref
+        let reference: Option<Reference> = mapping
+            .get(&MarkedYaml::value_from_str("$ref"))
+            .map(|_| {
+                debug!("[Subschema#try_from] Trying to load `$ref` as Reference");
+                mapping.try_into()
+            })
+            .transpose()?;
+
+        // anyOf
+        let any_of: Option<AnyOfSchema> = mapping
+            .get(&MarkedYaml::value_from_str("anyOf"))
+            .map(|_| {
+                debug!("[Subschema#try_from] Trying to load `anyOf` as AnyOfSchema");
+                mapping.try_into()
+            })
+            .transpose()?;
+
+        // allOf
+        let all_of: Option<AllOfSchema> = mapping
+            .get(&MarkedYaml::value_from_str("allOf"))
+            .map(|_| {
+                debug!("[Subschema#try_from] Trying to load `allOf` as AllOfSchema");
+                mapping.try_into()
+            })
+            .transpose()?;
+
+        // oneOf
+        let one_of: Option<OneOfSchema> = mapping
+            .get(&MarkedYaml::value_from_str("oneOf"))
+            .map(|_| {
+                debug!("[Subschema#try_from] Trying to load `oneOf` as OneOfSchema");
+                mapping.try_into()
+            })
+            .transpose()?;
+
+        // not
+        let not: Option<NotSchema> = mapping
+            .get(&MarkedYaml::value_from_str("not"))
+            .map(|_| {
+                debug!("[Subschema#try_from] Trying to load `not` as NotSchema");
+                mapping.try_into()
+            })
+            .transpose()?;
+
+        // const
+        let mut r#const: Option<ConstValue> = None;
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("const")) {
+            r#const = Some(ConstValue::try_from(value)?);
+        }
+
+        // enum
+        let mut r#enum: Option<EnumSchema> = None;
+        if let Some(value) = mapping.get(&MarkedYaml::value_from_str("enum")) {
+            r#enum = Some(value.try_into()?);
+        }
+
+        // type
+        let mut r#type: SchemaType = SchemaType::None;
+        if let Some(type_value) = mapping.get(&MarkedYaml::value_from_str("type")) {
+            match &type_value.data {
+                YamlData::Value(Scalar::Null) => {
+                    r#type = SchemaType::new("null");
+                }
+                YamlData::Value(Scalar::String(s)) => r#type = SchemaType::new(s.as_ref()),
+                YamlData::Sequence(values) => {
+                    r#type = SchemaType::Multiple(
+                        values
+                            .iter()
+                            .map(|marked_yaml| {
+                                marked_yaml_to_string(marked_yaml, "type must be a string")
+                            })
+                            .collect::<Result<Vec<String>>>()?,
+                    )
+                }
+                _ => {
+                    return Err(schema_loading_error!(
+                        "[Subschema#try_from] Expected a string or sequence for `type`, but got: {:?}",
+                        type_value.data
+                    ));
+                }
+            }
+        }
+
+        // Instantiate the appropriate schema based on the type(s)
+        let mut array_schema = None;
+        let mut integer_schema = None;
+        let mut number_schema = None;
+        let mut object_schema = None;
+        let mut string_schema = None;
+
+        let types: Vec<&str> = match r#type {
+            SchemaType::None => vec![],
+            SchemaType::Single(ref s) => vec![s],
+            SchemaType::Multiple(ref values) => values.iter().map(|s| s.as_ref()).collect(),
+        };
+
+        for s in types {
+            match s {
+                "array" => {
+                    debug!("[Subschema#try_from] Instantiating array schema");
+                    array_schema = ArraySchema::try_from(mapping).map(Some)?;
+                }
+                // No subschema needed for boolean, we handle it in the validate_by_type method
+                "boolean" => {}
+                "integer" => {
+                    debug!("[Subschema#try_from] Instantiating integer schema");
+                    integer_schema = IntegerSchema::try_from(mapping).map(Some)?;
+                }
+                "number" => {
+                    debug!("[Subschema#try_from] Instantiating number schema");
+                    number_schema = NumberSchema::try_from(mapping).map(Some)?;
+                }
+                "object" => {
+                    debug!("[Subschema#try_from] Instantiating object schema");
+                    object_schema = ObjectSchema::try_from(mapping).map(Some)?;
+                }
+                "string" => {
+                    debug!("[Subschema#try_from] Instantiating string schema");
+                    string_schema = StringSchema::try_from(mapping).map(Some)?;
+                }
+                "null" => (),
+                _ => {
+                    return Err(unsupported_type!(
+                        "Expected type: string, number, integer, object, or array, but got: {}",
+                        s
+                    ));
+                }
+            }
+        }
+
+        debug!("[Subschema#try_from] array_schema: {array_schema:?}");
+        debug!("[Subschema#try_from] integer_schema: {integer_schema:?}");
+        debug!("[Subschema#try_from] number_schema: {number_schema:?}");
+        debug!("[Subschema#try_from] object_schema: {object_schema:?}");
+        debug!("[Subschema#try_from] string_schema: {string_schema:?}");
+
+        Ok(Self {
+            metadata_and_annotations,
+            defs,
+            r#ref: reference,
+            any_of,
+            all_of,
+            one_of,
+            not,
+            r#type,
+            r#const,
+            r#enum,
+            array_schema,
+            integer_schema,
+            number_schema,
+            object_schema,
+            string_schema,
+            anchor: None,
+        })
+    }
+}
+
+impl Display for Subschema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
-        if let Some(metadata) = &self.metadata {
-            write!(f, "metadata: {metadata:?}, ")?;
+        if !self.metadata_and_annotations.is_empty() {
+            write!(f, " ")?;
+            self.metadata_and_annotations.fmt(f)?;
+            write!(f, " ")?;
+        }
+        if !self.r#type.is_none() {
+            write!(f, "type: ")?;
+            self.r#type.fmt(f)?;
         }
         if let Some(r#ref) = &self.r#ref {
+            write!(f, "$ref: ")?;
             r#ref.fmt(f)?;
         }
-        if let Some(schema) = &self.schema {
-            write!(f, "schema: {schema}")?;
+        if let Some(defs) = &self.defs {
+            write!(f, "$defs: {}", format_linked_hash_map(defs))?;
         }
-        write!(f, "}}")
-    }
-}
-
-/// YamlSchemaBuilder is a builder for YamlSchema, which can be used to build a YamlSchema step by step
-pub struct YamlSchemaBuilder(YamlSchema);
-
-impl Default for YamlSchemaBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl YamlSchemaBuilder {
-    /// Create a new YamlSchemaBuilder
-    pub fn new() -> Self {
-        YamlSchemaBuilder(YamlSchema::default())
-    }
-
-    /// Add metadata to the YamlSchema
-    pub fn metadata<K, V>(&mut self, key: K, value: V) -> &mut Self
-    where
-        K: Into<String>,
-        V: Into<String>,
-    {
-        if let Some(metadata) = self.0.metadata.as_mut() {
-            metadata.insert(key.into(), value.into());
-        } else {
-            self.0.metadata = Some(linked_hash_map(key.into(), value.into()));
+        if let Some(any_of) = &self.any_of {
+            write!(f, "anyOf: ")?;
+            any_of.fmt(f)?;
         }
-        self
-    }
-
-    /// Add a description to the YamlSchema
-    pub fn description<S>(&mut self, description: S) -> &mut Self
-    where
-        S: Into<String>,
-    {
-        self.metadata("description", description)
-    }
-
-    /// Add a reference to the YamlSchema
-    pub fn r#ref(&mut self, r#ref: Reference) -> &mut Self {
-        self.0.r#ref = Some(r#ref);
-        self
-    }
-
-    pub fn schema(&mut self, schema: Schema) -> &mut Self {
-        self.0.schema = Some(schema);
-        self
-    }
-
-    pub fn string_schema(&mut self, string_schema: StringSchema) -> &mut Self {
-        self.schema(Schema::typed_string(string_schema))
-    }
-
-    pub fn object_schema(&mut self, object_schema: ObjectSchema) -> &mut Self {
-        self.schema(Schema::typed_object(object_schema))
-    }
-
-    /// Build the YamlSchema
-    pub fn build(&mut self) -> YamlSchema {
-        std::mem::take(&mut self.0)
+        if let Some(all_of) = &self.all_of {
+            write!(f, "allOf: ")?;
+            all_of.fmt(f)?;
+        }
+        if let Some(one_of) = &self.one_of {
+            write!(f, "oneOf: ")?;
+            one_of.fmt(f)?;
+        }
+        if let Some(not) = &self.not {
+            write!(f, "not: ")?;
+            not.fmt(f)?;
+        }
+        write!(f, "}}")?;
+        Ok(())
     }
 }
 
-impl Validator for YamlSchema {
+impl Validator for Subschema<'_> {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> crate::Result<()> {
-        debug!("[YamlSchema] self: {self}");
+        debug!("[Subschema] self: {self}");
         debug!(
-            "[YamlSchema] Validating value: {}",
+            "[Subschema] Validating value: {}",
             format_yaml_data(&value.data)
         );
+
         if let Some(reference) = &self.r#ref {
-            debug!("[YamlSchema] Reference found: {reference}");
+            debug!("[Subschema] Reference found: {reference}");
             let ref_name = &reference.ref_name;
             if let Some(root_schema) = context.root_schema {
-                if let Some(schema) = root_schema.get_def(ref_name) {
-                    debug!("[YamlSchema] Found {ref_name}: {schema}");
-                    schema.validate(context, value)?;
+                if let Some(ref_name) = ref_name.strip_prefix("#") {
+                    let pointer = jsonptr::Pointer::parse(ref_name)?;
+                    debug!("[Subschema] Pointer: {pointer}");
+                    let schema = root_schema.resolve(pointer);
+                    if let Some(schema) = schema {
+                        debug!("[Subschema] Found {ref_name}: {schema}");
+                        schema.validate(context, value)?;
+                    } else {
+                        error!("[Subschema] Cannot find definition: {ref_name}");
+                        context.add_error(value, format!("Schema {ref_name} not found"));
+                    }
                 } else {
-                    error!("[YamlSchema] Cannot find definition: {ref_name}");
+                    error!("[Subschema] Cannot find definition: {ref_name}");
                     context.add_error(value, format!("Schema {ref_name} not found"));
                 }
+                return Ok(());
             } else {
                 return Err(generic_error!(
-                    "YamlSchema has a reference, but no root schema was provided!"
+                    "Subschema has a reference, but no root schema was provided!"
                 ));
             }
-        } else if let Some(schema) = &self.schema {
-            schema.validate(context, value)?;
+        }
+
+        // Short-circuit for type: null
+        if self.r#type.is_or_contains("null") {
+            if !matches!(&value.data, YamlData::Value(Scalar::Null)) {
+                context.add_error(
+                    value,
+                    format!("Expected null, but got: {}", format_yaml_data(&value.data)),
+                );
+            }
+            return Ok(());
+        }
+
+        if let Some(any_of) = &self.any_of {
+            debug!("[Subschema] Validating anyOf schema: {any_of:?}");
+            any_of.validate(context, value)?;
+        }
+
+        if let Some(all_of) = &self.all_of {
+            debug!("[Subschema] Validating allOf schema: {all_of:?}");
+            all_of.validate(context, value)?;
+        }
+
+        if let Some(one_of) = &self.one_of {
+            debug!("[Subschema] Validating oneOf schema: {one_of:?}");
+            one_of.validate(context, value)?;
+        }
+
+        if let Some(not) = &self.not {
+            debug!("[Subschema] Validating not schema: {not:?}");
+            not.validate(context, value)?;
+        }
+
+        match &self.r#type {
+            SchemaType::None => (),
+            SchemaType::Single(s) => self.validate_by_type(context, s.as_ref(), value)?,
+            SchemaType::Multiple(values) => {
+                debug!(
+                    "[Subschema] Validating multiple types: {}",
+                    values.join(", ")
+                );
+                let mut any_matched = false;
+                for s in values {
+                    let sub_context = context.get_sub_context();
+                    self.validate_by_type(&sub_context, s.as_ref(), value)?;
+                    if !sub_context.has_errors() {
+                        any_matched = true;
+                        break;
+                    }
+                }
+                if !any_matched {
+                    context.add_error(
+                        value,
+                        format!("None of type: [{}] matched", values.join(", ")),
+                    );
+                }
+            }
+        }
+
+        if let Some(r#const) = &self.r#const
+            && !r#const.accepts(value)
+        {
+            context.add_error(
+                value,
+                format!(
+                    "Expected const: {:#?}, but got: {}",
+                    r#const,
+                    format_yaml_data(&value.data)
+                ),
+            );
+        }
+
+        if let Some(r#enum) = &self.r#enum {
+            debug!("[Subschema] Validating enum schema: {}", r#enum);
+            r#enum.validate(context, value)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Subschema<'_> {
+    fn validate_by_type(
+        &self,
+        context: &Context,
+        r#type: &str,
+        value: &saphyr::MarkedYaml,
+    ) -> Result<()> {
+        debug!("[Subschema#validate_by_type] r#type: {}", r#type);
+        match r#type {
+            "array" => {
+                if let Some(array_schema) = &self.array_schema {
+                    debug!("[Subschema] Validating array schema: {array_schema:?}");
+                    array_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No array schema found");
+                    context.add_error(value, format!("No array schema found for type: {}", r#type));
+                }
+            }
+            "boolean" => {
+                if !matches!(&value.data, YamlData::Value(Scalar::Boolean(_))) {
+                    context.add_error(
+                        value,
+                        format!(
+                            "Expected boolean, but got: {}",
+                            format_yaml_data(&value.data)
+                        ),
+                    );
+                }
+            }
+            "string" => {
+                if let Some(string_schema) = &self.string_schema {
+                    debug!("[Subschema] Validating string schema: {string_schema:?}");
+                    string_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No string schema found");
+                    context.add_error(
+                        value,
+                        format!("No string schema found for type: {}", r#type),
+                    );
+                }
+            }
+            "number" => {
+                if let Some(number_schema) = &self.number_schema {
+                    debug!("[Subschema] Validating number schema: {number_schema:?}");
+                    number_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No number schema found");
+                    context.add_error(
+                        value,
+                        format!("No number schema found for type: {}", r#type),
+                    );
+                }
+            }
+            "integer" => {
+                if let Some(integer_schema) = &self.integer_schema {
+                    debug!("[Subschema] Validating integer schema: {integer_schema:?}");
+                    integer_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No integer schema found");
+                    context.add_error(
+                        value,
+                        format!("No integer schema found for type: {}", r#type),
+                    );
+                }
+            }
+            "object" => {
+                if let Some(object_schema) = &self.object_schema {
+                    debug!("[Subschema] Validating object schema: {object_schema:?}");
+                    object_schema.validate(context, value)?;
+                } else {
+                    error!("[Subschema#validate_by_type] No object schema found");
+                    context.add_error(
+                        value,
+                        format!("No object schema found for type: {}", r#type),
+                    );
+                }
+            }
+            _ => {
+                error!("[Subschema#validate_by_type] Unsupported type: {}", r#type);
+                context.add_error(value, format!("Unsupported type: {}", r#type));
+            }
         }
         Ok(())
     }
 }
 
-impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for YamlSchema {
+/// The `$id` and `$schema` metadata
+#[derive(Debug, Default, PartialEq)]
+pub struct MetadataAndAnnotations {
+    /// `$id` metadata
+    pub id: Option<String>,
+    /// `$schema` metadata
+    pub schema: Option<String>,
+    /// `title` annotation
+    pub title: Option<String>,
+    /// `description` annotation
+    pub description: Option<String>,
+}
+
+impl MetadataAndAnnotations {
+    pub fn is_empty(&self) -> bool {
+        self.id.is_none()
+            && self.schema.is_none()
+            && self.title.is_none()
+            && self.description.is_none()
+    }
+}
+
+impl std::fmt::Display for MetadataAndAnnotations {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
+        if !self.is_empty() {
+            write!(f, " ")?;
+            if let Some(id) = &self.id {
+                write!(f, "id: {id}, ")?;
+            }
+            if let Some(schema) = &self.schema {
+                write!(f, "schema: {schema}, ")?;
+            }
+            if let Some(title) = &self.title {
+                write!(f, "title: {title}, ")?;
+            }
+            if let Some(description) = &self.description {
+                write!(f, "description: {description}, ")?;
+            }
+            write!(f, " ")?;
+        }
+        write!(f, "}}")?;
+        Ok(())
+    }
+}
+
+impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for MetadataAndAnnotations {
     type Error = Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut metadata: LinkedHashMap<String, String> = LinkedHashMap::new();
-        let mut r#ref: Option<Reference> = None;
-        let mut data = AnnotatedMapping::new();
-
+        let mut metadata_and_annotations = MetadataAndAnnotations::default();
         for (key, value) in mapping.iter() {
             match &key.data {
-                YamlData::Value(Scalar::String(s)) => {
-                    match s.as_ref() {
-                        "$id" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "$id must be a string")?,
-                            );
-                        }
-                        "$schema" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "$schema must be a string")?,
-                            );
-                        }
-                        "$ref" => {
-                            r#ref = Some(value.try_into()?);
-                            // TODO: What?
-                        }
-                        "title" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "title must be a string")?,
-                            );
-                        }
-                        "description" => {
-                            metadata.insert(
-                                s.to_string(),
-                                marked_yaml_to_string(value, "description must be a string")?,
-                            );
-                        }
-                        _ => {
-                            data.insert(key.clone(), value.clone());
-                        }
+                YamlData::Value(Scalar::String(s)) => match s.as_ref() {
+                    "$id" => {
+                        metadata_and_annotations.id =
+                            Some(marked_yaml_to_string(value, "$id must be a string")?);
                     }
-                }
+                    "$schema" => {
+                        metadata_and_annotations.schema =
+                            Some(marked_yaml_to_string(value, "$schema must be a string")?);
+                    }
+                    "title" => {
+                        metadata_and_annotations.title =
+                            Some(marked_yaml_to_string(value, "title must be a string")?);
+                    }
+                    "description" => {
+                        metadata_and_annotations.description = Some(marked_yaml_to_string(
+                            value,
+                            "description must be a string",
+                        )?);
+                    }
+                    _ => {
+                        debug!("[MetadataAndAnnotations#try_from] Unknown key: {s}");
+                    }
+                },
                 _ => {
-                    data.insert(key.clone(), value.clone());
+                    debug!("[MetadataAndAnnotations#try_from] Unsupported key data: {key:?}");
                 }
             }
         }
-        let schema = Some(Schema::try_from(&data)?);
-        Ok(YamlSchema {
-            metadata: if metadata.is_empty() {
-                None
-            } else {
-                Some(metadata)
-            },
-            schema,
-            r#ref,
-        })
+        Ok(metadata_and_annotations)
     }
 }
 
@@ -395,9 +926,61 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for YamlSchema {
 mod tests {
     use saphyr::LoadableYamlNode;
 
-    use crate::schemas::TypedSchemaType;
+    use crate::loader;
 
     use super::*;
+
+    #[test]
+    fn test_type_boolean() {
+        let yaml = r#"
+        type: boolean
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).expect("Failed to load YAML");
+        let marked_yaml = doc.first().unwrap();
+        let yaml_schema = YamlSchema::try_from(marked_yaml).unwrap();
+        let YamlSchema::Subschema(subschema) = yaml_schema else {
+            panic!("Expected a subschema");
+        };
+        assert!(!subschema.r#type.is_none());
+        assert!(subschema.r#type.is_single());
+        let SchemaType::Single(type_value) = subschema.r#type else {
+            panic!("Expected a single type");
+        };
+        assert_eq!(type_value, "boolean");
+    }
+
+    #[test]
+    fn test_metadata_and_annotations_try_from() {
+        let yaml = r#"
+        $id: http://example.com/schema
+        $schema: http://example.com/schema
+        title: Example Schema
+        description: This is an example schema
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).expect("Failed to load YAML");
+        let marked_yaml = doc.first().unwrap();
+        assert!(marked_yaml.data.is_mapping());
+        let YamlData::Mapping(mapping) = &marked_yaml.data else {
+            panic!("Expected a mapping");
+        };
+        let metadata_and_annotations = MetadataAndAnnotations::try_from(mapping).unwrap();
+        assert_eq!(
+            metadata_and_annotations.id,
+            Some("http://example.com/schema".to_string())
+        );
+        assert_eq!(
+            metadata_and_annotations.schema,
+            Some("http://example.com/schema".to_string())
+        );
+        assert_eq!(
+            metadata_and_annotations.title,
+            Some("Example Schema".to_string())
+        );
+        assert_eq!(
+            metadata_and_annotations.description,
+            Some("This is an example schema".to_string())
+        );
+    }
 
     #[test]
     fn test_yaml_schema_with_multiple_types() {
@@ -408,20 +991,82 @@ mod tests {
           - integer
           - string
         "#;
-        let doc = MarkedYaml::load_from_str(&yaml).expect("Failed to load YAML");
+        let doc = MarkedYaml::load_from_str(yaml).expect("Failed to load YAML");
         let marked_yaml = doc.first().unwrap();
         let yaml_schema = YamlSchema::try_from(marked_yaml).unwrap();
-        let schema = yaml_schema.schema.unwrap();
-        assert!(schema.is_typed());
-        let typed_schema = schema.as_typed_schema().unwrap();
-        assert_eq!(
-            typed_schema.r#type,
-            vec![
-                TypedSchemaType::BooleanSchema,
-                TypedSchemaType::Number(NumberSchema::default()),
-                TypedSchemaType::Integer(IntegerSchema::default()),
-                TypedSchemaType::String(StringSchema::default()),
-            ]
-        );
+        let YamlSchema::Subschema(subschema) = yaml_schema else {
+            panic!("Expected a subschema");
+        };
+        assert!(!subschema.r#type.is_none());
+        assert!(subschema.r#type.is_multiple());
+        let SchemaType::Multiple(type_values) = subschema.r#type else {
+            panic!("Expected a multiple type");
+        };
+        assert_eq!(type_values, vec!["boolean", "number", "integer", "string"]);
+    }
+
+    #[test]
+    fn test_multiple_types() {
+        let schema = r#"
+        type:
+          - string
+          - number
+        "#;
+        let schema = loader::load_from_str(schema).unwrap();
+
+        let s = "I'm a string";
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
+
+        let s = "42";
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
+
+        let s = "null";
+        let docs = MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(context.has_errors());
+        let errors = context.errors.borrow();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].error, "None of type: [string, number] matched");
+    }
+
+    #[test]
+    fn test_object_schema_with_const_property() {
+        let schema = r#"
+        type: object
+        properties:
+          const:
+            description: A scalar value that must match the value
+            type:
+              - string
+              - integer
+              - number
+              - boolean
+        "#;
+        let schema = loader::load_from_str(schema).expect("Failed to load schema");
+
+        let docs = MarkedYaml::load_from_str(
+            r#"
+        const: "I'm a string"
+        "#,
+        )
+        .unwrap();
+        let value = docs.first().unwrap();
+        let context = Context::default();
+        let result = schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(!context.has_errors());
     }
 }
