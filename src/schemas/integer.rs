@@ -137,7 +137,7 @@ impl IntegerSchema {
         } else if let Some(minimum) = self.minimum {
             match minimum {
                 Number::Integer(min) => {
-                    if i <= min {
+                    if i < min {
                         context.add_error(
                             value,
                             format!("Number must be greater than or equal to {min}"),
@@ -160,25 +160,21 @@ impl IntegerSchema {
             match exclusive_max {
                 Number::Integer(exclusive_max) => {
                     if i >= exclusive_max {
-                        context.add_error(
-                            value,
-                            format!("Number must be less than than {exclusive_max}"),
-                        );
+                        context
+                            .add_error(value, format!("Number must be less than {exclusive_max}"));
                     }
                 }
                 Number::Float(exclusive_max) => {
                     if (i as f64).partial_cmp(&exclusive_max) != Some(Ordering::Less) {
-                        context.add_error(
-                            value,
-                            format!("Number must be less than than {exclusive_max}"),
-                        );
+                        context
+                            .add_error(value, format!("Number must be less than {exclusive_max}"));
                     }
                 }
             }
         } else if let Some(maximum) = self.maximum {
             match maximum {
                 Number::Integer(max) => {
-                    if i >= max {
+                    if i > max {
                         context.add_error(
                             value,
                             format!("Number must be less than or equal to {max}"),
