@@ -107,6 +107,13 @@ impl ObjectSchema<'_> {
                 "validate_object_mapping: span.end: {:?}",
                 format_marker(&span.end)
             );
+
+            // Per JSON Schema spec (section 6), `$schema` is a meta-property
+            // used by tooling to identify the schema. Skip it during validation.
+            if key_string == "$schema" {
+                continue;
+            }
+
             // First, we check the explicitly defined properties, and validate against it if found
             if let Some(properties) = &self.properties
                 && try_validate_value_against_properties(context, &key_string, value, properties)?
