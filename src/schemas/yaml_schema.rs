@@ -563,7 +563,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
                 "null" => (),
                 _ => {
                     return Err(unsupported_type!(
-                        "Expected type: string, number, integer, object, or array, but got: {}",
+                        "Expected type: string, number, integer, object, array, boolean, or null, but got: {}",
                         s
                     ));
                 }
