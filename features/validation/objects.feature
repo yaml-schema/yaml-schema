@@ -251,6 +251,32 @@ Feature: Object types
       two: 2
       ```
 
+  Scenario: $schema property in data is ignored
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        musics:
+          type: array
+          items:
+            type: string
+            enum: [Salsa, Bachata]
+      additionalProperties: false
+      required:
+        - musics
+      ```
+    Then it should accept:
+      ```
+      $schema: "./schema.json"
+      musics:
+        - Bachata
+      ```
+    And it should accept:
+      ```
+      musics:
+        - Salsa
+      ```
+
   Scenario: Required properties
     Given a YAML schema:
       ```
