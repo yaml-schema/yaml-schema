@@ -69,6 +69,45 @@ Should fail with exit code 1
 
 See the [features](features/) folder for all examples.
 
+## Object Scoping Rules
+
+`additionalProperties` applies only to the object schema where it is declared. It does not
+automatically propagate to nested object schemas.
+
+Root-only `additionalProperties: false`:
+
+```
+type: object
+additionalProperties: false
+properties:
+  app:
+    type: object
+    properties:
+      name:
+        type: string
+```
+
+In this schema, unknown keys are rejected at the root object level, but nested object keys under
+`app` are still allowed unless `app` also declares `additionalProperties`.
+
+For nested objects under arrays, declare it on the `items` object:
+
+```
+type: object
+properties:
+  cluster:
+    type: object
+    properties:
+      control:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            host:
+              type: string
+```
+
 ## Installation
 
 Currently, **yaml-schema** requires Git, Rust and Cargo to build and

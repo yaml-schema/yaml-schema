@@ -147,6 +147,65 @@ Feature: Object types
       direction: NW
       ```
 
+  Scenario: additionalProperties is scoped per object schema
+    Given a YAML schema:
+      ```
+      type: object
+      additionalProperties: false
+      properties:
+        cluster:
+          type: object
+          properties:
+            control:
+              type: array
+              items:
+                type: object
+                properties:
+                  host:
+                    type: string
+      ```
+    # Root-level additionalProperties does not apply to nested item objects.
+    Then it should accept:
+      ```
+      cluster:
+        control:
+          - host: "controller-1"
+            foo: bar
+      ```
+
+  Scenario: additionalProperties must be set on nested object schema
+    Given a YAML schema:
+      ```
+      type: object
+      additionalProperties: false
+      properties:
+        cluster:
+          type: object
+          properties:
+            control:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                properties:
+                  host:
+                    type: string
+      ```
+    Then it should accept:
+      ```
+      cluster:
+        control:
+          - host: "controller-1"
+      ```
+    # The nested object now rejects unknown keys.
+    But it should NOT accept:
+      ```
+      cluster:
+        control:
+          - host: "controller-1"
+            foo: bar
+      ```
+
   Scenario: additionalProperties as a schema
     Given a YAML schema:
       ```

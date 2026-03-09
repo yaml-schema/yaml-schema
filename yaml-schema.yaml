@@ -92,7 +92,7 @@ properties:
   additionalProperties:
     oneOf:
       - type: boolean
-      - $ref: "#/$defs/array_of_schemas"
+      - $ref: "#/$defs/schema"
   not:
     $ref: "#/$defs/schema"
   oneOf:
