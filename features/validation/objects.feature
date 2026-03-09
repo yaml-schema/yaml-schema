@@ -214,6 +214,32 @@ Feature: Object types
       keyword: 42
       ```
 
+  Scenario: patternProperties takes priority over additionalProperties
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        builtin:
+          type: string
+      patternProperties:
+        ^pattern_[a-z]*$:
+          type: string
+      additionalProperties:
+        type: integer
+      ```
+    Then it should accept:
+      ```
+      builtin: hello
+      pattern_string: bonjour
+      whatever: 21
+      ```
+    But it should NOT accept:
+      ```
+      builtin: hello
+      pattern_integer: 12
+      whatever: 21
+      ```
+
   Scenario: additionalProperties as a object schemas with unused properties
     Given a YAML schema:
       ```
