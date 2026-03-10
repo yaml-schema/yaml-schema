@@ -1,5 +1,6 @@
 //! yaml-schema is a library for validating YAML data against a JSON Schema.
 
+use hashlink::LinkedHashMap;
 use jsonptr::Pointer;
 use log::debug;
 use saphyr::MarkedYaml;
@@ -186,15 +187,17 @@ impl std::fmt::Display for Number {
     }
 }
 
-/// A ConstValue is similar to a saphyr::Scalar, but for validating "number" types
-/// we treat integers and floating point values as 'fungible' and represent them
-/// using the `Number` enum.
+/// A ConstValue represents a constant value for the `const` keyword.
+/// Per JSON Schema, `const` can be any JSON value: null, boolean, number,
+/// string, array, or object.
 #[derive(Debug, PartialEq)]
 pub enum ConstValue {
     Null,
     Boolean(bool),
     Number(Number),
     String(String),
+    Array(Vec<ConstValue>),
+    Object(LinkedHashMap<String, ConstValue>),
 }
 
 impl ConstValue {
@@ -238,6 +241,34 @@ impl ConstValue {
                     return expected == actual.as_ref();
                 }
             }
+            ConstValue::Array(expected) => {
+                if let YamlData::Sequence(actual) = &value.data {
+                    if expected.len() != actual.len() {
+                        return false;
+                    }
+                    return expected
+                        .iter()
+                        .zip(actual.iter())
+                        .all(|(exp, act)| exp.accepts(act));
+                }
+            }
+            ConstValue::Object(expected) => {
+                if let YamlData::Mapping(actual) = &value.data {
+                    if expected.len() != actual.len() {
+                        return false;
+                    }
+                    for (key, exp_val) in expected.iter() {
+                        let key_yaml = MarkedYaml::value_from_str(key);
+                        let Some(act_yaml) = actual.get(&key_yaml) else {
+                            return false;
+                        };
+                        if !exp_val.accepts(act_yaml) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            }
         }
         false
     }
@@ -263,7 +294,26 @@ impl<'a> TryFrom<&YamlData<'a, MarkedYaml<'a>>> for ConstValue {
     fn try_from(value: &YamlData<'a, MarkedYaml<'a>>) -> Result<Self> {
         match value {
             YamlData::Value(scalar) => scalar.try_into(),
-            v => Err(generic_error!("Expected a scalar value, but got: {:?}", v)),
+            YamlData::Sequence(seq) => {
+                let arr = seq
+                    .iter()
+                    .map(|item| item.try_into())
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(ConstValue::Array(arr))
+            }
+            YamlData::Mapping(mapping) => {
+                let mut obj = LinkedHashMap::new();
+                for (key, val) in mapping.iter() {
+                    let key_str = marked_yaml_to_string(key, "const object key must be a string")?;
+                    let val_cv: ConstValue = val.try_into()?;
+                    obj.insert(key_str, val_cv);
+                }
+                Ok(ConstValue::Object(obj))
+            }
+            YamlData::Tagged(_, inner) => (&inner.data).try_into(),
+            YamlData::Representation(_, _, _) | YamlData::Alias(_) | YamlData::BadValue => Err(
+                generic_error!("Unsupported YamlData variant for const: {:?}", value),
+            ),
         }
     }
 }
@@ -271,14 +321,7 @@ impl<'a> TryFrom<&YamlData<'a, MarkedYaml<'a>>> for ConstValue {
 impl<'a> TryFrom<&MarkedYaml<'a>> for ConstValue {
     type Error = crate::Error;
     fn try_from(value: &MarkedYaml<'a>) -> Result<ConstValue> {
-        match (&value.data).try_into() {
-            Ok(r) => Ok(r),
-            _ => Err(generic_error!(
-                "{} Expected a scalar value, but got: {:?}",
-                format_marker(&value.span.start),
-                value
-            )),
-        }
+        (&value.data).try_into()
     }
 }
 
@@ -289,6 +332,26 @@ impl std::fmt::Display for ConstValue {
             ConstValue::Null => write!(f, "null"),
             ConstValue::Number(n) => write!(f, "{n} (number)"),
             ConstValue::String(s) => write!(f, "\"{s}\""),
+            ConstValue::Array(arr) => {
+                write!(f, "[")?;
+                for (i, v) in arr.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{v}")?;
+                }
+                write!(f, "]")
+            }
+            ConstValue::Object(obj) => {
+                write!(f, "{{")?;
+                for (i, (k, v)) in obj.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "\"{k}\": {v}")?;
+                }
+                write!(f, "}}")
+            }
         }
     }
 }
@@ -307,6 +370,8 @@ fn init() {
 
 #[cfg(test)]
 mod tests {
+    use saphyr::LoadableYamlNode;
+
     use super::*;
     use ordered_float::OrderedFloat;
 
@@ -349,6 +414,55 @@ mod tests {
             assert_eq!(*expected, actual);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_const_value_array_try_from() -> Result<()> {
+        let docs = MarkedYaml::load_from_str("[1, 2, 3]").unwrap();
+        let cv: ConstValue = docs.first().unwrap().try_into()?;
+        assert_eq!(
+            cv,
+            ConstValue::Array(vec![
+                ConstValue::integer(1),
+                ConstValue::integer(2),
+                ConstValue::integer(3),
+            ])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_const_value_object_try_from() -> Result<()> {
+        let docs = MarkedYaml::load_from_str("a: 1\nb: two").unwrap();
+        let cv: ConstValue = docs.first().unwrap().try_into()?;
+        let mut expected = LinkedHashMap::new();
+        expected.insert("a".into(), ConstValue::integer(1));
+        expected.insert("b".into(), ConstValue::string("two"));
+        assert_eq!(cv, ConstValue::Object(expected));
+        Ok(())
+    }
+
+    #[test]
+    fn test_const_value_accepts_array() -> Result<()> {
+        let cv = ConstValue::Array(vec![ConstValue::integer(1), ConstValue::string("foo")]);
+        let matching = MarkedYaml::load_from_str("[1, \"foo\"]").unwrap();
+        let not_matching = MarkedYaml::load_from_str("[1, \"bar\"]").unwrap();
+        assert!(cv.accepts(matching.first().unwrap()));
+        assert!(!cv.accepts(not_matching.first().unwrap()));
+        Ok(())
+    }
+
+    #[test]
+    fn test_const_value_accepts_object() -> Result<()> {
+        let mut obj = LinkedHashMap::new();
+        obj.insert("x".into(), ConstValue::integer(42));
+        obj.insert("y".into(), ConstValue::string("hi"));
+        let cv = ConstValue::Object(obj);
+        let matching = MarkedYaml::load_from_str("x: 42\ny: hi").unwrap();
+        let not_matching = MarkedYaml::load_from_str("x: 43\ny: hi").unwrap();
+        assert!(cv.accepts(matching.first().unwrap()));
+        assert!(!cv.accepts(not_matching.first().unwrap()));
         Ok(())
     }
 }
