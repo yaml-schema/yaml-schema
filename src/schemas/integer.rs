@@ -145,8 +145,7 @@ impl IntegerSchema {
                     }
                 }
                 Number::Float(min) => {
-                    let cmp = (i as f64).partial_cmp(&min);
-                    if cmp != Some(Ordering::Less) && cmp != Some(Ordering::Equal) {
+                    if (i as f64).partial_cmp(&min) == Some(Ordering::Less) {
                         context.add_error(
                             value,
                             format!("Number must be greater than or equal to {min}"),
@@ -182,8 +181,7 @@ impl IntegerSchema {
                     }
                 }
                 Number::Float(max) => {
-                    let cmp = (i as f64).partial_cmp(&max);
-                    if cmp != Some(Ordering::Greater) && cmp != Some(Ordering::Equal) {
+                    if (i as f64).partial_cmp(&max) == Some(Ordering::Greater) {
                         context.add_error(
                             value,
                             format!("Number must be less than or equal to {max}"),
@@ -239,6 +237,118 @@ mod tests {
             first_error.error,
             "Expected a number, but got: Value(String(\"foo\"))"
         );
+    }
+
+    #[test]
+    fn test_minimum_float_accepts_value_above() {
+        let schema = IntegerSchema {
+            minimum: Some(Number::Float(1.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("2");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_minimum_float_rejects_value_below() {
+        let schema = IntegerSchema {
+            minimum: Some(Number::Float(1.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("1");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_maximum_float_accepts_value_below() {
+        let schema = IntegerSchema {
+            maximum: Some(Number::Float(10.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("10");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_maximum_float_rejects_value_above() {
+        let schema = IntegerSchema {
+            maximum: Some(Number::Float(10.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("11");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_minimum_float_accepts_value_above() {
+        let schema = IntegerSchema {
+            exclusive_minimum: Some(Number::Float(1.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("2");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_minimum_float_rejects_value_below() {
+        let schema = IntegerSchema {
+            exclusive_minimum: Some(Number::Float(1.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("1");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_maximum_float_accepts_value_below() {
+        let schema = IntegerSchema {
+            exclusive_maximum: Some(Number::Float(10.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("10");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_maximum_float_rejects_value_above() {
+        let schema = IntegerSchema {
+            exclusive_maximum: Some(Number::Float(10.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("11");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
     }
 
     #[test]

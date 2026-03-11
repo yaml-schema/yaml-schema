@@ -86,7 +86,8 @@ impl NumberSchema {
                     }
                 }
             }
-        } else if let Some(minimum) = self.minimum {
+        }
+        if let Some(minimum) = self.minimum {
             match minimum {
                 Number::Integer(min) => {
                     if i < min {
@@ -97,8 +98,7 @@ impl NumberSchema {
                     }
                 }
                 Number::Float(min) => {
-                    let cmp = min.partial_cmp(&(i as f64));
-                    if cmp == Some(Ordering::Less) {
+                    if (i as f64).partial_cmp(&min) == Some(Ordering::Less) {
                         context.add_error(
                             value,
                             format!("Number must be greater than or equal to {min}"),
@@ -112,25 +112,22 @@ impl NumberSchema {
             match exclusive_max {
                 Number::Integer(exclusive_max) => {
                     if i >= exclusive_max {
-                        context.add_error(
-                            value,
-                            format!("Number must be less than than {exclusive_max}"),
-                        );
+                        context
+                            .add_error(value, format!("Number must be less than {exclusive_max}"));
                     }
                 }
                 Number::Float(exclusive_max) => {
                     if (i as f64).partial_cmp(&exclusive_max) != Some(Ordering::Less) {
-                        context.add_error(
-                            value,
-                            format!("Number must be less than than {exclusive_max}"),
-                        );
+                        context
+                            .add_error(value, format!("Number must be less than {exclusive_max}"));
                     }
                 }
             }
-        } else if let Some(maximum) = self.maximum {
+        }
+        if let Some(maximum) = self.maximum {
             match maximum {
                 Number::Integer(max) => {
-                    if i >= max {
+                    if i > max {
                         context.add_error(
                             value,
                             format!("Number must be less than or equal to {max}"),
@@ -138,8 +135,7 @@ impl NumberSchema {
                     }
                 }
                 Number::Float(max) => {
-                    let cmp = (i as f64).partial_cmp(&max);
-                    if cmp != Some(Ordering::Greater) && cmp != Some(Ordering::Equal) {
+                    if (i as f64).partial_cmp(&max) == Some(Ordering::Greater) {
                         context.add_error(
                             value,
                             format!("Number must be less than or equal to {max}"),
@@ -179,30 +175,78 @@ impl NumberSchema {
         value: &MarkedYaml,
         f: f64,
     ) {
-        if let Some(minimum) = &self.minimum {
-            match minimum {
-                Number::Integer(min) => {
-                    if f < *min as f64 {
-                        context.add_error(value, "Number is too small!".to_string());
+        if let Some(exclusive_min) = self.exclusive_minimum {
+            match exclusive_min {
+                Number::Integer(exclusive_min) => {
+                    if f <= exclusive_min as f64 {
+                        context.add_error(
+                            value,
+                            format!("Number must be greater than {exclusive_min}"),
+                        );
                     }
                 }
-                Number::Float(min) => {
-                    if f < *min {
-                        context.add_error(value, "Number is too small!".to_string());
+                Number::Float(exclusive_min) => {
+                    if f.partial_cmp(&exclusive_min) != Some(Ordering::Greater) {
+                        context.add_error(
+                            value,
+                            format!("Number must be greater than {exclusive_min}"),
+                        );
                     }
                 }
             }
         }
-        if let Some(maximum) = &self.maximum {
+        if let Some(minimum) = self.minimum {
+            match minimum {
+                Number::Integer(min) => {
+                    if f < min as f64 {
+                        context.add_error(
+                            value,
+                            format!("Number must be greater than or equal to {min}"),
+                        );
+                    }
+                }
+                Number::Float(min) => {
+                    if f.partial_cmp(&min) == Some(Ordering::Less) {
+                        context.add_error(
+                            value,
+                            format!("Number must be greater than or equal to {min}"),
+                        );
+                    }
+                }
+            }
+        }
+        if let Some(exclusive_max) = self.exclusive_maximum {
+            match exclusive_max {
+                Number::Integer(exclusive_max) => {
+                    if f >= exclusive_max as f64 {
+                        context
+                            .add_error(value, format!("Number must be less than {exclusive_max}"));
+                    }
+                }
+                Number::Float(exclusive_max) => {
+                    if f.partial_cmp(&exclusive_max) != Some(Ordering::Less) {
+                        context
+                            .add_error(value, format!("Number must be less than {exclusive_max}"));
+                    }
+                }
+            }
+        }
+        if let Some(maximum) = self.maximum {
             match maximum {
                 Number::Integer(max) => {
-                    if f > *max as f64 {
-                        context.add_error(value, "Number is too big!".to_string());
+                    if f > max as f64 {
+                        context.add_error(
+                            value,
+                            format!("Number must be less than or equal to {max}"),
+                        );
                     }
                 }
                 Number::Float(max) => {
-                    if f > *max {
-                        context.add_error(value, "Number is too big!".to_string());
+                    if f.partial_cmp(&max) == Some(Ordering::Greater) {
+                        context.add_error(
+                            value,
+                            format!("Number must be less than or equal to {max}"),
+                        );
                     }
                 }
             }
@@ -349,6 +393,163 @@ mod tests {
         let context = Context::default();
         number_schema
             .validate(&context, &marked_yaml)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_minimum_float_accepts_value_above() {
+        let schema = NumberSchema {
+            exclusive_minimum: Some(Number::Float(1.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("1.6");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_minimum_float_rejects_equal_value() {
+        let schema = NumberSchema {
+            exclusive_minimum: Some(Number::Float(1.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("1.5");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_minimum_float_rejects_value_below() {
+        let schema = NumberSchema {
+            exclusive_minimum: Some(Number::Float(1.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("1.4");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_maximum_float_accepts_value_below() {
+        let schema = NumberSchema {
+            exclusive_maximum: Some(Number::Float(10.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("10.4");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_maximum_float_rejects_equal_value() {
+        let schema = NumberSchema {
+            exclusive_maximum: Some(Number::Float(10.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("10.5");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_maximum_float_rejects_value_above() {
+        let schema = NumberSchema {
+            exclusive_maximum: Some(Number::Float(10.5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("10.6");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_minimum_int_boundary_with_float_value() {
+        let schema = NumberSchema {
+            exclusive_minimum: Some(Number::Integer(5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("5.0");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_maximum_int_boundary_with_float_value() {
+        let schema = NumberSchema {
+            exclusive_maximum: Some(Number::Integer(5)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("5.0");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_min_and_max_float_accepts_value_in_range() {
+        let schema = NumberSchema {
+            exclusive_minimum: Some(Number::Float(1.0)),
+            exclusive_maximum: Some(Number::Float(10.0)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("5.5");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_min_and_max_float_rejects_lower_boundary() {
+        let schema = NumberSchema {
+            exclusive_minimum: Some(Number::Float(1.0)),
+            exclusive_maximum: Some(Number::Float(10.0)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("1.0");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
+            .expect("validate() failed!");
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_exclusive_min_and_max_float_rejects_upper_boundary() {
+        let schema = NumberSchema {
+            exclusive_minimum: Some(Number::Float(1.0)),
+            exclusive_maximum: Some(Number::Float(10.0)),
+            ..Default::default()
+        };
+        let value = MarkedYaml::value_from_str("10.0");
+        let context = Context::default();
+        schema
+            .validate(&context, &value)
             .expect("validate() failed!");
         assert!(context.has_errors());
     }
