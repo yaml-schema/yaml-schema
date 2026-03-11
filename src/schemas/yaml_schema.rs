@@ -780,10 +780,7 @@ impl Subschema<'_> {
                 if !matches!(&value.data, YamlData::Value(Scalar::Null)) {
                     context.add_error(
                         value,
-                        format!(
-                            "Expected null, but got: {}",
-                            format_yaml_data(&value.data)
-                        ),
+                        format!("Expected null, but got: {}", format_yaml_data(&value.data)),
                     );
                 }
             }

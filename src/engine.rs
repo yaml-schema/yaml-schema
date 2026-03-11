@@ -31,18 +31,14 @@ impl<'a> Engine<'a> {
         let docs = saphyr::MarkedYaml::load_from_str(value).map_err(Error::YamlParsingError)?;
         match docs.first() {
             Some(yaml) => {
-                engine
-                    .root_schema
-                    .validate(&engine.context, yaml)?;
+                engine.root_schema.validate(&engine.context, yaml)?;
             }
-            None => {
-                match &engine.root_schema.schema {
-                    YamlSchema::Empty | YamlSchema::BooleanLiteral(true) => (),
-                    _ => engine
-                        .context
-                        .add_doc_error("Empty YAML document is not allowed"),
-                }
-            }
+            None => match &engine.root_schema.schema {
+                YamlSchema::Empty | YamlSchema::BooleanLiteral(true) => (),
+                _ => engine
+                    .context
+                    .add_doc_error("Empty YAML document is not allowed"),
+            },
         }
         Ok(engine.context)
     }
