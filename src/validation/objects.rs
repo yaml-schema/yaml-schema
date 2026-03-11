@@ -121,17 +121,8 @@ impl ObjectSchema<'_> {
                 continue;
             }
 
-            // Then, we check if additional properties are allowed or not
-            if let Some(additional_properties) = &self.additional_properties {
-                try_validate_value_against_additional_properties(
-                    context,
-                    &key_string,
-                    value,
-                    additional_properties,
-                )?;
-            }
-
             // Then we check if pattern_properties matches
+            let mut matched_pattern_property = false;
             if let Some(pattern_properties) = &self.pattern_properties {
                 for (pattern, schema) in pattern_properties {
                     log::debug!("pattern: {pattern}");
@@ -140,9 +131,23 @@ impl ObjectSchema<'_> {
                         Error::GenericError(format!("Invalid regular expression pattern: {e}"))
                     })?;
                     if re.is_match(key_string.as_ref()) {
+                        matched_pattern_property = true;
                         schema.validate(context, value)?;
                     }
                 }
+            }
+
+            // additionalProperties only applies when a property does not match
+            // either explicit properties or patternProperties.
+            if !matched_pattern_property
+                && let Some(additional_properties) = &self.additional_properties
+            {
+                try_validate_value_against_additional_properties(
+                    context,
+                    &key_string,
+                    value,
+                    additional_properties,
+                )?;
             }
             // Finally, we check if it matches property_names
             if let Some(property_names) = &self.property_names {

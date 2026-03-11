@@ -256,6 +256,29 @@ mod tests {
     }
 
     #[test]
+    fn test_const_array() {
+        let docs = MarkedYaml::load_from_str("const: [1, 2]").unwrap();
+        let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        let expected = ConstValue::Array(vec![ConstValue::integer(1), ConstValue::integer(2)]);
+        assert_eq!(subschema.r#const, Some(expected));
+    }
+
+    #[test]
+    fn test_const_object() {
+        let docs = MarkedYaml::load_from_str("const:\n  a: 1").unwrap();
+        let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+        };
+        let mut expected_obj = hashlink::LinkedHashMap::new();
+        expected_obj.insert("a".into(), ConstValue::integer(1));
+        assert_eq!(subschema.r#const, Some(ConstValue::Object(expected_obj)));
+    }
+
+    #[test]
     fn test_type_foo_should_error() {
         let docs = MarkedYaml::load_from_str("type: foo").unwrap();
         let root_schema = load_from_doc(docs.first().unwrap());
