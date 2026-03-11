@@ -649,16 +649,23 @@ impl Validator for Subschema<'_> {
             debug!("[Subschema] Reference found: {reference}");
             let ref_name = &reference.ref_name;
             if let Some(root_schema) = context.root_schema {
-                if let Some(ref_name) = ref_name.strip_prefix("#") {
-                    let pointer = jsonptr::Pointer::parse(ref_name)?;
+                if let Some(ref_path) = ref_name.strip_prefix("#") {
+                    if context.is_resolving_ref(ref_name, value) {
+                        context.add_error(value, format!("Circular $ref detected: {ref_name}"));
+                        return Ok(());
+                    }
+                    let pointer = jsonptr::Pointer::parse(ref_path)?;
                     debug!("[Subschema] Pointer: {pointer}");
                     let schema = root_schema.resolve(pointer);
                     if let Some(schema) = schema {
-                        debug!("[Subschema] Found {ref_name}: {schema}");
-                        schema.validate(context, value)?;
+                        debug!("[Subschema] Found {ref_path}: {schema}");
+                        context.begin_resolving_ref(ref_name, value);
+                        let result = schema.validate(context, value);
+                        context.end_resolving_ref(ref_name, value);
+                        result?;
                     } else {
-                        error!("[Subschema] Cannot find definition: {ref_name}");
-                        context.add_error(value, format!("Schema {ref_name} not found"));
+                        error!("[Subschema] Cannot find definition: {ref_path}");
+                        context.add_error(value, format!("Schema {ref_path} not found"));
                     }
                 } else {
                     error!("[Subschema] Cannot find definition: {ref_name}");
