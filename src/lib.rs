@@ -153,6 +153,32 @@ impl Number {
     pub fn float(value: f64) -> Number {
         Number::Float(value)
     }
+
+    pub fn to_f64(self) -> f64 {
+        match self {
+            Number::Integer(i) => i as f64,
+            Number::Float(f) => f,
+        }
+    }
+
+    pub fn is_multiple_of(self, divisor: Number) -> bool {
+        match (self, divisor) {
+            (Number::Integer(a), Number::Integer(b)) => b != 0 && a % b == 0,
+            _ => {
+                let d = divisor.to_f64();
+                d != 0.0 && self.to_f64() % d == 0.0
+            }
+        }
+    }
+}
+
+impl PartialOrd for Number {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Number::Integer(a), Number::Integer(b)) => a.partial_cmp(b),
+            _ => self.to_f64().partial_cmp(&other.to_f64()),
+        }
+    }
 }
 
 impl TryFrom<&MarkedYaml<'_>> for Number {

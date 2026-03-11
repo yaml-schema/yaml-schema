@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
@@ -8,6 +6,7 @@ use saphyr::YamlData;
 
 use crate::Number;
 use crate::Result;
+use crate::schemas::NumericBounds;
 use crate::utils::format_marker;
 use crate::validation::Context;
 use crate::validation::Validator;
@@ -15,11 +14,7 @@ use crate::validation::Validator;
 /// An integer schema
 #[derive(Debug, Default, PartialEq)]
 pub struct IntegerSchema {
-    pub minimum: Option<Number>,
-    pub maximum: Option<Number>,
-    pub exclusive_minimum: Option<Number>,
-    pub exclusive_maximum: Option<Number>,
-    pub multiple_of: Option<Number>,
+    pub bounds: NumericBounds,
 }
 
 impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
@@ -38,24 +33,24 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for IntegerSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'_, MarkedYaml<'_>>) -> crate::Result<Self> {
-        let mut integer_schema = IntegerSchema::default();
+        let mut schema = IntegerSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
                 match key.as_ref() {
                     "minimum" => {
-                        integer_schema.minimum = Some(value.try_into()?);
+                        schema.bounds.minimum = Some(value.try_into()?);
                     }
                     "maximum" => {
-                        integer_schema.maximum = Some(value.try_into()?);
+                        schema.bounds.maximum = Some(value.try_into()?);
                     }
                     "exclusiveMinimum" => {
-                        integer_schema.exclusive_minimum = Some(value.try_into()?);
+                        schema.bounds.exclusive_minimum = Some(value.try_into()?);
                     }
                     "exclusiveMaximum" => {
-                        integer_schema.exclusive_maximum = Some(value.try_into()?);
+                        schema.bounds.exclusive_maximum = Some(value.try_into()?);
                     }
                     "multipleOf" => {
-                        integer_schema.multiple_of = Some(value.try_into()?);
+                        schema.bounds.multiple_of = Some(value.try_into()?);
                     }
                     _ => {
                         debug!("Unsupported key for `type: integer`: {}", key);
@@ -69,7 +64,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for IntegerSchema {
                 ));
             }
         }
-        Ok(integer_schema)
+        Ok(schema)
     }
 }
 
@@ -82,15 +77,15 @@ impl std::fmt::Display for IntegerSchema {
 impl Validator for IntegerSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
-        // TODO: add enum validation
-        let enum_values = None;
         if let saphyr::YamlData::Value(scalar) = data {
             if let saphyr::Scalar::Integer(i) = scalar {
-                self.validate_integer(context, &enum_values, value, *i);
+                self.bounds
+                    .validate(context, value, Number::Integer(*i));
             } else if let saphyr::Scalar::FloatingPoint(o) = scalar {
                 let f = o.into_inner();
                 if f.fract() == 0.0 {
-                    self.validate_integer(context, &enum_values, value, f as i64);
+                    self.bounds
+                        .validate(context, value, Number::Integer(f as i64));
                 } else {
                     context.add_error(value, format!("Expected an integer, but got: {data:?}"));
                 }
@@ -104,114 +99,6 @@ impl Validator for IntegerSchema {
             fail_fast!(context)
         }
         Ok(())
-    }
-}
-
-impl IntegerSchema {
-    fn validate_integer(
-        &self,
-        context: &Context,
-        enum_values: &Option<Vec<i64>>,
-        value: &MarkedYaml,
-        i: i64,
-    ) {
-        if let Some(exclusive_min) = self.exclusive_minimum {
-            match exclusive_min {
-                Number::Integer(exclusive_min) => {
-                    if i <= exclusive_min {
-                        context.add_error(
-                            value,
-                            format!("Number must be greater than {exclusive_min}"),
-                        );
-                    }
-                }
-                Number::Float(exclusive_min) => {
-                    if (i as f64).partial_cmp(&exclusive_min) != Some(Ordering::Greater) {
-                        context.add_error(
-                            value,
-                            format!("Number must be greater than {exclusive_min}"),
-                        );
-                    }
-                }
-            }
-        } else if let Some(minimum) = self.minimum {
-            match minimum {
-                Number::Integer(min) => {
-                    if i < min {
-                        context.add_error(
-                            value,
-                            format!("Number must be greater than or equal to {min}"),
-                        );
-                    }
-                }
-                Number::Float(min) => {
-                    if (i as f64).partial_cmp(&min) == Some(Ordering::Less) {
-                        context.add_error(
-                            value,
-                            format!("Number must be greater than or equal to {min}"),
-                        );
-                    }
-                }
-            }
-        }
-
-        if let Some(exclusive_max) = self.exclusive_maximum {
-            match exclusive_max {
-                Number::Integer(exclusive_max) => {
-                    if i >= exclusive_max {
-                        context
-                            .add_error(value, format!("Number must be less than {exclusive_max}"));
-                    }
-                }
-                Number::Float(exclusive_max) => {
-                    if (i as f64).partial_cmp(&exclusive_max) != Some(Ordering::Less) {
-                        context
-                            .add_error(value, format!("Number must be less than {exclusive_max}"));
-                    }
-                }
-            }
-        } else if let Some(maximum) = self.maximum {
-            match maximum {
-                Number::Integer(max) => {
-                    if i > max {
-                        context.add_error(
-                            value,
-                            format!("Number must be less than or equal to {max}"),
-                        );
-                    }
-                }
-                Number::Float(max) => {
-                    if (i as f64).partial_cmp(&max) == Some(Ordering::Greater) {
-                        context.add_error(
-                            value,
-                            format!("Number must be less than or equal to {max}"),
-                        );
-                    }
-                }
-            }
-        }
-
-        if let Some(multiple_of) = self.multiple_of {
-            match multiple_of {
-                Number::Integer(multiple) => {
-                    if i % multiple != 0 {
-                        context
-                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
-                    }
-                }
-                Number::Float(multiple) => {
-                    if (i as f64) % multiple != 0.0 {
-                        context
-                            .add_error(value, format!("Number is not a multiple of {multiple}!"));
-                    }
-                }
-            }
-        }
-        if let Some(enum_values) = enum_values
-            && !enum_values.contains(&i)
-        {
-            context.add_error(value, format!("Number is not in enum: {enum_values:?}"));
-        }
     }
 }
 
@@ -242,8 +129,10 @@ mod tests {
     #[test]
     fn test_minimum_float_accepts_value_above() {
         let schema = IntegerSchema {
-            minimum: Some(Number::Float(1.5)),
-            ..Default::default()
+            bounds: NumericBounds {
+                minimum: Some(Number::Float(1.5)),
+                ..Default::default()
+            },
         };
         let value = MarkedYaml::value_from_str("2");
         let context = Context::default();
@@ -256,8 +145,10 @@ mod tests {
     #[test]
     fn test_minimum_float_rejects_value_below() {
         let schema = IntegerSchema {
-            minimum: Some(Number::Float(1.5)),
-            ..Default::default()
+            bounds: NumericBounds {
+                minimum: Some(Number::Float(1.5)),
+                ..Default::default()
+            },
         };
         let value = MarkedYaml::value_from_str("1");
         let context = Context::default();
@@ -270,8 +161,10 @@ mod tests {
     #[test]
     fn test_maximum_float_accepts_value_below() {
         let schema = IntegerSchema {
-            maximum: Some(Number::Float(10.5)),
-            ..Default::default()
+            bounds: NumericBounds {
+                maximum: Some(Number::Float(10.5)),
+                ..Default::default()
+            },
         };
         let value = MarkedYaml::value_from_str("10");
         let context = Context::default();
@@ -284,8 +177,10 @@ mod tests {
     #[test]
     fn test_maximum_float_rejects_value_above() {
         let schema = IntegerSchema {
-            maximum: Some(Number::Float(10.5)),
-            ..Default::default()
+            bounds: NumericBounds {
+                maximum: Some(Number::Float(10.5)),
+                ..Default::default()
+            },
         };
         let value = MarkedYaml::value_from_str("11");
         let context = Context::default();
@@ -298,8 +193,10 @@ mod tests {
     #[test]
     fn test_exclusive_minimum_float_accepts_value_above() {
         let schema = IntegerSchema {
-            exclusive_minimum: Some(Number::Float(1.5)),
-            ..Default::default()
+            bounds: NumericBounds {
+                exclusive_minimum: Some(Number::Float(1.5)),
+                ..Default::default()
+            },
         };
         let value = MarkedYaml::value_from_str("2");
         let context = Context::default();
@@ -312,8 +209,10 @@ mod tests {
     #[test]
     fn test_exclusive_minimum_float_rejects_value_below() {
         let schema = IntegerSchema {
-            exclusive_minimum: Some(Number::Float(1.5)),
-            ..Default::default()
+            bounds: NumericBounds {
+                exclusive_minimum: Some(Number::Float(1.5)),
+                ..Default::default()
+            },
         };
         let value = MarkedYaml::value_from_str("1");
         let context = Context::default();
@@ -326,8 +225,10 @@ mod tests {
     #[test]
     fn test_exclusive_maximum_float_accepts_value_below() {
         let schema = IntegerSchema {
-            exclusive_maximum: Some(Number::Float(10.5)),
-            ..Default::default()
+            bounds: NumericBounds {
+                exclusive_maximum: Some(Number::Float(10.5)),
+                ..Default::default()
+            },
         };
         let value = MarkedYaml::value_from_str("10");
         let context = Context::default();
@@ -340,8 +241,10 @@ mod tests {
     #[test]
     fn test_exclusive_maximum_float_rejects_value_above() {
         let schema = IntegerSchema {
-            exclusive_maximum: Some(Number::Float(10.5)),
-            ..Default::default()
+            bounds: NumericBounds {
+                exclusive_maximum: Some(Number::Float(10.5)),
+                ..Default::default()
+            },
         };
         let value = MarkedYaml::value_from_str("11");
         let context = Context::default();
