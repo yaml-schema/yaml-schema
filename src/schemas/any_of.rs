@@ -65,7 +65,7 @@ impl Validator for crate::schemas::AnyOfSchema<'_> {
 }
 
 pub fn validate_any_of(
-    schemas: &Vec<YamlSchema>,
+    schemas: &[YamlSchema],
     context: &Context,
     marked_yaml: &saphyr::MarkedYaml,
 ) -> Result<bool> {

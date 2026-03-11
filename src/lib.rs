@@ -245,58 +245,47 @@ impl ConstValue {
 
     pub fn accepts(&self, value: &saphyr::MarkedYaml) -> bool {
         match self {
-            ConstValue::Null => return matches!(&value.data, YamlData::Value(Scalar::Null)),
+            ConstValue::Null => matches!(&value.data, YamlData::Value(Scalar::Null)),
             ConstValue::Boolean(expected) => {
-                if let YamlData::Value(Scalar::Boolean(actual)) = &value.data {
-                    return *expected == *actual;
-                }
+                matches!(&value.data, YamlData::Value(Scalar::Boolean(actual)) if *expected == *actual)
             }
-            ConstValue::Number(number) => {
-                if let Number::Integer(expected) = number
-                    && let YamlData::Value(Scalar::Integer(actual)) = &value.data
-                {
-                    return *actual == *expected;
-                } else if let Number::Float(expected) = number
-                    && let YamlData::Value(Scalar::FloatingPoint(ordered_float)) = &value.data
-                {
-                    return ordered_float.into_inner() == *expected;
+            ConstValue::Number(number) => match (number, &value.data) {
+                (Number::Integer(expected), YamlData::Value(Scalar::Integer(actual))) => {
+                    *actual == *expected
                 }
-            }
+                (Number::Float(expected), YamlData::Value(Scalar::FloatingPoint(of))) => {
+                    of.into_inner() == *expected
+                }
+                _ => false,
+            },
             ConstValue::String(expected) => {
-                if let YamlData::Value(Scalar::String(actual)) = &value.data {
-                    return expected == actual.as_ref();
-                }
+                matches!(&value.data, YamlData::Value(Scalar::String(actual)) if expected == actual.as_ref())
             }
             ConstValue::Array(expected) => {
                 if let YamlData::Sequence(actual) = &value.data {
-                    if expected.len() != actual.len() {
-                        return false;
-                    }
-                    return expected
-                        .iter()
-                        .zip(actual.iter())
-                        .all(|(exp, act)| exp.accepts(act));
+                    expected.len() == actual.len()
+                        && expected
+                            .iter()
+                            .zip(actual.iter())
+                            .all(|(exp, act)| exp.accepts(act))
+                } else {
+                    false
                 }
             }
             ConstValue::Object(expected) => {
                 if let YamlData::Mapping(actual) = &value.data {
-                    if expected.len() != actual.len() {
-                        return false;
-                    }
-                    for (key, exp_val) in expected.iter() {
-                        let key_yaml = MarkedYaml::value_from_str(key);
-                        let Some(act_yaml) = actual.get(&key_yaml) else {
-                            return false;
-                        };
-                        if !exp_val.accepts(act_yaml) {
-                            return false;
-                        }
-                    }
-                    return true;
+                    expected.len() == actual.len()
+                        && expected.iter().all(|(key, exp_val)| {
+                            let key_yaml = MarkedYaml::value_from_str(key);
+                            actual
+                                .get(&key_yaml)
+                                .is_some_and(|act_yaml| exp_val.accepts(act_yaml))
+                        })
+                } else {
+                    false
                 }
             }
         }
-        false
     }
 }
 

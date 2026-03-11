@@ -66,7 +66,7 @@ macro_rules! unsupported_type {
         $crate::Error::UnsupportedType(format!($s, $($e),+))
     };
     ($e:expr) => {
-        $crate::Error::UnsupportedType()
+        $crate::Error::UnsupportedType($e.to_string())
     };
 }
 
