@@ -1,6 +1,4 @@
 use saphyr::LoadableYamlNode;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use crate::Error;
 use crate::Result;
@@ -12,14 +10,14 @@ use crate::validation::Context;
 #[derive(Debug)]
 pub struct Engine<'a> {
     pub root_schema: &'a RootSchema<'a>,
-    pub context: Rc<RefCell<Context<'a>>>,
+    pub context: Context<'a>,
 }
 
 impl<'a> Engine<'a> {
     pub fn new(root_schema: &'a RootSchema, context: Context<'a>) -> Self {
         Engine {
             root_schema,
-            context: Rc::new(RefCell::new(context)),
+            context,
         }
     }
 
@@ -35,21 +33,18 @@ impl<'a> Engine<'a> {
             Some(yaml) => {
                 engine
                     .root_schema
-                    .validate(&engine.context.borrow(), yaml)?;
+                    .validate(&engine.context, yaml)?;
             }
             None => {
-                // docs.is_empty()
                 match &engine.root_schema.schema {
                     YamlSchema::Empty | YamlSchema::BooleanLiteral(true) => (),
-                    // YamlSchema::Null or YamlSchema::Subschema(_)
                     _ => engine
                         .context
-                        .borrow()
                         .add_doc_error("Empty YAML document is not allowed"),
                 }
             }
         }
-        Ok(engine.context.take())
+        Ok(engine.context)
     }
 }
 

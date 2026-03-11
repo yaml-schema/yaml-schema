@@ -672,17 +672,6 @@ impl Validator for Subschema<'_> {
             }
         }
 
-        // Short-circuit for type: null
-        if self.r#type.is_or_contains("null") {
-            if !matches!(&value.data, YamlData::Value(Scalar::Null)) {
-                context.add_error(
-                    value,
-                    format!("Expected null, but got: {}", format_yaml_data(&value.data)),
-                );
-            }
-            return Ok(());
-        }
-
         if let Some(any_of) = &self.any_of {
             debug!("[Subschema] Validating anyOf schema: {any_of:?}");
             any_of.validate(context, value)?;
@@ -775,6 +764,17 @@ impl Subschema<'_> {
                         value,
                         format!(
                             "Expected boolean, but got: {}",
+                            format_yaml_data(&value.data)
+                        ),
+                    );
+                }
+            }
+            "null" => {
+                if !matches!(&value.data, YamlData::Value(Scalar::Null)) {
+                    context.add_error(
+                        value,
+                        format!(
+                            "Expected null, but got: {}",
                             format_yaml_data(&value.data)
                         ),
                     );
