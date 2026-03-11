@@ -54,10 +54,10 @@ Feature: Numeric types
       ```
       type: number
       minimum: 0
-      exclusiveMaximum: 10
+      exclusiveMaximum: 100
       ```
     # Less than `minimum`
-    Then it should not accept:
+    Then it should NOT accept:
       ```
       -1
       ```
@@ -75,12 +75,12 @@ Feature: Numeric types
       99
       ```
     # `exclusiveMaximum` is exclusive, so 100 is not valid
-    But it should not accept:
+    But it should NOT accept:
       ```
       100
       ```
     # Greater than `maximum`
-    And it should not accept:
+    And it should NOT accept:
       ```
       101
       ```
@@ -90,10 +90,10 @@ Feature: Numeric types
       ```
       type: integer
       minimum: 0
-      exclusiveMaximum: 10
+      exclusiveMaximum: 100
       ```
     # Less than `minimum`
-    Then it should not accept:
+    Then it should NOT accept:
       ```
       -1
       ```
@@ -111,12 +111,12 @@ Feature: Numeric types
       99
       ```
     # `exclusiveMaximum` is exclusive, so 100 is not valid
-    But it should not accept:
+    But it should NOT accept:
       ```
       100
       ```
     # Greater than `maximum`
-    And it should not accept:
+    And it should NOT accept:
       ```
       101
       ```

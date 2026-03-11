@@ -54,7 +54,7 @@ async fn it_should_accept(world: &mut FeaturesWorld, step: &Step) {
     assert!(result);
 }
 
-#[then(regex = "it should NOT accept:")]
+#[then(regex = "it should (?i:NOT) accept:")]
 async fn it_should_not_accept(world: &mut FeaturesWorld, step: &Step) {
     let raw_input = step.docstring().expect("Expected a docstring");
     let input_without_beginning_newline =
