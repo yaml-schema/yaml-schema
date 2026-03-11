@@ -37,10 +37,9 @@ pub fn load_from_str<'f>(s: &str) -> Result<RootSchema<'f>> {
 
 /// Load a RootSchema from Vec of docs.
 pub fn load_from_docs<'f>(docs: Vec<MarkedYaml<'f>>) -> Result<RootSchema<'f>> {
-    if docs.is_empty() {
-        return Ok(RootSchema::empty()); // empty schema
-    }
-    let first_doc = docs.first().expect("No documents found");
+    let Some(first_doc) = docs.first() else {
+        return Ok(RootSchema::empty());
+    };
     load_from_doc(first_doc)
 }
 

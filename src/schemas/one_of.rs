@@ -71,7 +71,7 @@ impl Validator for crate::schemas::OneOfSchema<'_> {
 
 pub fn validate_one_of(
     context: &Context,
-    schemas: &Vec<YamlSchema<'_>>,
+    schemas: &[YamlSchema<'_>],
     value: &saphyr::MarkedYaml,
 ) -> Result<bool> {
     let mut one_of_is_valid = false;

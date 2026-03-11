@@ -72,7 +72,7 @@ impl Validator for AllOfSchema<'_> {
 }
 
 pub fn validate_all_of(
-    schemas: &Vec<YamlSchema>,
+    schemas: &[YamlSchema],
     context: &Context,
     value: &saphyr::MarkedYaml,
 ) -> Result<bool> {
