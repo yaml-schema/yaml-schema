@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::RootSchema;
@@ -16,6 +17,11 @@ pub struct Context<'r> {
     pub stream_ended: bool,
     pub errors: Rc<RefCell<Vec<ValidationError>>>,
     pub fail_fast: bool,
+    /// Tracks `($ref, value_position)` pairs currently being resolved to detect circular references.
+    /// The value position is the byte offset of the YAML value's span start, so the same ref
+    /// applied to a nested value is allowed (legitimate recursion) while the same ref
+    /// on the same value is detected as a cycle.
+    pub resolving_refs: Rc<RefCell<HashSet<(String, usize)>>>,
 }
 
 impl<'r> Context<'r> {
@@ -45,6 +51,7 @@ impl<'r> Context<'r> {
             stream_ended: self.stream_ended,
             errors: Rc::new(RefCell::new(Vec::new())),
             fail_fast: self.fail_fast,
+            resolving_refs: self.resolving_refs.clone(),
         }
     }
 
@@ -96,6 +103,26 @@ impl<'r> Context<'r> {
             fail_fast: self.fail_fast,
             stream_ended: self.stream_ended,
             stream_started: self.stream_started,
+            resolving_refs: self.resolving_refs.clone(),
         }
+    }
+
+    /// Returns `true` if the given ref is already being resolved for the given
+    /// YAML value (identified by its span start index), indicating a cycle.
+    pub fn is_resolving_ref(&self, ref_name: &str, value: &saphyr::MarkedYaml) -> bool {
+        let key = (ref_name.to_string(), value.span.start.index());
+        self.resolving_refs.borrow().contains(&key)
+    }
+
+    /// Mark a `(ref, value_position)` pair as currently being resolved.
+    pub fn begin_resolving_ref(&self, ref_name: &str, value: &saphyr::MarkedYaml) {
+        let key = (ref_name.to_string(), value.span.start.index());
+        self.resolving_refs.borrow_mut().insert(key);
+    }
+
+    /// Remove a `(ref, value_position)` pair from the resolving set after resolution completes.
+    pub fn end_resolving_ref(&self, ref_name: &str, value: &saphyr::MarkedYaml) {
+        let key = (ref_name.to_string(), value.span.start.index());
+        self.resolving_refs.borrow_mut().remove(&key);
     }
 }

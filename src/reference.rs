@@ -161,4 +161,84 @@ mod tests {
         let components: Vec<_> = ptr.components().collect();
         assert!(!components.is_empty());
     }
+
+    #[test]
+    fn test_circular_reference_direct() {
+        let schema = r##"
+            $defs:
+                a:
+                    $ref: "#/$defs/a"
+            $ref: "#/$defs/a"
+        "##;
+        let root_schema = loader::load_from_str(schema).expect("Failed to load schema");
+        let context = crate::Context::with_root_schema(&root_schema, false);
+        let docs = saphyr::MarkedYaml::load_from_str("test").unwrap();
+        let value = docs.first().unwrap();
+        let result = root_schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(context.has_errors());
+        let errors = context.errors.borrow();
+        assert_eq!(errors.len(), 1);
+        assert!(
+            errors[0].error.contains("Circular $ref detected"),
+            "Expected circular ref error, got: {}",
+            errors[0].error
+        );
+    }
+
+    #[test]
+    fn test_circular_reference_indirect() {
+        let schema = r##"
+            $defs:
+                a:
+                    $ref: "#/$defs/b"
+                b:
+                    $ref: "#/$defs/a"
+            $ref: "#/$defs/a"
+        "##;
+        let root_schema = loader::load_from_str(schema).expect("Failed to load schema");
+        let context = crate::Context::with_root_schema(&root_schema, false);
+        let docs = saphyr::MarkedYaml::load_from_str("test").unwrap();
+        let value = docs.first().unwrap();
+        let result = root_schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(context.has_errors());
+        let errors = context.errors.borrow();
+        assert_eq!(errors.len(), 1);
+        assert!(
+            errors[0].error.contains("Circular $ref detected"),
+            "Expected circular ref error, got: {}",
+            errors[0].error
+        );
+    }
+
+    #[test]
+    fn test_non_circular_ref_still_works() {
+        let schema = r##"
+            $defs:
+                name:
+                    type: string
+            type: object
+            properties:
+                first_name:
+                    $ref: "#/$defs/name"
+                last_name:
+                    $ref: "#/$defs/name"
+        "##;
+        let root_schema = loader::load_from_str(schema).expect("Failed to load schema");
+        let context = crate::Context::with_root_schema(&root_schema, false);
+        let value = r#"
+            first_name: "Alice"
+            last_name: "Smith"
+        "#;
+        let docs = saphyr::MarkedYaml::load_from_str(value).unwrap();
+        let value = docs.first().unwrap();
+        let result = root_schema.validate(&context, value);
+        assert!(result.is_ok());
+        assert!(
+            !context.has_errors(),
+            "Expected no errors, got: {:?}",
+            context.errors.borrow()
+        );
+    }
 }
