@@ -33,6 +33,8 @@ pub enum Error {
     InvalidRegularExpression(String),
     #[error(transparent)]
     UrlLoadError(#[from] UrlLoadError),
+    #[error("Circular $ref detected: {0}")]
+    CircularReference(String),
     #[error(transparent)]
     JsonPtrError(#[from] jsonptr::ParseError),
     #[error("Not yet implemented!")]
@@ -105,5 +107,15 @@ macro_rules! expected_type_is_string {
             $crate::utils::format_marker(&$marked_yaml.span.start),
             format!("{:?}", $marked_yaml.data),
         )
+    };
+}
+
+#[macro_export]
+macro_rules! circular_reference {
+    ($s:literal, $($e:expr),+) => {
+        $crate::Error::CircularReference(format!($s, $($e),+))
+    };
+    ($s:literal) => {
+        $crate::Error::CircularReference($s.to_string())
     };
 }
