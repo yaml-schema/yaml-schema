@@ -380,3 +380,135 @@ Feature: Arrays
       - 4
       - 5
       ```
+
+  Scenario: minContains
+    # minContains requires at least N items to match the contains schema
+    Given a YAML schema:
+      ```
+      type: array
+      contains:
+        type: number
+      minContains: 2
+      ```
+    # Two numbers satisfies minContains: 2
+    Then it should accept:
+      ```
+      - apple
+      - 1
+      - banana
+      - 2
+      ```
+    # Only one number is not enough
+    But it should NOT accept:
+      ```
+      - apple
+      - 1
+      - banana
+      ```
+    # All numbers also satisfies the constraint
+    And it should accept:
+      ```
+      - 1
+      - 2
+      - 3
+      ```
+
+  Scenario: maxContains
+    # maxContains requires at most N items to match the contains schema
+    Given a YAML schema:
+      ```
+      type: array
+      contains:
+        type: number
+      maxContains: 3
+      ```
+    # Three numbers is within the limit
+    Then it should accept:
+      ```
+      - 1
+      - apple
+      - 2
+      - banana
+      - 3
+      ```
+    # Four numbers exceeds maxContains: 3
+    But it should NOT accept:
+      ```
+      - 1
+      - 2
+      - 3
+      - 4
+      ```
+    # One number is fine (still at least 1 by default minContains)
+    And it should accept:
+      ```
+      - apple
+      - 1
+      - banana
+      ```
+
+  Scenario: minContains and maxContains together
+    Given a YAML schema:
+      ```
+      type: array
+      contains:
+        type: number
+      minContains: 2
+      maxContains: 3
+      ```
+    # Exactly 2 matches — valid
+    Then it should accept:
+      ```
+      - apple
+      - 1
+      - 2
+      - banana
+      ```
+    # Exactly 3 matches — valid
+    And it should accept:
+      ```
+      - 1
+      - apple
+      - 2
+      - 3
+      ```
+    # Only 1 match — below minContains
+    But it should NOT accept:
+      ```
+      - apple
+      - 1
+      - banana
+      - cherry
+      ```
+    # 4 matches — exceeds maxContains
+    And it should NOT accept:
+      ```
+      - 1
+      - 2
+      - 3
+      - 4
+      ```
+
+  Scenario: minContains of 0
+    # Setting minContains to 0 with contains means "contains is satisfied even if nothing matches"
+    Given a YAML schema:
+      ```
+      type: array
+      contains:
+        type: number
+      minContains: 0
+      ```
+    # No numbers at all — still valid because minContains is 0
+    Then it should accept:
+      ```
+      - apple
+      - banana
+      - cherry
+      ```
+    # Having numbers is also fine
+    And it should accept:
+      ```
+      - apple
+      - 1
+      - banana
+      ```
