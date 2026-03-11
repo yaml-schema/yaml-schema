@@ -188,6 +188,164 @@ Feature: Arrays
       - 20500
       ```
 
+  Scenario: minItems
+    Given a YAML schema:
+      ```
+      type: array
+      minItems: 2
+      ```
+    Then it should accept:
+      ```
+      - 1
+      - 2
+      - 3
+      ```
+    And it should accept:
+      ```
+      - 1
+      - 2
+      ```
+    # An array with fewer items than the minimum is invalid
+    But it should NOT accept:
+      ```
+      - 1
+      ```
+    # An empty array should also fail
+    And it should NOT accept:
+      ```
+      []
+      ```
+
+  Scenario: maxItems
+    Given a YAML schema:
+      ```
+      type: array
+      maxItems: 3
+      ```
+    Then it should accept:
+      ```
+      - 1
+      - 2
+      ```
+    And it should accept:
+      ```
+      - 1
+      - 2
+      - 3
+      ```
+    # An array with more items than the maximum is invalid
+    But it should NOT accept:
+      ```
+      - 1
+      - 2
+      - 3
+      - 4
+      ```
+    # An empty array is always valid
+    And it should accept:
+      ```
+      []
+      ```
+
+  Scenario: minItems and maxItems together
+    Given a YAML schema:
+      ```
+      type: array
+      minItems: 2
+      maxItems: 4
+      items:
+        type: number
+      ```
+    Then it should accept:
+      ```
+      - 1
+      - 2
+      ```
+    And it should accept:
+      ```
+      - 1
+      - 2
+      - 3
+      - 4
+      ```
+    # Too few items
+    But it should NOT accept:
+      ```
+      - 1
+      ```
+    # Too many items
+    And it should NOT accept:
+      ```
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      ```
+
+  Scenario: uniqueItems
+    Given a YAML schema:
+      ```
+      type: array
+      uniqueItems: true
+      ```
+    # All unique elements
+    Then it should accept:
+      ```
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      ```
+    # Duplicate elements should be rejected
+    But it should NOT accept:
+      ```
+      - 1
+      - 2
+      - 3
+      - 3
+      - 4
+      ```
+    # An empty array is always valid
+    And it should accept:
+      ```
+      []
+      ```
+    # A single element is always valid
+    And it should accept:
+      ```
+      - 1
+      ```
+    # Unique strings
+    And it should accept:
+      ```
+      - foo
+      - bar
+      - baz
+      ```
+    # Duplicate strings should be rejected
+    But it should NOT accept:
+      ```
+      - foo
+      - bar
+      - foo
+      ```
+
+  Scenario: uniqueItems with false
+    Given a YAML schema:
+      ```
+      type: array
+      uniqueItems: false
+      ```
+    # Duplicates are allowed when uniqueItems is false
+    Then it should accept:
+      ```
+      - 1
+      - 1
+      - 2
+      ```
+
   Scenario: Contains
     # While the items schema must be valid for every item in the array, the `contains` only needs to
     # validate against one or more items in the array.

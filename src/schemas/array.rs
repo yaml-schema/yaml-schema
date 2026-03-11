@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Display;
 
 use log::debug;
@@ -21,6 +22,9 @@ use crate::utils::format_yaml_data;
 pub struct ArraySchema<'r> {
     pub items: Option<BooleanOrSchema<'r>>,
     pub prefix_items: Option<Vec<YamlSchema<'r>>>,
+    pub min_items: Option<usize>,
+    pub max_items: Option<usize>,
+    pub unique_items: Option<bool>,
     pub contains: Option<YamlSchema<'r>>,
     pub min_contains: Option<u64>,
     pub max_contains: Option<u64>,
@@ -87,6 +91,36 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema<'r> {
                         }
                         array_schema.max_contains = Some(n as u64);
                     }
+                    "minItems" => {
+                        if let Ok(i) = loader::load_integer_marked(value) {
+                            array_schema.min_items = Some(i as usize);
+                        } else {
+                            return Err(unsupported_type!(
+                                "minItems expected integer, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "maxItems" => {
+                        if let Ok(i) = loader::load_integer_marked(value) {
+                            array_schema.max_items = Some(i as usize);
+                        } else {
+                            return Err(unsupported_type!(
+                                "maxItems expected integer, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "uniqueItems" => {
+                        if let YamlData::Value(Scalar::Boolean(b)) = &value.data {
+                            array_schema.unique_items = Some(*b);
+                        } else {
+                            return Err(unsupported_type!(
+                                "uniqueItems expected boolean, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
                     _ => debug!("Unsupported key for ArraySchema: {}", s),
                 }
             } else {
@@ -109,6 +143,45 @@ impl Validator for ArraySchema<'_> {
 
         if let saphyr::YamlData::Sequence(array) = data {
             // validate contains with minContains / maxContains
+            if let Some(min_items) = self.min_items
+                && array.len() < min_items
+            {
+                context.add_error(
+                    value,
+                    format!(
+                        "Array has too few items (minimum {min_items}, found {})",
+                        array.len()
+                    ),
+                );
+                fail_fast!(context);
+            }
+            if let Some(max_items) = self.max_items
+                && array.len() > max_items
+            {
+                context.add_error(
+                    value,
+                    format!(
+                        "Array has too many items (maximum {max_items}, found {})",
+                        array.len()
+                    ),
+                );
+                fail_fast!(context);
+            }
+
+            if self.unique_items == Some(true) {
+                let mut seen = HashSet::with_capacity(array.len());
+                for item in array {
+                    if !seen.insert(item) {
+                        context.add_error(
+                            item,
+                            format!("Duplicate array element: {}", format_yaml_data(&item.data)),
+                        );
+                        fail_fast!(context);
+                    }
+                }
+            }
+
+            // validate contains
             if let Some(sub_schema) = &self.contains {
                 let match_count = array
                     .iter()
@@ -219,8 +292,15 @@ impl Display for ArraySchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Array{{ items: {:?}, prefix_items: {:?}, contains: {:?}, min_contains: {:?}, max_contains: {:?}}}",
-            self.items, self.prefix_items, self.contains, self.min_contains, self.max_contains
+            "Array{{ items: {:?}, prefix_items: {:?}, min_items: {:?}, max_items: {:?}, unique_items: {:?}}}, contains: {:?}, min_contains: {:?}, max_contains: {:?}}}",
+            self.items,
+            self.prefix_items,
+            self.min_items,
+            self.max_items,
+            self.unique_items,
+            self.contains,
+            self.min_contains,
+            self.max_contains
         )
     }
 }
@@ -357,6 +437,157 @@ mod tests {
         assert!(result.is_ok());
         let errors = context.errors.take();
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_min_items_valid() {
+        let schema = ArraySchema {
+            min_items: Some(2),
+            ..Default::default()
+        };
+        let s = "- 1\n- 2\n- 3";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, value).unwrap();
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_min_items_invalid() {
+        let schema = ArraySchema {
+            min_items: Some(3),
+            ..Default::default()
+        };
+        let s = "- 1\n- 2";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, value).unwrap();
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_max_items_valid() {
+        let schema = ArraySchema {
+            max_items: Some(3),
+            ..Default::default()
+        };
+        let s = "- 1\n- 2";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, value).unwrap();
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_max_items_invalid() {
+        let schema = ArraySchema {
+            max_items: Some(2),
+            ..Default::default()
+        };
+        let s = "- 1\n- 2\n- 3";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, value).unwrap();
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_min_items_from_yaml() {
+        let schema_string = "type: array\nminItems: 2";
+        let s_docs = saphyr::MarkedYaml::load_from_str(schema_string).unwrap();
+        let first_schema = s_docs.first().unwrap();
+        if let YamlData::Mapping(mapping) = &first_schema.data {
+            let schema = ArraySchema::try_from(mapping).unwrap();
+            assert_eq!(schema.min_items, Some(2));
+        } else {
+            panic!("Expected mapping");
+        }
+    }
+
+    #[test]
+    fn test_max_items_from_yaml() {
+        let schema_string = "type: array\nmaxItems: 5";
+        let s_docs = saphyr::MarkedYaml::load_from_str(schema_string).unwrap();
+        let first_schema = s_docs.first().unwrap();
+        if let YamlData::Mapping(mapping) = &first_schema.data {
+            let schema = ArraySchema::try_from(mapping).unwrap();
+            assert_eq!(schema.max_items, Some(5));
+        } else {
+            panic!("Expected mapping");
+        }
+    }
+
+    #[test]
+    fn test_unique_items_valid() {
+        let schema = ArraySchema {
+            unique_items: Some(true),
+            ..Default::default()
+        };
+        let s = "- 1\n- 2\n- 3";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, value).unwrap();
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_unique_items_invalid() {
+        let schema = ArraySchema {
+            unique_items: Some(true),
+            ..Default::default()
+        };
+        let s = "- 1\n- 2\n- 1";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, value).unwrap();
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_unique_items_false_allows_duplicates() {
+        let schema = ArraySchema {
+            unique_items: Some(false),
+            ..Default::default()
+        };
+        let s = "- 1\n- 1\n- 2";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, value).unwrap();
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_unique_items_empty_array() {
+        let schema = ArraySchema {
+            unique_items: Some(true),
+            ..Default::default()
+        };
+        let s = "[]";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let value = docs.first().unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, value).unwrap();
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_unique_items_from_yaml() {
+        let schema_string = "type: array\nuniqueItems: true";
+        let s_docs = saphyr::MarkedYaml::load_from_str(schema_string).unwrap();
+        let first_schema = s_docs.first().unwrap();
+        if let YamlData::Mapping(mapping) = &first_schema.data {
+            let schema = ArraySchema::try_from(mapping).unwrap();
+            assert_eq!(schema.unique_items, Some(true));
+        } else {
+            panic!("Expected mapping");
+        }
     }
 
     #[test]
