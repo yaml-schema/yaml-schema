@@ -1,8 +1,10 @@
+use assert_cmd::Command;
 use cucumber::World;
 use cucumber::gherkin::Scenario;
 use cucumber::gherkin::Step;
 use cucumber::given;
 use cucumber::then;
+use cucumber::when;
 use log::{debug, error};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -12,11 +14,19 @@ use yaml_schema::RootSchema;
 use yaml_schema::loader;
 use yaml_schema::validation::ValidationError;
 
+#[derive(Debug, Default)]
+struct CommandOutput {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+}
+
 #[derive(Debug, Default, World)]
 pub struct FeaturesWorld {
     root_schema: Option<RootSchema<'static>>,
     yaml_schema_error: Option<yaml_schema::Error>,
     errors: Option<Rc<RefCell<Vec<ValidationError>>>>,
+    command_output: Option<CommandOutput>,
 }
 
 #[given(regex = "a YAML schema:")]
@@ -88,6 +98,67 @@ async fn it_should_fail_with(world: &mut FeaturesWorld, expected_error_message: 
     } else {
         panic!("Expected an error message, but there was no error!");
     }
+}
+
+#[when(regex = "the following command is run:")]
+async fn the_following_command_is_run(world: &mut FeaturesWorld, step: &Step) {
+    let docstring = step.docstring().expect("Expected a docstring");
+    let command_line = docstring.trim();
+    let mut parts = command_line.split_whitespace();
+    let program = parts.next().expect("Expected a command name");
+    let args: Vec<&str> = parts.collect();
+
+    let output = Command::cargo_bin(program)
+        .unwrap_or_else(|_| panic!("Binary '{program}' not found"))
+        .args(&args)
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to execute command: {e}"));
+
+    world.command_output = Some(CommandOutput {
+        exit_code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    });
+}
+
+#[then(expr = "it should exit with status code {int}")]
+async fn it_should_exit_with_status_code(world: &mut FeaturesWorld, expected_code: i32) {
+    let output = world
+        .command_output
+        .as_ref()
+        .expect("No command has been run");
+    assert_eq!(
+        output.exit_code, expected_code,
+        "Expected exit code {expected_code}, got {}.\nstdout: {}\nstderr: {}",
+        output.exit_code, output.stdout, output.stderr
+    );
+}
+
+#[then(regex = "it should output:")]
+async fn it_should_output(world: &mut FeaturesWorld, step: &Step) {
+    let expected = step.docstring().expect("Expected a docstring");
+    let expected = expected.trim();
+    let output = world
+        .command_output
+        .as_ref()
+        .expect("No command has been run");
+    let actual = output.stdout.trim();
+    assert_eq!(actual, expected, "stdout mismatch");
+}
+
+#[then(regex = "stderr output should end with:")]
+async fn stderr_output_should_end_with(world: &mut FeaturesWorld, step: &Step) {
+    let expected = step.docstring().expect("Expected a docstring");
+    let expected = expected.trim();
+    let output = world
+        .command_output
+        .as_ref()
+        .expect("No command has been run");
+    let actual = output.stderr.trim();
+    assert!(
+        actual.ends_with(expected),
+        "Expected stderr to end with:\n{expected}\nBut got:\n{actual}"
+    );
 }
 
 fn list_feature_files(dir: &str) -> std::result::Result<Vec<String>, std::io::Error> {
