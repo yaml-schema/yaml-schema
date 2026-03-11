@@ -22,6 +22,7 @@ pub use not::NotSchema;
 pub use number::NumberSchema;
 pub use numeric::NumericBounds;
 pub use object::ObjectSchema;
+pub use object::PatternProperty;
 pub use one_of::OneOfSchema;
 pub use string::StringSchema;
 pub use yaml_schema::BooleanOrSchema;

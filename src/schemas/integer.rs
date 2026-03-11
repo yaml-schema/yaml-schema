@@ -79,8 +79,7 @@ impl Validator for IntegerSchema {
         let data = &value.data;
         if let saphyr::YamlData::Value(scalar) = data {
             if let saphyr::Scalar::Integer(i) = scalar {
-                self.bounds
-                    .validate(context, value, Number::Integer(*i));
+                self.bounds.validate(context, value, Number::Integer(*i));
             } else if let saphyr::Scalar::FloatingPoint(o) = scalar {
                 let f = o.into_inner();
                 if f.fract() == 0.0 {

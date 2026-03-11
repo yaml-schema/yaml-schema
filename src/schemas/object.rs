@@ -18,13 +18,26 @@ use crate::utils::format_annotated_mapping;
 use crate::utils::format_marker;
 use crate::utils::linked_hash_map;
 
+/// A pattern property entry: a pre-compiled regex paired with its schema.
+#[derive(Debug)]
+pub struct PatternProperty<'r> {
+    pub regex: Regex,
+    pub schema: YamlSchema<'r>,
+}
+
+impl PartialEq for PatternProperty<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.regex.as_str() == other.regex.as_str() && self.schema == other.schema
+    }
+}
+
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
 pub struct ObjectSchema<'r> {
     pub properties: Option<LinkedHashMap<String, YamlSchema<'r>>>,
     pub required: Option<Vec<String>>,
     pub additional_properties: Option<BooleanOrSchema<'r>>,
-    pub pattern_properties: Option<LinkedHashMap<String, YamlSchema<'r>>>,
+    pub pattern_properties: Option<Vec<PatternProperty<'r>>>,
     pub property_names: Option<StringSchema>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
@@ -76,8 +89,8 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema<'r> {
                         object_schema.max_properties = Some(load_integer_marked(value)? as usize);
                     }
                     "patternProperties" => {
-                        let pattern_properties = load_properties_marked(value)?;
-                        object_schema.pattern_properties = Some(pattern_properties);
+                        object_schema.pattern_properties =
+                            Some(load_pattern_properties_marked(value)?);
                     }
                     "propertyNames" => {
                         if let YamlData::Mapping(mapping) = &value.data {
@@ -192,6 +205,41 @@ fn load_properties_marked<'r>(
     }
 }
 
+fn load_pattern_properties_marked<'r>(value: &MarkedYaml<'r>) -> Result<Vec<PatternProperty<'r>>> {
+    if let YamlData::Mapping(mapping) = &value.data {
+        let mut pattern_properties = Vec::new();
+        for (key, value) in mapping.iter() {
+            if let YamlData::Value(Scalar::String(pattern)) = &key.data {
+                let regex = Regex::new(pattern.as_ref())
+                    .map_err(|_e| Error::InvalidRegularExpression(pattern.to_string()))?;
+                if value.data.is_mapping() {
+                    let schema: YamlSchema = value.try_into()?;
+                    pattern_properties.push(PatternProperty { regex, schema });
+                } else {
+                    return Err(generic_error!(
+                        "patternProperties: Expected a mapping for \"{}\", but got: {:?}",
+                        pattern,
+                        value
+                    ));
+                }
+            } else {
+                return Err(generic_error!(
+                    "{} Expected a string key, but got: {:?}",
+                    format_marker(&key.span.start),
+                    key
+                ));
+            }
+        }
+        Ok(pattern_properties)
+    } else {
+        Err(generic_error!(
+            "{} patternProperties: expected a mapping, but got: {:?}",
+            format_marker(&value.span.start),
+            value
+        ))
+    }
+}
+
 fn load_additional_properties_marked<'input>(
     marked_yaml: &MarkedYaml<'input>,
 ) -> Result<BooleanOrSchema<'input>> {
@@ -282,22 +330,29 @@ impl<'r> ObjectSchemaBuilder<'r> {
 
     pub fn pattern_properties(
         &mut self,
-        pattern_properties: LinkedHashMap<String, YamlSchema<'r>>,
+        pattern_properties: Vec<PatternProperty<'r>>,
     ) -> &mut Self {
         self.0.pattern_properties = Some(pattern_properties);
         self
     }
 
-    pub fn pattern_property<K>(&mut self, key: K, value: YamlSchema<'r>) -> &mut Self
+    /// Add a pattern property, compiling the regex pattern at build time.
+    ///
+    /// # Panics
+    /// Panics if `pattern` is not a valid regex.
+    pub fn pattern_property<K>(&mut self, pattern: K, schema: YamlSchema<'r>) -> &mut Self
     where
-        K: Into<String>,
+        K: AsRef<str>,
     {
+        let regex = Regex::new(pattern.as_ref())
+            .unwrap_or_else(|e| panic!("Invalid regex pattern '{}': {e}", pattern.as_ref()));
+        let entry = PatternProperty { regex, schema };
         if let Some(pattern_properties) = self.0.pattern_properties.as_mut() {
-            pattern_properties.insert(key.into(), value);
-            self
+            pattern_properties.push(entry);
         } else {
-            self.pattern_properties(linked_hash_map(key.into(), value))
+            self.0.pattern_properties = Some(vec![entry]);
         }
+        self
     }
 
     pub fn property_names(&mut self, property_names: StringSchema) -> &mut Self {

@@ -27,8 +27,7 @@ impl Validator for NumberSchema {
         debug!("[NumberSchema#validate] data: {data:?}");
         if let YamlData::Value(scalar) = data {
             if let Scalar::Integer(i) = scalar {
-                self.bounds
-                    .validate(context, value, Number::Integer(*i));
+                self.bounds.validate(context, value, Number::Integer(*i));
             } else if let Scalar::FloatingPoint(ordered_float) = scalar {
                 self.bounds
                     .validate(context, value, Number::Float(ordered_float.into_inner()));

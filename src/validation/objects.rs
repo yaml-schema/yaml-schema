@@ -121,18 +121,13 @@ impl ObjectSchema<'_> {
                 continue;
             }
 
-            // Then we check if pattern_properties matches
             let mut matched_pattern_property = false;
             if let Some(pattern_properties) = &self.pattern_properties {
-                for (pattern, schema) in pattern_properties {
-                    log::debug!("pattern: {pattern}");
-                    // TODO: compile the regex once instead of every time we're evaluating
-                    let re = regex::Regex::new(pattern).map_err(|e| {
-                        Error::GenericError(format!("Invalid regular expression pattern: {e}"))
-                    })?;
-                    if re.is_match(key_string.as_ref()) {
+                for pp in pattern_properties {
+                    log::debug!("pattern: {}", pp.regex.as_str());
+                    if pp.regex.is_match(key_string.as_ref()) {
                         matched_pattern_property = true;
-                        schema.validate(context, value)?;
+                        pp.schema.validate(context, value)?;
                     }
                 }
             }
