@@ -37,8 +37,8 @@ pub enum Commands {
 fn main() {
     env_logger::init();
     let opts = Opts::parse();
-    if let Some(comand) = opts.command {
-        match comand {
+    if let Some(command) = opts.command {
+        match command {
             Commands::Version => {
                 println!("ys {}", version());
             }
