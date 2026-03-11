@@ -22,6 +22,8 @@ pub struct ArraySchema<'r> {
     pub items: Option<BooleanOrSchema<'r>>,
     pub prefix_items: Option<Vec<YamlSchema<'r>>>,
     pub contains: Option<YamlSchema<'r>>,
+    pub min_contains: Option<u64>,
+    pub max_contains: Option<u64>,
 }
 
 impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema<'r> {
@@ -63,6 +65,28 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema<'r> {
                         let prefix_items = loader::load_array_of_schemas_marked(value)?;
                         array_schema.prefix_items = Some(prefix_items);
                     }
+                    "minContains" => {
+                        let n = loader::load_integer_marked(value)?;
+                        if n < 0 {
+                            return Err(generic_error!(
+                                "{} minContains must be a non-negative integer, got: {}",
+                                format_marker(&value.span.start),
+                                n
+                            ));
+                        }
+                        array_schema.min_contains = Some(n as u64);
+                    }
+                    "maxContains" => {
+                        let n = loader::load_integer_marked(value)?;
+                        if n < 0 {
+                            return Err(generic_error!(
+                                "{} maxContains must be a non-negative integer, got: {}",
+                                format_marker(&value.span.start),
+                                n
+                            ));
+                        }
+                        array_schema.max_contains = Some(n as u64);
+                    }
                     _ => debug!("Unsupported key for ArraySchema: {}", s),
                 }
             } else {
@@ -84,18 +108,38 @@ impl Validator for ArraySchema<'_> {
         debug!("[ArraySchema] Validating value: {}", format_yaml_data(data));
 
         if let saphyr::YamlData::Sequence(array) = data {
-            // validate contains
+            // validate contains with minContains / maxContains
             if let Some(sub_schema) = &self.contains {
-                let any_matches = array.iter().any(|item| {
-                    let sub_context = crate::Context {
-                        root_schema: context.root_schema,
-                        fail_fast: true,
-                        ..Default::default()
-                    };
-                    sub_schema.validate(&sub_context, item).is_ok() && !sub_context.has_errors()
-                });
-                if !any_matches {
-                    context.add_error(value, "Contains validation failed!".to_string());
+                let match_count = array
+                    .iter()
+                    .filter(|item| {
+                        let sub_context = crate::Context {
+                            root_schema: context.root_schema,
+                            fail_fast: true,
+                            ..Default::default()
+                        };
+                        sub_schema.validate(&sub_context, item).is_ok() && !sub_context.has_errors()
+                    })
+                    .count() as u64;
+
+                let min = self.min_contains.unwrap_or(1);
+                if match_count < min {
+                    context.add_error(
+                        value,
+                        format!(
+                            "Array must contain at least {min} item(s) matching the contains schema, but only {match_count} matched"
+                        ),
+                    );
+                }
+                if let Some(max) = self.max_contains
+                    && match_count > max
+                {
+                    context.add_error(
+                        value,
+                        format!(
+                            "Array must contain at most {max} item(s) matching the contains schema, but {match_count} matched"
+                        ),
+                    );
                 }
             }
 
@@ -175,8 +219,8 @@ impl Display for ArraySchema<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Array{{ items: {:?}, prefix_items: {:?}, contains: {:?}}}",
-            self.items, self.prefix_items, self.contains
+            "Array{{ items: {:?}, prefix_items: {:?}, contains: {:?}, min_contains: {:?}, max_contains: {:?}}}",
+            self.items, self.prefix_items, self.contains, self.min_contains, self.max_contains
         )
     }
 }
@@ -334,5 +378,70 @@ mod tests {
         assert!(result.is_ok());
         let errors = context.errors.take();
         assert!(!errors.is_empty());
+    }
+
+    #[test]
+    fn test_min_contains() {
+        let number_schema = YamlSchema::typed_number(NumberSchema::default());
+        let schema = ArraySchema {
+            contains: Some(number_schema),
+            min_contains: Some(2),
+            ..Default::default()
+        };
+
+        // 2 numbers — passes
+        let s = "- apple\n- 1\n- 2\n";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, docs.first().unwrap()).unwrap();
+        assert!(context.errors.take().is_empty());
+
+        // only 1 number — fails
+        let s = "- apple\n- 1\n- banana\n";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, docs.first().unwrap()).unwrap();
+        assert!(!context.errors.take().is_empty());
+    }
+
+    #[test]
+    fn test_max_contains() {
+        let number_schema = YamlSchema::typed_number(NumberSchema::default());
+        let schema = ArraySchema {
+            contains: Some(number_schema),
+            max_contains: Some(2),
+            ..Default::default()
+        };
+
+        // 2 numbers — passes
+        let s = "- 1\n- apple\n- 2\n";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, docs.first().unwrap()).unwrap();
+        assert!(context.errors.take().is_empty());
+
+        // 3 numbers — fails
+        let s = "- 1\n- 2\n- 3\n";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, docs.first().unwrap()).unwrap();
+        assert!(!context.errors.take().is_empty());
+    }
+
+    #[test]
+    fn test_min_contains_zero() {
+        let number_schema = YamlSchema::typed_number(NumberSchema::default());
+        let schema = ArraySchema {
+            contains: Some(number_schema),
+            min_contains: Some(0),
+            ..Default::default()
+        };
+
+        // no numbers — still passes because minContains is 0
+        let s = "- apple\n- banana\n";
+        let docs = saphyr::MarkedYaml::load_from_str(s).unwrap();
+        let context = crate::Context::default();
+        schema.validate(&context, docs.first().unwrap()).unwrap();
+        assert!(context.errors.take().is_empty());
     }
 }
