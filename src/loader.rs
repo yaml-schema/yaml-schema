@@ -1,5 +1,6 @@
 //! The loader module loads the YAML schema from a file into the in-memory model
 
+use std::path::Path;
 use std::time::Duration;
 
 use reqwest::Url;
@@ -8,6 +9,7 @@ use saphyr::LoadableYamlNode;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
+use url::Url as ParseUrl;
 
 use crate::Error;
 use crate::Number;
@@ -20,23 +22,30 @@ use crate::utils::try_unwrap_saphyr_scalar;
 
 /// Load a YAML schema from a file.
 /// Delegates to the `load_from_doc` function to load the schema from the first document.
-pub fn load_file<'f, S: AsRef<str>>(path: S) -> Result<RootSchema<'f>> {
+/// Sets `base_uri` to the canonical file URL for resolving relative `$ref` values.
+pub fn load_file<S: AsRef<str>>(path: S) -> Result<RootSchema> {
     let fs_metadata = std::fs::metadata(path.as_ref())?;
     if !fs_metadata.is_file() {
         return Err(Error::FileNotFound(path.as_ref().to_string()));
     }
     let s = std::fs::read_to_string(path.as_ref())?;
-    load_from_str(&s)
+    let mut root = load_from_str(&s)?;
+    let canonical = Path::new(path.as_ref()).canonicalize()?;
+    root.base_uri = Some(
+        ParseUrl::from_file_path(canonical)
+            .map_err(|_| Error::GenericError("Failed to convert file path to URL".to_string()))?,
+    );
+    Ok(root)
 }
 
 /// Load a YAML schema from a &str.
-pub fn load_from_str<'f>(s: &str) -> Result<RootSchema<'f>> {
+pub fn load_from_str(s: &str) -> Result<RootSchema> {
     let docs = MarkedYaml::load_from_str(s).map_err(Error::YamlParsingError)?;
     load_from_docs(docs)
 }
 
 /// Load a RootSchema from Vec of docs.
-pub fn load_from_docs<'f>(docs: Vec<MarkedYaml<'f>>) -> Result<RootSchema<'f>> {
+pub fn load_from_docs<'f>(docs: Vec<MarkedYaml<'f>>) -> Result<RootSchema> {
     let Some(first_doc) = docs.first() else {
         return Ok(RootSchema::empty());
     };
@@ -44,7 +53,7 @@ pub fn load_from_docs<'f>(docs: Vec<MarkedYaml<'f>>) -> Result<RootSchema<'f>> {
 }
 
 /// Load a YAML schema from a document. Basically just a wrapper around the TryFrom<&MarkedYaml<'_>> for RootSchema.
-pub fn load_from_doc<'f>(doc: &MarkedYaml<'f>) -> Result<RootSchema<'f>> {
+pub fn load_from_doc<'f>(doc: &MarkedYaml<'f>) -> Result<RootSchema> {
     RootSchema::try_from(doc)
 }
 
@@ -70,6 +79,76 @@ impl From<reqwest::Error> for crate::Error {
     }
 }
 
+/// Load a schema from string content with an optional base URI for resolving relative $ref values.
+pub fn load_from_content(content: &str, base_uri: Option<ParseUrl>) -> Result<RootSchema> {
+    let docs = MarkedYaml::load_from_str(content).map_err(Error::YamlParsingError)?;
+    let doc = docs
+        .first()
+        .ok_or_else(|| crate::generic_error!("No YAML documents in content"))?;
+    let mut root = load_from_doc(doc)?;
+    root.base_uri = base_uri;
+    Ok(root)
+}
+
+/// Load a schema from a URL (file:// or http(s)://). Used for external $ref resolution.
+pub fn load_external_schema(doc_url: &str) -> Result<RootSchema> {
+    let parsed = ParseUrl::parse(doc_url).map_err(|e| Error::UrlLoadError(e.into()))?;
+    match parsed.scheme() {
+        "file" => {
+            let path = parsed
+                .to_file_path()
+                .map_err(|_| Error::GenericError("Invalid file URL".to_string()))?;
+            let path_str = path
+                .to_str()
+                .ok_or_else(|| Error::GenericError("Non-UTF-8 file path".to_string()))?;
+            load_file(path_str)
+        }
+        "http" | "https" => {
+            let (content, url) = fetch_url(doc_url, None)?;
+            load_from_content(&content, Some(url))
+        }
+        _ => Err(Error::GenericError(format!(
+            "Unsupported URL scheme for $ref: {}",
+            parsed.scheme()
+        ))),
+    }
+}
+
+/// Fetches content from a URL. Returns the response body as a String and the request URL.
+///
+/// The HTTP call runs on a dedicated OS thread so that `reqwest::blocking`
+/// does not conflict with an already-running async (tokio) runtime.
+pub fn fetch_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<(String, Url)> {
+    let url_owned = url_string.to_string();
+    let timeout = Duration::from_secs(timeout_seconds.unwrap_or(30));
+
+    std::thread::spawn(move || {
+        let client = Client::builder()
+            .timeout(timeout)
+            .use_native_tls()
+            .build()?;
+
+        let url = Url::parse(&url_owned).map_err(|e| Error::UrlLoadError(e.into()))?;
+
+        let response = client.get(url.clone()).send()?;
+        if !response.status().is_success() {
+            match response.error_for_status() {
+                Ok(_) => unreachable!(),
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        let content = response.text()?;
+        Ok((content, url))
+    })
+    .join()
+    .unwrap_or_else(|_| {
+        Err(Error::GenericError(
+            "HTTP fetch thread panicked".to_string(),
+        ))
+    })
+}
+
 /// Downloads a YAML schema from a URL and parses it into a YamlSchema
 ///
 /// # Arguments
@@ -85,32 +164,18 @@ impl From<reqwest::Error> for crate::Error {
 ///
 /// let schema = download_from_url("https://example.com/schema.yaml", None).unwrap();
 /// ```
-pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<RootSchema<'_>> {
-    // Create a new HTTP client with a custom timeout
-    let timeout = Duration::from_secs(timeout_seconds.unwrap_or(30));
-    let client = Client::builder()
-        .timeout(timeout)
-        .use_native_tls()
-        .build()?;
-
-    let url = Url::parse(url_string).map_err(|e| Error::UrlLoadError(e.into()))?;
-
-    // Download the YAML content
-    let response = client.get(url).send()?;
-    if !response.status().is_success() {
-        match response.error_for_status() {
-            Ok(_) => unreachable!(),
-            Err(e) => return Err(e.into()),
-        }
-    }
-
-    let yaml_content = response.text()?;
+pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<RootSchema> {
+    let (yaml_content, url) = fetch_url(url_string, timeout_seconds)?;
 
     // Parse the YAML content
     let docs = MarkedYaml::load_from_str(&yaml_content).map_err(UrlLoadError::ParseError)?;
 
     match docs.first() {
-        Some(doc) => load_from_doc(doc),
+        Some(doc) => {
+            let mut root = load_from_doc(doc)?;
+            root.base_uri = Some(url);
+            Ok(root)
+        }
         None => Err(UrlLoadError::NoDocuments.into()),
     }
 }
@@ -123,7 +188,7 @@ pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) 
     }
 }
 
-pub fn load_array_of_schemas_marked<'f>(value: &MarkedYaml<'f>) -> Result<Vec<YamlSchema<'f>>> {
+pub fn load_array_of_schemas_marked<'f>(value: &MarkedYaml<'f>) -> Result<Vec<YamlSchema>> {
     if let YamlData::Sequence(values) = &value.data {
         values
             .iter()
@@ -179,9 +244,7 @@ pub fn load_number(value: &saphyr::Yaml) -> Result<Number> {
     }
 }
 
-pub fn load_array_items_marked<'input>(
-    value: &MarkedYaml<'input>,
-) -> Result<BooleanOrSchema<'input>> {
+pub fn load_array_items_marked<'input>(value: &MarkedYaml<'input>) -> Result<BooleanOrSchema> {
     match &value.data {
         YamlData::Value(scalar) => {
             if let Scalar::Boolean(b) = scalar {

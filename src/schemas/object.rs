@@ -20,12 +20,12 @@ use crate::utils::linked_hash_map;
 
 /// A pattern property entry: a pre-compiled regex paired with its schema.
 #[derive(Debug)]
-pub struct PatternProperty<'r> {
+pub struct PatternProperty {
     pub regex: Regex,
-    pub schema: YamlSchema<'r>,
+    pub schema: YamlSchema,
 }
 
-impl PartialEq for PatternProperty<'_> {
+impl PartialEq for PatternProperty {
     fn eq(&self, other: &Self) -> bool {
         self.regex.as_str() == other.regex.as_str() && self.schema == other.schema
     }
@@ -33,23 +33,23 @@ impl PartialEq for PatternProperty<'_> {
 
 /// An object schema
 #[derive(Debug, Default, PartialEq)]
-pub struct ObjectSchema<'r> {
-    pub properties: Option<LinkedHashMap<String, YamlSchema<'r>>>,
+pub struct ObjectSchema {
+    pub properties: Option<LinkedHashMap<String, YamlSchema>>,
     pub required: Option<Vec<String>>,
-    pub additional_properties: Option<BooleanOrSchema<'r>>,
-    pub pattern_properties: Option<Vec<PatternProperty<'r>>>,
+    pub additional_properties: Option<BooleanOrSchema>,
+    pub pattern_properties: Option<Vec<PatternProperty>>,
     pub property_names: Option<StringSchema>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
 }
 
-impl<'r> ObjectSchema<'r> {
-    pub fn builder() -> ObjectSchemaBuilder<'r> {
+impl ObjectSchema {
+    pub fn builder() -> ObjectSchemaBuilder {
         ObjectSchemaBuilder::new()
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for ObjectSchema<'r> {
+impl<'r> TryFrom<&MarkedYaml<'r>> for ObjectSchema {
     type Error = crate::Error;
 
     fn try_from(marked_yaml: &MarkedYaml<'r>) -> Result<Self> {
@@ -62,7 +62,7 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for ObjectSchema<'r> {
     }
 }
 
-impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema<'r> {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
@@ -170,9 +170,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema<'r> {
     }
 }
 
-fn load_properties_marked<'r>(
-    value: &MarkedYaml<'r>,
-) -> Result<LinkedHashMap<String, YamlSchema<'r>>> {
+fn load_properties_marked<'r>(value: &MarkedYaml<'r>) -> Result<LinkedHashMap<String, YamlSchema>> {
     if let YamlData::Mapping(mapping) = &value.data {
         let mut properties = LinkedHashMap::new();
         for (key, value) in mapping.iter() {
@@ -205,7 +203,7 @@ fn load_properties_marked<'r>(
     }
 }
 
-fn load_pattern_properties_marked<'r>(value: &MarkedYaml<'r>) -> Result<Vec<PatternProperty<'r>>> {
+fn load_pattern_properties_marked<'r>(value: &MarkedYaml<'r>) -> Result<Vec<PatternProperty>> {
     if let YamlData::Mapping(mapping) = &value.data {
         let mut pattern_properties = Vec::new();
         for (key, value) in mapping.iter() {
@@ -240,9 +238,7 @@ fn load_pattern_properties_marked<'r>(value: &MarkedYaml<'r>) -> Result<Vec<Patt
     }
 }
 
-fn load_additional_properties_marked<'input>(
-    marked_yaml: &MarkedYaml<'input>,
-) -> Result<BooleanOrSchema<'input>> {
+fn load_additional_properties_marked<'r>(marked_yaml: &MarkedYaml<'r>) -> Result<BooleanOrSchema> {
     match &marked_yaml.data {
         YamlData::Value(scalar) => match scalar {
             Scalar::Boolean(b) => Ok(BooleanOrSchema::Boolean(*b)),
@@ -252,9 +248,7 @@ fn load_additional_properties_marked<'input>(
                 scalar
             )),
         },
-        YamlData::Mapping(_mapping) => marked_yaml
-            .try_into()
-            .map(|schema| BooleanOrSchema::schema(schema)),
+        YamlData::Mapping(_mapping) => marked_yaml.try_into().map(BooleanOrSchema::schema),
         _ => Err(unsupported_type!(
             "Expected type: boolean or mapping, but got: {:?}",
             marked_yaml
@@ -262,39 +256,39 @@ fn load_additional_properties_marked<'input>(
     }
 }
 
-impl Display for ObjectSchema<'_> {
+impl Display for ObjectSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Object {self:?}")
     }
 }
 
-pub struct ObjectSchemaBuilder<'r>(ObjectSchema<'r>);
+pub struct ObjectSchemaBuilder(ObjectSchema);
 
-impl Default for ObjectSchemaBuilder<'_> {
+impl Default for ObjectSchemaBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'r> ObjectSchemaBuilder<'r> {
+impl ObjectSchemaBuilder {
     pub fn new() -> Self {
         Self(ObjectSchema::default())
     }
 
-    pub fn build(&mut self) -> ObjectSchema<'r> {
+    pub fn build(&mut self) -> ObjectSchema {
         std::mem::take(&mut self.0)
     }
 
-    pub fn boxed(&mut self) -> Box<ObjectSchema<'r>> {
+    pub fn boxed(&mut self) -> Box<ObjectSchema> {
         Box::new(self.build())
     }
 
-    pub fn properties(&mut self, properties: LinkedHashMap<String, YamlSchema<'r>>) -> &mut Self {
+    pub fn properties(&mut self, properties: LinkedHashMap<String, YamlSchema>) -> &mut Self {
         self.0.properties = Some(properties);
         self
     }
 
-    pub fn property<K>(&mut self, key: K, value: YamlSchema<'r>) -> &mut Self
+    pub fn property<K>(&mut self, key: K, value: YamlSchema) -> &mut Self
     where
         K: Into<String>,
     {
@@ -323,15 +317,12 @@ impl<'r> ObjectSchemaBuilder<'r> {
         self
     }
 
-    pub fn additional_property_types(&mut self, typed_schema: YamlSchema<'r>) -> &mut Self {
+    pub fn additional_property_types(&mut self, typed_schema: YamlSchema) -> &mut Self {
         self.0.additional_properties = Some(BooleanOrSchema::schema(typed_schema));
         self
     }
 
-    pub fn pattern_properties(
-        &mut self,
-        pattern_properties: Vec<PatternProperty<'r>>,
-    ) -> &mut Self {
+    pub fn pattern_properties(&mut self, pattern_properties: Vec<PatternProperty>) -> &mut Self {
         self.0.pattern_properties = Some(pattern_properties);
         self
     }
@@ -340,7 +331,7 @@ impl<'r> ObjectSchemaBuilder<'r> {
     ///
     /// # Panics
     /// Panics if `pattern` is not a valid regex.
-    pub fn pattern_property<K>(&mut self, pattern: K, schema: YamlSchema<'r>) -> &mut Self
+    pub fn pattern_property<K>(&mut self, pattern: K, schema: YamlSchema) -> &mut Self
     where
         K: AsRef<str>,
     {

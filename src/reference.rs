@@ -1,32 +1,111 @@
-use std::borrow::Cow;
-
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
 use saphyr::YamlData;
+use url::Url;
 
+use crate::Result;
 use crate::utils::format_annotated_mapping;
+
+/// Parsed representation of a `$ref` URI for resolution.
+/// Supports same-document (#/...), relative (./other.yaml), and absolute (https://..., file:///...) references.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RefUri {
+    /// The reference as given (for display/errors).
+    raw: String,
+    /// Part before # (empty for same-document).
+    base_ref: String,
+    /// JSON Pointer fragment after # (e.g. "/$defs/foo"), or None if no fragment.
+    fragment: Option<String>,
+}
+
+impl RefUri {
+    /// Parse a `$ref` string into base and fragment components.
+    pub fn parse(ref_str: &str) -> RefUri {
+        let raw = ref_str.to_string();
+        let (base_ref, fragment) = match ref_str.split_once('#') {
+            Some((base, frag)) => (base.to_string(), Some(frag.to_string())),
+            None => (ref_str.to_string(), None),
+        };
+        RefUri {
+            raw,
+            base_ref,
+            fragment,
+        }
+    }
+
+    /// Returns true if this is a same-document reference (starts with #).
+    pub fn is_same_document(&self) -> bool {
+        self.raw.starts_with('#')
+    }
+
+    /// Returns true if the base part of the reference is an absolute URI (has a scheme).
+    pub fn is_absolute(&self) -> bool {
+        Url::parse(&self.base_ref).is_ok()
+    }
+
+    /// Returns the JSON Pointer fragment (e.g. "/$defs/foo") if present.
+    pub fn fragment(&self) -> Option<&str> {
+        self.fragment.as_deref()
+    }
+
+    /// Returns the part before # (base URI or path).
+    pub fn base_ref(&self) -> &str {
+        &self.base_ref
+    }
+
+    /// Returns the raw reference string.
+    pub fn as_str(&self) -> &str {
+        &self.raw
+    }
+
+    /// Resolve this reference against a base URL (RFC 3986).
+    /// For same-document refs, returns an error (use fragment resolution instead).
+    /// For relative refs, joins with base. For absolute refs, parses and optionally appends fragment.
+    pub fn resolve_against(&self, base: &Url) -> Result<Url> {
+        if self.is_same_document() {
+            return Err(crate::generic_error!(
+                "Cannot resolve same-document ref against base URI: {}",
+                self.raw
+            ));
+        }
+        let mut resolved = base.join(&self.base_ref).map_err(|e| {
+            crate::generic_error!(
+                "Failed to resolve $ref {} against base {}: {}",
+                self.raw,
+                base,
+                e
+            )
+        })?;
+        if let Some(frag) = &self.fragment {
+            resolved.set_fragment(Some(frag));
+        }
+        Ok(resolved)
+    }
+}
 
 /// A Reference is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Reference<'r> {
-    pub ref_name: Cow<'r, str>,
+pub struct Reference {
+    pub ref_name: String,
 }
 
-impl std::fmt::Display for Reference<'_> {
+impl std::fmt::Display for Reference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "$ref: {}", self.ref_name)
     }
 }
 
-impl<'r> Reference<'r> {
-    pub fn new(ref_name: Cow<'r, str>) -> Reference<'r> {
-        Reference { ref_name }
+impl Reference {
+    pub fn new(ref_name: impl Into<String>) -> Self {
+        Self {
+            ref_name: ref_name.into(),
+        }
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for Reference<'r> {
+impl<'r> TryFrom<&MarkedYaml<'r>> for Reference {
     type Error = crate::Error;
 
     fn try_from(value: &MarkedYaml<'r>) -> std::result::Result<Self, Self::Error> {
@@ -38,24 +117,16 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for Reference<'r> {
     }
 }
 
-impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Reference<'r> {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Reference {
     type Error = crate::Error;
 
-    fn try_from<'a>(
-        mapping: &AnnotatedMapping<'a, MarkedYaml<'a>>,
-    ) -> crate::Result<Reference<'a>> {
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
         debug!("[Reference#try_from] {}", format_annotated_mapping(mapping));
         let ref_key = MarkedYaml::value_from_str("$ref");
         if let Some(ref_value) = mapping.get(&ref_key) {
             match &ref_value.data {
                 YamlData::Value(saphyr::Scalar::String(s)) => {
-                    if !s.starts_with("#/$defs/") && !s.starts_with("#/definitions/") {
-                        return Err(generic_error!(
-                            "Only local references, starting with #/$defs/ or #/definitions/ are supported for now. Found: {}",
-                            s
-                        ));
-                    }
-                    Ok(Reference::new(s.clone()))
+                    Ok(Reference::new(s.as_ref().to_string()))
                 }
                 _ => Err(generic_error!(
                     "Expected a string value for $ref, but got: {:?}",
@@ -73,10 +144,13 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Reference<'r> {
 
 #[cfg(test)]
 mod tests {
+    use saphyr::LoadableYamlNode;
+
     use crate::Validator as _;
     use crate::YamlSchema;
     use crate::loader;
-    use saphyr::LoadableYamlNode;
+
+    use super::RefUri;
 
     #[test]
     fn test_reference() {
@@ -139,8 +213,7 @@ mod tests {
             .as_ref()
             .expect("Expected $ref in name property");
         assert_eq!(
-            ref_value.ref_name.as_ref(),
-            "#/$defs/name",
+            ref_value.ref_name, "#/$defs/name",
             "Expected reference to '#/$defs/name'"
         );
 
@@ -240,5 +313,76 @@ mod tests {
             "Expected no errors, got: {:?}",
             context.errors.borrow()
         );
+    }
+
+    #[test]
+    fn test_ref_uri_same_document() {
+        let r = RefUri::parse("#/$defs/name");
+        assert!(r.is_same_document());
+        assert_eq!(r.fragment(), Some("/$defs/name"));
+        assert_eq!(r.base_ref(), "");
+    }
+
+    #[test]
+    fn test_ref_uri_relative_with_fragment() {
+        let r = RefUri::parse("./common.yaml#/$defs/Id");
+        assert!(!r.is_same_document());
+        assert_eq!(r.fragment(), Some("/$defs/Id"));
+        assert_eq!(r.base_ref(), "./common.yaml");
+    }
+
+    #[test]
+    fn test_ref_uri_absolute() {
+        let r = RefUri::parse("https://example.com/schema.yaml#/$defs/User");
+        assert!(!r.is_same_document());
+        assert!(r.is_absolute());
+        assert_eq!(r.fragment(), Some("/$defs/User"));
+        assert_eq!(r.base_ref(), "https://example.com/schema.yaml");
+    }
+
+    #[test]
+    fn test_ref_uri_is_absolute() {
+        assert!(RefUri::parse("https://example.com/schema.yaml").is_absolute());
+        assert!(RefUri::parse("http://example.com/s.yaml#/$defs/X").is_absolute());
+        assert!(RefUri::parse("file:///tmp/schema.yaml").is_absolute());
+        assert!(!RefUri::parse("./common.yaml#/$defs/Id").is_absolute());
+        assert!(!RefUri::parse("#/$defs/name").is_absolute());
+        assert!(!RefUri::parse("common.yaml").is_absolute());
+    }
+
+    #[test]
+    fn test_ref_uri_resolve_relative() {
+        let r = RefUri::parse("./other.yaml#/$defs/foo");
+        let base = url::Url::parse("file:///dir/schema.yaml").unwrap();
+        let resolved = r.resolve_against(&base).unwrap();
+        assert!(resolved.as_str().contains("other.yaml"));
+        assert_eq!(resolved.fragment(), Some("/$defs/foo"));
+    }
+
+    #[test]
+    fn test_ref_accepts_external_ref() {
+        let schema = r##"
+            type: object
+            properties:
+                id:
+                    $ref: "./common.yaml#/$defs/Id"
+        "##;
+        let root_schema =
+            loader::load_from_str(schema).expect("Should load schema with external $ref");
+        let YamlSchema::Subschema(subschema) = &root_schema.schema else {
+            panic!("Expected Subschema");
+        };
+        let object_schema = subschema.object_schema.as_ref().unwrap();
+        let name_property = object_schema
+            .properties
+            .as_ref()
+            .unwrap()
+            .get("id")
+            .unwrap();
+        let YamlSchema::Subschema(prop_schema) = name_property else {
+            panic!("Expected Subschema for id property");
+        };
+        let ref_val = prop_schema.r#ref.as_ref().unwrap();
+        assert_eq!(ref_val.ref_name, "./common.yaml#/$defs/Id");
     }
 }

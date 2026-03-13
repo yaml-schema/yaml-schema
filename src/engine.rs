@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use saphyr::LoadableYamlNode;
 
 use crate::Error;
@@ -9,7 +12,7 @@ use crate::validation::Context;
 
 #[derive(Debug)]
 pub struct Engine<'a> {
-    pub root_schema: &'a RootSchema<'a>,
+    pub root_schema: &'a RootSchema,
     pub context: Context<'a>,
 }
 
@@ -26,7 +29,19 @@ impl<'a> Engine<'a> {
         value: &str,
         fail_fast: bool,
     ) -> Result<Context<'b>> {
-        let context = Context::with_root_schema(root_schema, fail_fast);
+        Self::evaluate_with_schemas(root_schema, value, fail_fast, HashMap::new())
+    }
+
+    /// Evaluate with pre-loaded schemas (e.g. from multiple -f flags).
+    /// Schemas are keyed by document URI (file:// or https://).
+    pub fn evaluate_with_schemas<'b: 'a>(
+        root_schema: &'b RootSchema,
+        value: &str,
+        fail_fast: bool,
+        preloaded_schemas: HashMap<String, Rc<RootSchema>>,
+    ) -> Result<Context<'b>> {
+        let context =
+            Context::with_root_schema_and_schemas(root_schema, fail_fast, preloaded_schemas);
         let engine = Engine::new(root_schema, context);
         let docs = saphyr::MarkedYaml::load_from_str(value).map_err(Error::YamlParsingError)?;
         match docs.first() {

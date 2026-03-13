@@ -10,6 +10,7 @@ mod number;
 mod numeric;
 mod object;
 mod one_of;
+mod root_schema;
 mod string;
 mod yaml_schema;
 
@@ -24,6 +25,7 @@ pub use numeric::NumericBounds;
 pub use object::ObjectSchema;
 pub use object::PatternProperty;
 pub use one_of::OneOfSchema;
+pub use root_schema::RootSchema;
 pub use string::StringSchema;
 pub use yaml_schema::BooleanOrSchema;
 pub use yaml_schema::SchemaType;

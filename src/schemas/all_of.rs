@@ -17,17 +17,17 @@ use crate::utils::format_vec;
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
 /// to the context.
 #[derive(Debug, Default, PartialEq)]
-pub struct AllOfSchema<'r> {
-    pub all_of: Vec<YamlSchema<'r>>,
+pub struct AllOfSchema {
+    pub all_of: Vec<YamlSchema>,
 }
 
-impl std::fmt::Display for AllOfSchema<'_> {
+impl std::fmt::Display for AllOfSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "allOf:{}", format_vec(&self.all_of))
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for AllOfSchema<'r> {
+impl<'r> TryFrom<&MarkedYaml<'r>> for AllOfSchema {
     type Error = crate::Error;
 
     fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
@@ -39,7 +39,7 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for AllOfSchema<'r> {
     }
 }
 
-impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for AllOfSchema<'r> {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for AllOfSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
@@ -58,7 +58,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for AllOfSchema<'r> {
     }
 }
 
-impl Validator for AllOfSchema<'_> {
+impl Validator for AllOfSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let all_of_is_valid = validate_all_of(&self.all_of, context, value)?;
         debug!("[AllOf#validate] all_of_is_valid: {all_of_is_valid}");
@@ -106,7 +106,7 @@ mod tests {
     use crate::schemas::StringSchema;
     use saphyr::LoadableYamlNode;
 
-    fn create_test_schema() -> AllOfSchema<'static> {
+    fn create_test_schema() -> AllOfSchema {
         AllOfSchema {
             all_of: vec![
                 StringSchema::builder().min_length(1).build().into(),

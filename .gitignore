@@ -21,3 +21,12 @@ target/
 
 # macOS
 .DS_Store
+
+# Environment variables
+.envrc
+
+# .cursor
+.cursor/
+
+# tasks
+tasks/
