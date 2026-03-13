@@ -1,12 +1,9 @@
 //! yaml-schema is a library for validating YAML data against a JSON Schema.
 
 use hashlink::LinkedHashMap;
-use jsonptr::Pointer;
-use log::debug;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
-use url::Url;
 
 #[macro_use]
 pub mod error;
@@ -21,6 +18,7 @@ pub use engine::Engine;
 pub use error::Error;
 pub use reference::RefUri;
 pub use reference::Reference;
+pub use schemas::RootSchema;
 pub use schemas::YamlSchema;
 pub use validation::Context;
 pub use validation::Validator;
@@ -36,114 +34,6 @@ pub fn version() -> String {
 
 // Alias for std::result::Result<T, yaml_schema::Error>
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// A RootSchema represents the root document in a schema document, and includes additional
-/// fields such as `$schema` that are not allowed in subschemas. It also provides a way to
-/// resolve references to other schemas.
-#[derive(Debug, PartialEq)]
-pub struct RootSchema<'r> {
-    pub meta_schema: Option<String>,
-    pub schema: YamlSchema<'r>,
-    /// Base URI for resolving relative `$ref` values (from file path, URL, or `$id`).
-    pub base_uri: Option<Url>,
-}
-
-impl<'r> RootSchema<'r> {
-    /// Create an empty RootSchema
-    pub fn empty() -> Self {
-        Self {
-            meta_schema: None,
-            schema: YamlSchema::Empty,
-            base_uri: None,
-        }
-    }
-
-    /// Create a new RootSchema with a given schema
-    pub fn new(schema: YamlSchema<'r>) -> Self {
-        Self {
-            meta_schema: None,
-            schema,
-            base_uri: None,
-        }
-    }
-
-    /// Resolve a JSON Pointer to an element in the schema.
-    pub fn resolve(&self, pointer: &Pointer) -> Option<&YamlSchema<'_>> {
-        let components = pointer.components().collect::<Vec<_>>();
-        debug!("[RootSchema#resolve] components: {components:?}");
-        components.first().and_then(|component| {
-            debug!("[RootSchema#resolve] component: {component:?}");
-            match component {
-                jsonptr::Component::Root => {
-                    let components = &components[1..];
-                    components.first().and_then(|component| {
-                        debug!("[RootSchema#resolve] component: {component:?}");
-                        match component {
-                            jsonptr::Component::Root => unimplemented!(),
-                            jsonptr::Component::Token(token) => {
-                                self.schema.resolve(Some(token), &components[1..])
-                            }
-                        }
-                    })
-                }
-                jsonptr::Component::Token(token) => {
-                    self.schema.resolve(Some(token), &components[1..])
-                }
-            }
-        })
-    }
-}
-
-impl<'r> TryFrom<&MarkedYaml<'r>> for RootSchema<'r> {
-    type Error = crate::Error;
-
-    fn try_from(marked_yaml: &MarkedYaml<'r>) -> Result<Self> {
-        match &marked_yaml.data {
-            YamlData::Value(scalar) => match scalar {
-                Scalar::Boolean(r#bool) => Ok(Self {
-                    meta_schema: None,
-                    schema: YamlSchema::<'r>::BooleanLiteral(*r#bool),
-                    base_uri: None,
-                }),
-                Scalar::Null => Ok(RootSchema {
-                    meta_schema: None,
-                    schema: YamlSchema::<'r>::Null,
-                    base_uri: None,
-                }),
-                _ => Err(generic_error!(
-                    "[loader#load_from_doc] Don't know how to a handle scalar: {:?}",
-                    scalar
-                )),
-            },
-            YamlData::Mapping(mapping) => {
-                debug!(
-                    "[loader#load_from_doc] Found mapping, trying to load as RootSchema: {mapping:?}"
-                );
-                let meta_schema = mapping
-                    .get(&MarkedYaml::value_from_str("$schema"))
-                    .map(|my| marked_yaml_to_string(my, "$schema must be a string"))
-                    .transpose()?;
-
-                let schema = YamlSchema::try_from(marked_yaml)?;
-                Ok(RootSchema {
-                    meta_schema,
-                    schema,
-                    base_uri: None,
-                })
-            }
-            _ => Err(generic_error!(
-                "[loader#load_from_doc] Don't know how to load: {:?}",
-                marked_yaml
-            )),
-        }
-    }
-}
-
-impl Validator for RootSchema<'_> {
-    fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
-        self.schema.validate(context, value)
-    }
-}
 
 /// A Number is either an integer or a float
 #[derive(Debug, Clone, Copy, PartialEq)]

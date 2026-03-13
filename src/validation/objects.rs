@@ -11,7 +11,7 @@ use crate::schemas::ObjectSchema;
 use crate::utils::{format_marker, format_yaml_data, scalar_to_string};
 use crate::validation::Context;
 
-impl Validator for ObjectSchema<'_> {
+impl Validator for ObjectSchema {
     /// Validate the object according to the schema rules
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         let data = &value.data;
@@ -34,7 +34,7 @@ pub fn try_validate_value_against_properties(
     context: &Context,
     key: &String,
     value: &saphyr::MarkedYaml,
-    properties: &LinkedHashMap<String, YamlSchema<'_>>,
+    properties: &LinkedHashMap<String, YamlSchema>,
 ) -> Result<bool> {
     let sub_context = context.append_path(key);
     if let Some(schema) = properties.get(key) {
@@ -79,7 +79,7 @@ pub fn try_validate_value_against_additional_properties(
     Ok(true)
 }
 
-impl ObjectSchema<'_> {
+impl ObjectSchema {
     fn validate_object_mapping<'r>(
         &self,
         context: &Context<'r>,

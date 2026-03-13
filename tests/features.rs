@@ -23,7 +23,7 @@ struct CommandOutput {
 
 #[derive(Debug, Default, World)]
 pub struct FeaturesWorld {
-    root_schema: Option<RootSchema<'static>>,
+    root_schema: Option<RootSchema>,
     yaml_schema_error: Option<yaml_schema::Error>,
     errors: Option<Rc<RefCell<Vec<ValidationError>>>>,
     command_output: Option<CommandOutput>,

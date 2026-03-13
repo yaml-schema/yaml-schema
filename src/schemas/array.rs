@@ -19,18 +19,18 @@ use crate::utils::format_yaml_data;
 
 /// An array schema represents an array
 #[derive(Debug, Default, PartialEq)]
-pub struct ArraySchema<'r> {
-    pub items: Option<BooleanOrSchema<'r>>,
-    pub prefix_items: Option<Vec<YamlSchema<'r>>>,
+pub struct ArraySchema {
+    pub items: Option<BooleanOrSchema>,
+    pub prefix_items: Option<Vec<YamlSchema>>,
     pub min_items: Option<usize>,
     pub max_items: Option<usize>,
     pub unique_items: Option<bool>,
-    pub contains: Option<YamlSchema<'r>>,
+    pub contains: Option<YamlSchema>,
     pub min_contains: Option<u64>,
     pub max_contains: Option<u64>,
 }
 
-impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema<'r> {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
@@ -135,7 +135,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema<'r> {
     }
 }
 
-impl Validator for ArraySchema<'_> {
+impl Validator for ArraySchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         debug!("[ArraySchema] self: {self:?}");
         let data = &value.data;
@@ -288,7 +288,7 @@ impl Validator for ArraySchema<'_> {
     }
 }
 
-impl Display for ArraySchema<'_> {
+impl Display for ArraySchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

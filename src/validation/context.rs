@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -7,11 +8,11 @@ use crate::YamlSchema;
 use crate::validation::ValidationError;
 
 /// The validation context
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Context<'r> {
     /// We use an Option here so tests can be run without a root schema
-    pub root_schema: Option<&'r RootSchema<'r>>,
-    pub current_schema: Option<&'r YamlSchema<'r>>,
+    pub root_schema: Option<&'r RootSchema>,
+    pub current_schema: Option<&'r YamlSchema>,
     pub current_path: Vec<String>,
     pub stream_started: bool,
     pub stream_ended: bool,
@@ -22,6 +23,24 @@ pub struct Context<'r> {
     /// applied to a nested value is allowed (legitimate recursion) while the same ref
     /// on the same value is detected as a cycle.
     pub resolving_refs: Rc<RefCell<HashSet<(String, usize)>>>,
+    /// Cache of externally loaded schemas by absolute URI (without fragment) or `$id` when valid.
+    pub schemas: Rc<RefCell<HashMap<String, Rc<RootSchema>>>>,
+}
+
+impl Default for Context<'_> {
+    fn default() -> Self {
+        Self {
+            root_schema: None,
+            current_schema: None,
+            current_path: Vec::new(),
+            stream_started: false,
+            stream_ended: false,
+            errors: Rc::new(RefCell::new(Vec::new())),
+            fail_fast: false,
+            resolving_refs: Rc::new(RefCell::new(HashSet::new())),
+            schemas: Rc::new(RefCell::new(HashMap::new())),
+        }
+    }
 }
 
 impl<'r> Context<'r> {
@@ -52,6 +71,7 @@ impl<'r> Context<'r> {
             errors: Rc::new(RefCell::new(Vec::new())),
             fail_fast: self.fail_fast,
             resolving_refs: self.resolving_refs.clone(),
+            schemas: self.schemas.clone(),
         }
     }
 
@@ -59,6 +79,20 @@ impl<'r> Context<'r> {
         Context {
             root_schema: Some(root_schema),
             fail_fast,
+            ..Default::default()
+        }
+    }
+
+    /// Create a context with root schema and pre-loaded schemas (e.g. for CLI -f multiple).
+    pub fn with_root_schema_and_schemas(
+        root_schema: &'r RootSchema,
+        fail_fast: bool,
+        schemas: HashMap<String, Rc<RootSchema>>,
+    ) -> Context<'r> {
+        Context {
+            root_schema: Some(root_schema),
+            fail_fast,
+            schemas: Rc::new(RefCell::new(schemas)),
             ..Default::default()
         }
     }
@@ -104,6 +138,7 @@ impl<'r> Context<'r> {
             stream_ended: self.stream_ended,
             stream_started: self.stream_started,
             resolving_refs: self.resolving_refs.clone(),
+            schemas: self.schemas.clone(),
         }
     }
 

@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
@@ -39,6 +37,11 @@ impl RefUri {
     /// Returns true if this is a same-document reference (starts with #).
     pub fn is_same_document(&self) -> bool {
         self.raw.starts_with('#')
+    }
+
+    /// Returns true if the base part of the reference is an absolute URI (has a scheme).
+    pub fn is_absolute(&self) -> bool {
+        Url::parse(&self.base_ref).is_ok()
     }
 
     /// Returns the JSON Pointer fragment (e.g. "/$defs/foo") if present.
@@ -84,23 +87,25 @@ impl RefUri {
 /// A Reference is a reference to another schema, usually one that is
 /// declared in the `$defs` section of the root schema.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Reference<'r> {
-    pub ref_name: Cow<'r, str>,
+pub struct Reference {
+    pub ref_name: String,
 }
 
-impl std::fmt::Display for Reference<'_> {
+impl std::fmt::Display for Reference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "$ref: {}", self.ref_name)
     }
 }
 
-impl<'r> Reference<'r> {
-    pub fn new(ref_name: Cow<'r, str>) -> Reference<'r> {
-        Reference { ref_name }
+impl Reference {
+    pub fn new(ref_name: impl Into<String>) -> Self {
+        Self {
+            ref_name: ref_name.into(),
+        }
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for Reference<'r> {
+impl<'r> TryFrom<&MarkedYaml<'r>> for Reference {
     type Error = crate::Error;
 
     fn try_from(value: &MarkedYaml<'r>) -> std::result::Result<Self, Self::Error> {
@@ -112,17 +117,17 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for Reference<'r> {
     }
 }
 
-impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Reference<'r> {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Reference {
     type Error = crate::Error;
 
-    fn try_from<'a>(
-        mapping: &AnnotatedMapping<'a, MarkedYaml<'a>>,
-    ) -> crate::Result<Reference<'a>> {
+    fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
         debug!("[Reference#try_from] {}", format_annotated_mapping(mapping));
         let ref_key = MarkedYaml::value_from_str("$ref");
         if let Some(ref_value) = mapping.get(&ref_key) {
             match &ref_value.data {
-                YamlData::Value(saphyr::Scalar::String(s)) => Ok(Reference::new(s.clone())),
+                YamlData::Value(saphyr::Scalar::String(s)) => {
+                    Ok(Reference::new(s.as_ref().to_string()))
+                }
                 _ => Err(generic_error!(
                     "Expected a string value for $ref, but got: {:?}",
                     ref_value
@@ -208,8 +213,7 @@ mod tests {
             .as_ref()
             .expect("Expected $ref in name property");
         assert_eq!(
-            ref_value.ref_name.as_ref(),
-            "#/$defs/name",
+            ref_value.ref_name, "#/$defs/name",
             "Expected reference to '#/$defs/name'"
         );
 
@@ -331,8 +335,19 @@ mod tests {
     fn test_ref_uri_absolute() {
         let r = RefUri::parse("https://example.com/schema.yaml#/$defs/User");
         assert!(!r.is_same_document());
+        assert!(r.is_absolute());
         assert_eq!(r.fragment(), Some("/$defs/User"));
         assert_eq!(r.base_ref(), "https://example.com/schema.yaml");
+    }
+
+    #[test]
+    fn test_ref_uri_is_absolute() {
+        assert!(RefUri::parse("https://example.com/schema.yaml").is_absolute());
+        assert!(RefUri::parse("http://example.com/s.yaml#/$defs/X").is_absolute());
+        assert!(RefUri::parse("file:///tmp/schema.yaml").is_absolute());
+        assert!(!RefUri::parse("./common.yaml#/$defs/Id").is_absolute());
+        assert!(!RefUri::parse("#/$defs/name").is_absolute());
+        assert!(!RefUri::parse("common.yaml").is_absolute());
     }
 
     #[test]
@@ -368,6 +383,6 @@ mod tests {
             panic!("Expected Subschema for id property");
         };
         let ref_val = prop_schema.r#ref.as_ref().unwrap();
-        assert_eq!(ref_val.ref_name.as_ref(), "./common.yaml#/$defs/Id");
+        assert_eq!(ref_val.ref_name, "./common.yaml#/$defs/Id");
     }
 }

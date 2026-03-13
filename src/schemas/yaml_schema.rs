@@ -1,5 +1,5 @@
-use std::borrow::Cow;
 use std::fmt::Display;
+use std::rc::Rc;
 
 use hashlink::LinkedHashMap;
 use jsonptr::Token;
@@ -10,9 +10,11 @@ use saphyr::{AnnotatedMapping, MarkedYaml, Scalar, YamlData};
 use crate::ConstValue;
 use crate::Context;
 use crate::Error;
+use crate::RefUri;
 use crate::Reference;
 use crate::Result;
 use crate::Validator;
+use crate::loader::load_external_schema;
 use crate::loader::marked_yaml_to_string;
 use crate::schemas::AllOfSchema;
 use crate::schemas::AnyOfSchema;
@@ -34,21 +36,21 @@ use crate::utils::format_yaml_data;
 
 /// YamlSchema is the base of the validation model
 #[derive(Debug, PartialEq)]
-pub enum YamlSchema<'r> {
+pub enum YamlSchema {
     Empty,                // no value
     Null,                 // `null`
     BooleanLiteral(bool), // `true` or `false`
-    Subschema(Box<Subschema<'r>>),
+    Subschema(Box<Subschema>),
 }
 
-impl<'r> YamlSchema<'r> {
-    pub fn subschema(subschema: Subschema<'r>) -> Self {
+impl YamlSchema {
+    pub fn subschema(subschema: Subschema) -> Self {
         Self::Subschema(Box::new(subschema))
     }
 
-    pub fn ref_str(ref_name: impl Into<Cow<'r, str>>) -> Self {
+    pub fn ref_str(ref_name: impl Into<String>) -> Self {
         Self::subschema(Subschema {
-            r#ref: Some(Reference::new(ref_name.into())),
+            r#ref: Some(Reference::new(ref_name)),
             ..Default::default()
         })
     }
@@ -76,7 +78,7 @@ impl<'r> YamlSchema<'r> {
     }
 
     /// Create a YamlSchema with a single type: `object`
-    pub fn typed_object(object_schema: ObjectSchema<'r>) -> Self {
+    pub fn typed_object(object_schema: ObjectSchema) -> Self {
         Self::subschema(Subschema {
             r#type: SchemaType::new("object"),
             object_schema: Some(object_schema),
@@ -89,7 +91,7 @@ impl<'r> YamlSchema<'r> {
         &self,
         key: Option<&Token>,
         components: &[jsonptr::Component],
-    ) -> Option<&YamlSchema<'_>> {
+    ) -> Option<&YamlSchema> {
         debug!("[YamlSchema#resolve] self: {self}, key: {key:?}, components: {components:?}");
         if components.is_empty() {
             return Some(self);
@@ -101,7 +103,7 @@ impl<'r> YamlSchema<'r> {
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for YamlSchema<'r> {
+impl<'r> TryFrom<&MarkedYaml<'r>> for YamlSchema {
     type Error = crate::Error;
     fn try_from(marked_yaml: &MarkedYaml<'r>) -> crate::Result<Self> {
         match &marked_yaml.data {
@@ -122,7 +124,7 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for YamlSchema<'r> {
     }
 }
 
-impl<'r> From<NumberSchema> for YamlSchema<'r> {
+impl From<NumberSchema> for YamlSchema {
     fn from(number_schema: NumberSchema) -> Self {
         YamlSchema::subschema(Subschema {
             r#type: SchemaType::new("number"),
@@ -132,7 +134,7 @@ impl<'r> From<NumberSchema> for YamlSchema<'r> {
     }
 }
 
-impl<'r> From<IntegerSchema> for YamlSchema<'r> {
+impl From<IntegerSchema> for YamlSchema {
     fn from(integer_schema: IntegerSchema) -> Self {
         YamlSchema::subschema(Subschema {
             r#type: SchemaType::new("integer"),
@@ -142,7 +144,7 @@ impl<'r> From<IntegerSchema> for YamlSchema<'r> {
     }
 }
 
-impl<'r> From<StringSchema> for YamlSchema<'r> {
+impl From<StringSchema> for YamlSchema {
     fn from(string_schema: StringSchema) -> Self {
         YamlSchema::subschema(Subschema {
             r#type: SchemaType::new("string"),
@@ -152,7 +154,7 @@ impl<'r> From<StringSchema> for YamlSchema<'r> {
     }
 }
 
-impl Validator for YamlSchema<'_> {
+impl Validator for YamlSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
         debug!("[YamlSchema] self: {self}");
         debug!(
@@ -185,13 +187,13 @@ impl Validator for YamlSchema<'_> {
     }
 }
 
-impl<'r> From<Subschema<'r>> for YamlSchema<'r> {
-    fn from(subschema: Subschema<'r>) -> Self {
+impl From<Subschema> for YamlSchema {
+    fn from(subschema: Subschema) -> Self {
         YamlSchema::subschema(subschema)
     }
 }
 
-impl Display for YamlSchema<'_> {
+impl Display for YamlSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             YamlSchema::Empty => write!(f, "<empty>"),
@@ -204,18 +206,18 @@ impl Display for YamlSchema<'_> {
 
 /// Represents either a literal boolean value or a YamlSchema
 #[derive(Debug, PartialEq)]
-pub enum BooleanOrSchema<'r> {
+pub enum BooleanOrSchema {
     Boolean(bool),
-    Schema(YamlSchema<'r>),
+    Schema(YamlSchema),
 }
 
-impl BooleanOrSchema<'_> {
-    pub fn schema<'r>(schema: YamlSchema<'r>) -> BooleanOrSchema<'r> {
+impl BooleanOrSchema {
+    pub fn schema(schema: YamlSchema) -> Self {
         BooleanOrSchema::Schema(schema)
     }
 }
 
-impl Display for BooleanOrSchema<'_> {
+impl Display for BooleanOrSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BooleanOrSchema::Boolean(value) => write!(f, "{value}"),
@@ -304,23 +306,23 @@ impl Display for SchemaType {
 
 /// A Subschema contains the core schema elements and validation
 #[derive(Debug, Default, PartialEq)]
-pub struct Subschema<'r> {
+pub struct Subschema {
     /// `$id` and `$schema` metadata and `title` and `description` annotations
     pub metadata_and_annotations: MetadataAndAnnotations,
     /// `$anchor` metadata
     pub anchor: Option<String>,
     /// `$ref`
-    pub r#ref: Option<Reference<'r>>,
+    pub r#ref: Option<Reference>,
     /// `$defs`
-    pub defs: Option<LinkedHashMap<String, YamlSchema<'r>>>,
+    pub defs: Option<LinkedHashMap<String, YamlSchema>>,
     /// `anyOf`
-    pub any_of: Option<AnyOfSchema<'r>>,
+    pub any_of: Option<AnyOfSchema>,
     /// `allOf`
-    pub all_of: Option<AllOfSchema<'r>>,
+    pub all_of: Option<AllOfSchema>,
     /// `oneOf`
-    pub one_of: Option<OneOfSchema<'r>>,
+    pub one_of: Option<OneOfSchema>,
     /// `not`
-    pub not: Option<NotSchema<'r>>,
+    pub not: Option<NotSchema>,
     /// `type`
     pub r#type: SchemaType,
     /// `const`
@@ -328,20 +330,20 @@ pub struct Subschema<'r> {
     /// `enum`
     pub r#enum: Option<EnumSchema>,
 
-    pub array_schema: Option<ArraySchema<'r>>,
+    pub array_schema: Option<ArraySchema>,
     pub integer_schema: Option<IntegerSchema>,
     pub number_schema: Option<NumberSchema>,
-    pub object_schema: Option<ObjectSchema<'r>>,
+    pub object_schema: Option<ObjectSchema>,
     pub string_schema: Option<StringSchema>,
 }
 
-impl<'r> Subschema<'r> {
+impl Subschema {
     /// Resolve a portion of a JSON Pointer to an element in the schema.
     pub fn resolve(
         &self,
         token: Option<&Token>,
         components: &[jsonptr::Component],
-    ) -> Option<&YamlSchema<'_>> {
+    ) -> Option<&YamlSchema> {
         debug!("[Subschema#resolve] self: {self}, token: {token:?}, components: {components:?}");
         if let Some(token) = token {
             let s = token.decoded();
@@ -375,7 +377,7 @@ impl<'r> Subschema<'r> {
 
 // Try to load a Subschema from a MarkedYaml. Delegate to the TryFrom<&AnnotatedMapping<'_>> for mappings.
 // If the MarkedYaml is not a mapping, returns an error.
-impl<'r> TryFrom<&MarkedYaml<'r>> for Subschema<'r> {
+impl<'r> TryFrom<&MarkedYaml<'r>> for Subschema {
     type Error = crate::Error;
     fn try_from(marked_yaml: &MarkedYaml<'r>) -> crate::Result<Self> {
         if let YamlData::Mapping(mapping) = &marked_yaml.data {
@@ -390,9 +392,7 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for Subschema<'r> {
     }
 }
 
-fn try_load_defs<'r>(
-    marked_yaml: &MarkedYaml<'r>,
-) -> Result<LinkedHashMap<String, YamlSchema<'r>>> {
+fn try_load_defs<'r>(marked_yaml: &MarkedYaml<'r>) -> Result<LinkedHashMap<String, YamlSchema>> {
     debug!(
         "[try_load_defs] marked_yaml: {}",
         format_yaml_data(&marked_yaml.data)
@@ -414,7 +414,7 @@ fn try_load_defs<'r>(
     }
 }
 
-impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema {
     type Error = Error;
 
     fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
@@ -430,11 +430,11 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
         debug!("[Subschema#try_from] metadata_and_annotations: {metadata_and_annotations}");
 
         // $defs
-        let defs: Option<LinkedHashMap<String, YamlSchema<'r>>> = mapping
+        let defs: Option<LinkedHashMap<String, YamlSchema>> = mapping
             .get(&MarkedYaml::value_from_str("$defs"))
             .map(|x| {
                 debug!("[Subschema#try_from] x: {}", format_yaml_data(&x.data));
-                debug!("[Subschema#try_from] Trying to load `$defs` as LinkedHashMap<String, YamlSchema<'r>>");
+                debug!("[Subschema#try_from] Trying to load `$defs` as LinkedHashMap<String, YamlSchema>");
                 try_load_defs(x)
             })
             .transpose()?;
@@ -597,7 +597,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema<'r> {
     }
 }
 
-impl Display for Subschema<'_> {
+impl Display for Subschema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{")?;
         if !self.metadata_and_annotations.is_empty() {
@@ -637,7 +637,7 @@ impl Display for Subschema<'_> {
     }
 }
 
-impl Validator for Subschema<'_> {
+impl Validator for Subschema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> crate::Result<()> {
         debug!("[Subschema] self: {self}");
         debug!(
@@ -668,8 +668,83 @@ impl Validator for Subschema<'_> {
                         context.add_error(value, format!("Schema {ref_path} not found"));
                     }
                 } else {
-                    error!("[Subschema] Cannot find definition: {ref_name}");
-                    context.add_error(value, format!("Schema {ref_name} not found"));
+                    // External ref: resolve, load schema if needed, resolve fragment
+                    let ref_uri = RefUri::parse(ref_name);
+                    let resolved_url = if ref_uri.is_absolute() {
+                        let mut url = url::Url::parse(ref_uri.base_ref()).map_err(|e| {
+                            generic_error!("Failed to parse absolute $ref URI {}: {}", ref_name, e)
+                        })?;
+                        if let Some(frag) = ref_uri.fragment() {
+                            url.set_fragment(Some(frag));
+                        }
+                        url
+                    } else {
+                        let base = root_schema.base_uri.as_ref().ok_or_else(|| {
+                            generic_error!(
+                                "Relative $ref requires schema to be loaded from a file or URL. Found: {}",
+                                ref_name
+                            )
+                        })?;
+                        ref_uri.resolve_against(base)?
+                    };
+                    let ref_key = resolved_url.to_string();
+                    if context.is_resolving_ref(&ref_key, value) {
+                        context.add_error(value, format!("Circular $ref detected: {ref_name}"));
+                        return Ok(());
+                    }
+                    let doc_url = {
+                        let mut u = resolved_url.clone();
+                        u.set_fragment(None);
+                        u.to_string()
+                    };
+                    let fragment = resolved_url.fragment().and_then(|f| {
+                        let s = if f.starts_with('/') {
+                            f.to_string()
+                        } else {
+                            format!("/{f}")
+                        };
+                        if s.is_empty() || s == "/" {
+                            None
+                        } else {
+                            Some(s)
+                        }
+                    });
+                    {
+                        let mut schemas = context.schemas.borrow_mut();
+                        if !schemas.contains_key(&doc_url) {
+                            let loaded = load_external_schema(&doc_url)?;
+                            let schema_rc = Rc::new(loaded);
+                            let key = schema_rc.cache_key(&doc_url);
+                            schemas.insert(key.clone(), Rc::clone(&schema_rc));
+                            if key != doc_url {
+                                schemas.insert(doc_url.clone(), schema_rc);
+                            }
+                        }
+                    }
+                    let schemas = context.schemas.borrow();
+                    let schema = schemas.get(&doc_url).ok_or_else(|| {
+                        generic_error!("Schema {doc_url} not in cache after load")
+                    })?;
+                    let pointer_opt = fragment
+                        .as_ref()
+                        .map(|frag| jsonptr::Pointer::parse(frag))
+                        .transpose()?;
+                    let target = match &pointer_opt {
+                        Some(pointer) => schema.resolve(pointer),
+                        None => Some(&schema.schema),
+                    };
+                    if let Some(target) = target {
+                        context.begin_resolving_ref(&ref_key, value);
+                        let result = target.validate(context, value);
+                        context.end_resolving_ref(&ref_key, value);
+                        result?;
+                    } else {
+                        error!("[Subschema] Cannot find definition: {:?}", fragment);
+                        context.add_error(
+                            value,
+                            format!("Schema {:?} not found in {doc_url}", fragment),
+                        );
+                    }
                 }
                 return Ok(());
             } else {
@@ -747,7 +822,7 @@ impl Validator for Subschema<'_> {
     }
 }
 
-impl Subschema<'_> {
+impl Subschema {
     fn validate_by_type(
         &self,
         context: &Context,

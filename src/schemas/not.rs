@@ -12,17 +12,17 @@ use crate::YamlSchema;
 
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
 #[derive(Debug, PartialEq)]
-pub struct NotSchema<'r> {
-    pub not: Box<YamlSchema<'r>>,
+pub struct NotSchema {
+    pub not: Box<YamlSchema>,
 }
 
-impl Display for NotSchema<'_> {
+impl Display for NotSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "not: {}", self.not)
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for NotSchema<'r> {
+impl<'r> TryFrom<&MarkedYaml<'r>> for NotSchema {
     type Error = crate::Error;
 
     fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
@@ -34,12 +34,12 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for NotSchema<'r> {
     }
 }
 
-impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for NotSchema<'r> {
+impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for NotSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
         if let Some(value) = mapping.get(&MarkedYaml::value_from_str("not")) {
-            let schema: YamlSchema<'r> = value.try_into()?;
+            let schema: YamlSchema = value.try_into()?;
             Ok(NotSchema {
                 not: Box::new(schema),
             })
@@ -49,7 +49,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for NotSchema<'r> {
     }
 }
 
-impl Validator for NotSchema<'_> {
+impl Validator for NotSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> crate::Result<()> {
         debug!(
             "Not: Validating value: {:?} against schema: {}",
