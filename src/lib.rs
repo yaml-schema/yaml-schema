@@ -6,6 +6,7 @@ use log::debug;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
+use url::Url;
 
 #[macro_use]
 pub mod error;
@@ -18,6 +19,7 @@ pub mod validation;
 
 pub use engine::Engine;
 pub use error::Error;
+pub use reference::RefUri;
 pub use reference::Reference;
 pub use schemas::YamlSchema;
 pub use validation::Context;
@@ -42,6 +44,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct RootSchema<'r> {
     pub meta_schema: Option<String>,
     pub schema: YamlSchema<'r>,
+    /// Base URI for resolving relative `$ref` values (from file path, URL, or `$id`).
+    pub base_uri: Option<Url>,
 }
 
 impl<'r> RootSchema<'r> {
@@ -50,6 +54,7 @@ impl<'r> RootSchema<'r> {
         Self {
             meta_schema: None,
             schema: YamlSchema::Empty,
+            base_uri: None,
         }
     }
 
@@ -58,6 +63,7 @@ impl<'r> RootSchema<'r> {
         Self {
             meta_schema: None,
             schema,
+            base_uri: None,
         }
     }
 
@@ -97,10 +103,12 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for RootSchema<'r> {
                 Scalar::Boolean(r#bool) => Ok(Self {
                     meta_schema: None,
                     schema: YamlSchema::<'r>::BooleanLiteral(*r#bool),
+                    base_uri: None,
                 }),
                 Scalar::Null => Ok(RootSchema {
                     meta_schema: None,
                     schema: YamlSchema::<'r>::Null,
+                    base_uri: None,
                 }),
                 _ => Err(generic_error!(
                     "[loader#load_from_doc] Don't know how to a handle scalar: {:?}",
@@ -120,6 +128,7 @@ impl<'r> TryFrom<&MarkedYaml<'r>> for RootSchema<'r> {
                 Ok(RootSchema {
                     meta_schema,
                     schema,
+                    base_uri: None,
                 })
             }
             _ => Err(generic_error!(

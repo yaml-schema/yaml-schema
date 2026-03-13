@@ -1,5 +1,6 @@
 //! The loader module loads the YAML schema from a file into the in-memory model
 
+use std::path::Path;
 use std::time::Duration;
 
 use reqwest::Url;
@@ -8,6 +9,7 @@ use saphyr::LoadableYamlNode;
 use saphyr::MarkedYaml;
 use saphyr::Scalar;
 use saphyr::YamlData;
+use url::Url as ParseUrl;
 
 use crate::Error;
 use crate::Number;
@@ -20,13 +22,20 @@ use crate::utils::try_unwrap_saphyr_scalar;
 
 /// Load a YAML schema from a file.
 /// Delegates to the `load_from_doc` function to load the schema from the first document.
+/// Sets `base_uri` to the canonical file URL for resolving relative `$ref` values.
 pub fn load_file<'f, S: AsRef<str>>(path: S) -> Result<RootSchema<'f>> {
     let fs_metadata = std::fs::metadata(path.as_ref())?;
     if !fs_metadata.is_file() {
         return Err(Error::FileNotFound(path.as_ref().to_string()));
     }
     let s = std::fs::read_to_string(path.as_ref())?;
-    load_from_str(&s)
+    let mut root = load_from_str(&s)?;
+    let canonical = Path::new(path.as_ref()).canonicalize()?;
+    root.base_uri = Some(
+        ParseUrl::from_file_path(canonical)
+            .map_err(|_| Error::GenericError("Failed to convert file path to URL".to_string()))?,
+    );
+    Ok(root)
 }
 
 /// Load a YAML schema from a &str.
@@ -96,7 +105,7 @@ pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Resu
     let url = Url::parse(url_string).map_err(|e| Error::UrlLoadError(e.into()))?;
 
     // Download the YAML content
-    let response = client.get(url).send()?;
+    let response = client.get(url.clone()).send()?;
     if !response.status().is_success() {
         match response.error_for_status() {
             Ok(_) => unreachable!(),
@@ -110,7 +119,11 @@ pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Resu
     let docs = MarkedYaml::load_from_str(&yaml_content).map_err(UrlLoadError::ParseError)?;
 
     match docs.first() {
-        Some(doc) => load_from_doc(doc),
+        Some(doc) => {
+            let mut root = load_from_doc(doc)?;
+            root.base_uri = Some(url.clone());
+            Ok(root)
+        }
         None => Err(UrlLoadError::NoDocuments.into()),
     }
 }
