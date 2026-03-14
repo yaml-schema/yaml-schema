@@ -8,6 +8,7 @@ use saphyr::Scalar;
 use saphyr::YamlData;
 
 use crate::loader;
+use crate::schemas::StringFormat;
 use crate::utils::format_hash_map;
 use crate::utils::format_marker;
 
@@ -17,6 +18,7 @@ pub struct StringSchema {
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub pattern: Option<Regex>,
+    pub format: Option<StringFormat>,
 }
 
 impl std::fmt::Debug for StringSchema {
@@ -30,6 +32,9 @@ impl std::fmt::Debug for StringSchema {
         }
         if let Some(pattern) = &self.pattern {
             h.insert("pattern".to_string(), pattern.as_str().to_string());
+        }
+        if let Some(format) = &self.format {
+            h.insert("format".to_string(), format.to_string());
         }
         write!(f, "StringSchema {}", format_hash_map(&h))
     }
@@ -46,6 +51,7 @@ impl PartialEq for StringSchema {
         self.min_length == other.min_length
             && self.max_length == other.max_length
             && are_patterns_equivalent(&self.pattern, &other.pattern)
+            && self.format == other.format
     }
 }
 
@@ -96,6 +102,20 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for StringSchema {
                         } else {
                             return Err(unsupported_type!(
                                 "pattern expected string, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "format" => {
+                        if let YamlData::Value(Scalar::String(s)) = &value.data {
+                            string_schema.format = Some(
+                                s.as_ref()
+                                    .parse::<StringFormat>()
+                                    .unwrap_or_else(|e| match e {}),
+                            );
+                        } else {
+                            return Err(unsupported_type!(
+                                "format expected string, but got: {:?}",
                                 value
                             ));
                         }
@@ -153,8 +173,8 @@ impl std::fmt::Display for StringSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "StringSchema {{ min_length: {:?}, max_length: {:?}, pattern: {:?} }}",
-            self.min_length, self.max_length, self.pattern
+            "StringSchema {{ min_length: {:?}, max_length: {:?}, pattern: {:?}, format: {:?} }}",
+            self.min_length, self.max_length, self.pattern, self.format
         )
     }
 }
@@ -188,6 +208,11 @@ impl StringSchemaBuilder {
 
     pub fn pattern(&mut self, pattern: Regex) -> &mut Self {
         self.0.pattern = Some(pattern);
+        self
+    }
+
+    pub fn format(&mut self, format: StringFormat) -> &mut Self {
+        self.0.format = Some(format);
         self
     }
 }

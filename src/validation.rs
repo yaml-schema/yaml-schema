@@ -5,6 +5,7 @@ use saphyr::Marker;
 use crate::Result;
 
 mod context;
+pub(crate) mod formats;
 mod objects;
 mod strings;
 
