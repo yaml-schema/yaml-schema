@@ -4,7 +4,9 @@ use regex::Regex;
 use crate::Context;
 use crate::Result;
 use crate::Validator;
+use crate::schemas::StringFormat;
 use crate::schemas::StringSchema;
+use crate::validation::formats;
 
 impl Validator for StringSchema {
     fn validate(&self, context: &Context, value: &saphyr::MarkedYaml) -> Result<()> {
@@ -34,6 +36,7 @@ impl StringSchema {
                 self.min_length,
                 self.max_length,
                 self.pattern.as_ref(),
+                self.format.as_ref(),
                 enum_strings.as_ref(),
                 s,
             );
@@ -50,6 +53,7 @@ pub fn validate_string(
     min_length: Option<usize>,
     max_length: Option<usize>,
     pattern: Option<&Regex>,
+    format: Option<&StringFormat>,
     r#enum: Option<&Vec<String>>,
     str_value: &str,
 ) {
@@ -70,6 +74,11 @@ pub fn validate_string(
             "String does not match regular expression {}!",
             regex.as_str()
         ));
+    }
+    if let Some(fmt) = format
+        && let Some(err) = formats::validate_format(fmt, str_value)
+    {
+        errors.push(err);
     }
     if let Some(enum_values) = r#enum
         && !enum_values.contains(&str_value.to_string())
@@ -111,16 +120,16 @@ mod tests {
     #[test]
     fn test_validate_string() {
         let mut errors = Vec::new();
-        validate_string(&mut errors, None, None, None, None, "hello");
+        validate_string(&mut errors, None, None, None, None, None, "hello");
         assert!(errors.is_empty());
     }
 
     #[test]
     fn test_validate_string_with_min_length() {
         let mut errors = Vec::new();
-        validate_string(&mut errors, Some(5), None, None, None, "hello");
+        validate_string(&mut errors, Some(5), None, None, None, None, "hello");
         assert!(errors.is_empty());
-        validate_string(&mut errors, Some(5), None, None, None, "hell");
+        validate_string(&mut errors, Some(5), None, None, None, None, "hell");
         assert!(!errors.is_empty());
         assert_eq!(
             errors.first().unwrap(),
@@ -148,5 +157,55 @@ mod tests {
         let result = string_schema.validate(&context, marked_yaml);
         assert!(result.is_ok());
         assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_validate_string_with_format() {
+        let mut errors = Vec::new();
+        let fmt = StringFormat::Email;
+        validate_string(
+            &mut errors,
+            None,
+            None,
+            None,
+            Some(&fmt),
+            None,
+            "user@example.com",
+        );
+        assert!(errors.is_empty());
+
+        validate_string(
+            &mut errors,
+            None,
+            None,
+            None,
+            Some(&fmt),
+            None,
+            "not-an-email",
+        );
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("email"));
+    }
+
+    #[test]
+    fn test_engine_validate_string_with_format() {
+        let schema = StringSchema {
+            format: Some(StringFormat::Date),
+            ..Default::default()
+        };
+        let root_schema = RootSchema::new(YamlSchema::typed_string(schema));
+        let context = Engine::evaluate(&root_schema, "2024-01-15", false).unwrap();
+        assert!(!context.has_errors());
+
+        let context = Engine::evaluate(&root_schema, "not-a-date", false).unwrap();
+        assert!(context.has_errors());
+    }
+
+    #[test]
+    fn test_validate_string_unknown_format_always_passes() {
+        let mut errors = Vec::new();
+        let fmt = StringFormat::Unknown("custom".to_string());
+        validate_string(&mut errors, None, None, None, Some(&fmt), None, "anything");
+        assert!(errors.is_empty());
     }
 }
