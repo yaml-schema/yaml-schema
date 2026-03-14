@@ -1,27 +1,33 @@
 # Agent Guidelines for yaml-schema
 
-YAML schema validator in Rust (edition 2024). Library (`yaml-schema`) + CLI (`ys`). Validates YAML files against YAML-defined schemas, similar to JSON Schema.
+YAML schema validator in Rust (edition 2024). This repository contains both:
+
+- Library crate: `yaml-schema`
+- CLI binary: `ys`
+
+The project validates YAML files against YAML-defined schemas (similar in spirit to JSON Schema).
 
 ## File Organization
 
-- `src/lib.rs` — library entry point
-- `src/schemas/` — schema type definitions (one module per type)
-- `src/validation/` — validation logic (separate from schema definitions)
-- `src/loader.rs` — schema loading/parsing from YAML
-- `src/engine.rs` — core validation engine
-- `src/error.rs` — error types/macros (`thiserror`)
-- `src/bin/ys.rs` — CLI binary
-- `features/` — Cucumber BDD feature tests
-- `tests/` — integration tests
+- `src/lib.rs` - library entry point
+- `src/schemas/` - schema type definitions (one module per type)
+- `src/validation/` - validation logic (kept separate from schema definitions)
+- `src/loader.rs` - schema loading/parsing from YAML
+- `src/engine.rs` - core validation engine
+- `src/error.rs` - error types/macros (`thiserror`)
+- `src/bin/ys.rs` - CLI binary
+- `features/` - Cucumber BDD feature tests
+- `tests/` - integration tests
 
-## Import Rules
+## Rust Import Rules
 
-- Group: `std` first, external crates second, `crate::` last.
-- **SPLIT** multiple symbols from the same module into individual `use` statements. Do NOT group them.
+- Group imports in this order: `std`, external crates, then `crate::`.
+- Split multiple symbols from the same module into individual `use` statements.
+  - Do not group multiple imported symbols in braces.
 
 ## Error Handling
 
-Use `crate::Error` and `crate::Result<T>` everywhere. Macros:
+Use `crate::Error` and `crate::Result<T>` consistently. Prefer existing error macros:
 
 ```rust
 Err(generic_error!("msg: {}", val))
@@ -33,22 +39,24 @@ Always include location markers via `format_marker()` from `utils`.
 
 ## Key Dependencies
 
-- **saphyr** — YAML parsing: `MarkedYaml<'a>` (location-preserving), `YamlData`, `Scalar` (Null/Boolean/Integer/FloatingPoint/String)
-- **hashlink** — `LinkedHashMap` (preserves insertion order)
-- **ordered-float** — `OrderedFloat` for float comparisons
+- `saphyr` - YAML parsing with location-preserving `MarkedYaml<'a>`, plus `YamlData` and `Scalar`
+- `hashlink` - `LinkedHashMap` for insertion-ordered mappings
+- `ordered-float` - `OrderedFloat` for stable float comparison and ordering
 
 ## Schema Architecture
 
-- `BaseSchema` — common fields shared by all schemas
-- `TypedSchema` enum — type-specific variants (Array, Object, String, Number, etc.)
-- `Schema` — top-level enum; large variants use `Box` (e.g., `Schema::Object(Box<ObjectSchema>)`)
-- Composition: `allOf`, `anyOf`, `oneOf`, `not`
-- Shared ownership via `Rc` (single-threaded; see `RootSchema.schema`)
+- `BaseSchema` - common fields shared by all schemas
+- `TypedSchema` - enum for type-specific variants (Array, Object, String, Number, etc.)
+- `Schema` - top-level enum; large variants use `Box` (for example `Schema::Object(Box<ObjectSchema>)`)
+- Composition keywords supported: `allOf`, `anyOf`, `oneOf`, `not`
+- Shared ownership uses `Rc` (single-threaded; see `RootSchema.schema`)
 - Implement `std::fmt::Display` for schema types
 
-## Core Traits & Patterns
+## Core Traits and Patterns
 
-**Loading** — implement `FromAnnotatedMapping<T>` and `TryFrom<&MarkedYaml>`:
+### Loading
+
+Implement `FromAnnotatedMapping<T>` and `TryFrom<&MarkedYaml>` for schema loading.
 
 ```rust
 impl FromAnnotatedMapping<MySchema> for MySchema {
@@ -56,7 +64,9 @@ impl FromAnnotatedMapping<MySchema> for MySchema {
 }
 ```
 
-**Validation** — implement `Validator`; pass `&Context` for error reporting and `$ref` resolution:
+### Validation
+
+Implement `Validator`; pass `&Context` for both error reporting and `$ref` resolution.
 
 ```rust
 impl Validator for MySchema {
@@ -64,20 +74,24 @@ impl Validator for MySchema {
 }
 ```
 
-Errors are accumulated (not fail-fast) unless `fail-fast` is enabled.
+Validation should accumulate errors (rather than fail fast) unless `fail-fast` is enabled.
 
-## Testing
+## Testing Expectations
 
-- **Unit tests** — `#[cfg(test)]` modules inside `src/` source files, colocated with the code they test
-- **Doctests** — executable examples in `///` doc comments on public functions and types
-- **Cucumber BDD tests** — feature files in `features/` using Gherkin syntax; step definitions in `tests/`
+- Unit tests: colocated in `#[cfg(test)]` modules inside `src/`
+- Doctests: executable examples in public `///` docs
+- BDD tests: Gherkin feature files in `features/` with step definitions in `tests/`
 
-Run all tests with `cargo test`. Cucumber tests run as part of the default test suite.
+Run all tests with:
 
-## Before Committing
+```bash
+cargo test
+```
+
+## Pre-Commit Quality Checklist
 
 1. `cargo fmt`
-2. `cargo clippy` — fix warnings
+2. `cargo clippy` (fix warnings)
 3. `cargo test`
-4. New schema features need Cucumber tests in `features/`
-5. Error messages must include location information
+4. Add or update Cucumber scenarios in `features/` for new schema behavior
+5. Ensure error messages include location information
