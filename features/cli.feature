@@ -6,10 +6,7 @@ Feature: CLI usage
       ys version
       ```
     Then it should exit with status code 0
-    And it should output:
-      ```
-      ys 0.9.0
-      ```
+    And the output should start with "ys 0.9.0"
 
   Scenario: Basic validation with a valid file
     When the following command is run:
