@@ -146,6 +146,19 @@ async fn it_should_output(world: &mut FeaturesWorld, step: &Step) {
     assert_eq!(actual, expected, "stdout mismatch");
 }
 
+#[then(expr = "the output should start with {string}")]
+async fn the_output_should_start_with(world: &mut FeaturesWorld, prefix: String) {
+    let output = world
+        .command_output
+        .as_ref()
+        .expect("No command has been run");
+    let actual = output.stdout.trim();
+    assert!(
+        actual.starts_with(&prefix),
+        "Expected stdout to start with:\n{prefix}\nBut got:\n{actual}"
+    );
+}
+
 #[then(regex = "stderr output should end with:")]
 async fn stderr_output_should_end_with(world: &mut FeaturesWorld, step: &Step) {
     let expected = step.docstring().expect("Expected a docstring");

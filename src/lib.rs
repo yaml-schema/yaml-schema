@@ -11,6 +11,7 @@ pub mod engine;
 pub mod loader;
 pub mod reference;
 pub mod schemas;
+pub mod target;
 pub mod utils;
 pub mod validation;
 
@@ -27,9 +28,11 @@ use utils::format_marker;
 
 use crate::loader::marked_yaml_to_string;
 
-// Returns the library version, which reflects the crate version
+/// Returns the library version string including the target triple.
+///
+/// Format: `{crate_version} ({target_triple})`
 pub fn version() -> String {
-    clap::crate_version!().to_string()
+    format!("{} ({})", clap::crate_version!(), target::TARGET)
 }
 
 // Alias for std::result::Result<T, yaml_schema::Error>

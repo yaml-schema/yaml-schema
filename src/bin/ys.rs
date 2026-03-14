@@ -15,7 +15,7 @@ use yaml_schema::version;
 #[derive(Parser, Debug, Default)]
 #[command(name = "ys")]
 #[command(author = "Alistair Israel <aisrael@gmail.com>")]
-#[command(version = clap::crate_version!())]
+#[command(version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("YS_TARGET"), ")"))]
 #[command(about = "A tool for validating YAML against a schema")]
 #[command(arg_required_else_help = true)]
 pub struct Opts {
