@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -14,6 +15,7 @@ use crate::RefUri;
 use crate::Reference;
 use crate::Result;
 use crate::Validator;
+use crate::loader::load_boolean_or_schema_marked;
 use crate::loader::load_external_schema;
 use crate::loader::marked_yaml_to_string;
 use crate::schemas::AllOfSchema;
@@ -34,6 +36,8 @@ use crate::utils::format_marker;
 use crate::utils::format_scalar;
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
+use crate::utils::scalar_to_string;
+use crate::validation::ArrayUnevaluatedAnnotations;
 
 /// YamlSchema is the base of the validation model
 #[derive(Debug, PartialEq)]
@@ -338,6 +342,10 @@ pub struct Subschema {
     pub number_schema: Option<NumberSchema>,
     pub object_schema: Option<ObjectSchema>,
     pub string_schema: Option<StringSchema>,
+    /// `unevaluatedProperties` (JSON Schema 2020-12 unevaluated vocabulary).
+    pub unevaluated_properties: Option<BooleanOrSchema>,
+    /// `unevaluatedItems`.
+    pub unevaluated_items: Option<BooleanOrSchema>,
 }
 
 impl Subschema {
@@ -601,6 +609,15 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema {
             string_schema = StringSchema::try_from(mapping).map(Some)?;
         }
 
+        let unevaluated_properties = mapping
+            .get(&MarkedYaml::value_from_str("unevaluatedProperties"))
+            .map(load_boolean_or_schema_marked)
+            .transpose()?;
+        let unevaluated_items = mapping
+            .get(&MarkedYaml::value_from_str("unevaluatedItems"))
+            .map(load_boolean_or_schema_marked)
+            .transpose()?;
+
         debug!("[Subschema#try_from] array_schema: {array_schema:?}");
         debug!("[Subschema#try_from] integer_schema: {integer_schema:?}");
         debug!("[Subschema#try_from] number_schema: {number_schema:?}");
@@ -624,6 +641,8 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema {
             number_schema,
             object_schema,
             string_schema,
+            unevaluated_properties,
+            unevaluated_items,
             anchor: None,
         })
     }
@@ -789,34 +808,38 @@ impl Validator for Subschema {
             }
         }
 
+        // `unevaluated*` on the same mapping as `$ref` are not applied when `$ref` is present
+        // (validation returns above). See gap #1 / `$ref` sibling behavior.
+        let ctx = Self::validation_context_for_instance(context, value);
+
         if let Some(any_of) = &self.any_of {
             debug!("[Subschema] Validating anyOf schema: {any_of:?}");
-            any_of.validate(context, value)?;
+            any_of.validate(&ctx, value)?;
         }
 
         if let Some(all_of) = &self.all_of {
             debug!("[Subschema] Validating allOf schema: {all_of:?}");
-            all_of.validate(context, value)?;
+            all_of.validate(&ctx, value)?;
         }
 
         if let Some(one_of) = &self.one_of {
             debug!("[Subschema] Validating oneOf schema: {one_of:?}");
-            one_of.validate(context, value)?;
+            one_of.validate(&ctx, value)?;
         }
 
         if let Some(not) = &self.not {
             debug!("[Subschema] Validating not schema: {not:?}");
-            not.validate(context, value)?;
+            not.validate(&ctx, value)?;
         }
 
         if let Some(if_then_else) = &self.if_then_else {
             debug!("[Subschema] Validating if/then/else: {if_then_else:?}");
-            if_then_else.validate(context, value)?;
+            if_then_else.validate(&ctx, value)?;
         }
 
         match &self.r#type {
             SchemaType::None => (),
-            SchemaType::Single(s) => self.validate_by_type(context, s.as_ref(), value)?,
+            SchemaType::Single(s) => self.validate_by_type(&ctx, s.as_ref(), value)?,
             SchemaType::Multiple(values) => {
                 debug!(
                     "[Subschema] Validating multiple types: {}",
@@ -824,7 +847,7 @@ impl Validator for Subschema {
                 );
                 let mut any_matched = false;
                 for s in values {
-                    let sub_context = context.get_sub_context();
+                    let sub_context = ctx.get_sub_context();
                     self.validate_by_type(&sub_context, s.as_ref(), value)?;
                     if !sub_context.has_errors() {
                         any_matched = true;
@@ -832,7 +855,7 @@ impl Validator for Subschema {
                     }
                 }
                 if !any_matched {
-                    context.add_error(
+                    ctx.add_error(
                         value,
                         format!("None of type: [{}] matched", values.join(", ")),
                     );
@@ -843,7 +866,7 @@ impl Validator for Subschema {
         if let Some(r#const) = &self.r#const
             && !r#const.accepts(value)
         {
-            context.add_error(
+            ctx.add_error(
                 value,
                 format!(
                     "Expected const: {:#?}, but got: {}",
@@ -855,14 +878,119 @@ impl Validator for Subschema {
 
         if let Some(r#enum) = &self.r#enum {
             debug!("[Subschema] Validating enum schema: {}", r#enum);
-            r#enum.validate(context, value)?;
+            r#enum.validate(&ctx, value)?;
         }
+
+        self.apply_unevaluated(&ctx, value)?;
 
         Ok(())
     }
 }
 
 impl Subschema {
+    fn validation_context_for_instance<'r>(base: &Context<'r>, value: &MarkedYaml) -> Context<'r> {
+        match &value.data {
+            YamlData::Mapping(_) => {
+                let oe = base.object_evaluated.clone().unwrap_or_default();
+                base.with_object_evaluated(Some(oe))
+            }
+            YamlData::Sequence(_) => {
+                let arr = base
+                    .array_unevaluated
+                    .clone()
+                    .unwrap_or_else(ArrayUnevaluatedAnnotations::new_shared);
+                base.with_array_unevaluated(Some(arr))
+            }
+            _ => base
+                .with_object_evaluated(base.object_evaluated.clone())
+                .with_array_unevaluated(base.array_unevaluated.clone()),
+        }
+    }
+
+    fn apply_unevaluated(&self, ctx: &Context, value: &MarkedYaml) -> Result<()> {
+        if let YamlData::Mapping(mapping) = &value.data
+            && let Some(u) = &self.unevaluated_properties
+        {
+            let evaluated: HashSet<String> = ctx
+                .object_evaluated
+                .as_ref()
+                .map(|o| o.snapshot())
+                .unwrap_or_default();
+            for (k, v) in mapping.iter() {
+                let key_string = match &k.data {
+                    YamlData::Value(scalar) => scalar_to_string(scalar),
+                    _ => {
+                        return Err(expected_scalar!(
+                            "[{}] Expected a scalar object key, got: {:?}",
+                            format_marker(&k.span.start),
+                            k.data
+                        ));
+                    }
+                };
+                if key_string == "$schema" {
+                    continue;
+                }
+                if evaluated.contains(&key_string) {
+                    continue;
+                }
+                let prop_ctx = ctx.append_path(&key_string);
+                match u {
+                    BooleanOrSchema::Boolean(false) => {
+                        ctx.add_error(
+                            v,
+                            format!("Unevaluated property '{key_string}' is not allowed!"),
+                        );
+                    }
+                    BooleanOrSchema::Boolean(true) => {}
+                    BooleanOrSchema::Schema(s) => {
+                        s.validate(&prop_ctx, v)?;
+                    }
+                }
+            }
+        }
+
+        if let YamlData::Sequence(seq) = &value.data
+            && let Some(u) = &self.unevaluated_items
+        {
+            let ann = ctx
+                .array_unevaluated
+                .as_ref()
+                .map(|c| c.borrow().clone())
+                .unwrap_or_default();
+            if ann.full_coverage {
+                return Ok(());
+            }
+            let indices = ann.indices_requiring_unevaluated(seq.len());
+            let err_before = ctx.errors.borrow().len();
+            for i in indices.iter().copied() {
+                let item = &seq[i];
+                let item_ctx = ctx.append_path(i.to_string());
+                match u {
+                    BooleanOrSchema::Boolean(false) => {
+                        ctx.add_error(
+                            item,
+                            format!("Unevaluated array item at index {i} is not allowed!"),
+                        );
+                    }
+                    BooleanOrSchema::Boolean(true) => {}
+                    BooleanOrSchema::Schema(s) => {
+                        s.validate(&item_ctx, item)?;
+                    }
+                }
+            }
+            if ctx.errors.borrow().len() == err_before
+                && !indices.is_empty()
+                && let Some(cell) = &ctx.array_unevaluated
+            {
+                let mut a = cell.borrow_mut();
+                a.saw_relevant = true;
+                a.full_coverage = true;
+            }
+        }
+
+        Ok(())
+    }
+
     fn validate_by_type(
         &self,
         context: &Context,
@@ -1214,5 +1342,23 @@ mod tests {
         let result = schema.validate(&context, value);
         assert!(result.is_ok());
         assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn unevaluated_properties_all_of_extra_key_rejected() {
+        let root = loader::load_from_str(
+            r#"
+            allOf:
+              - properties:
+                  a:
+                    type: string
+              - unevaluatedProperties: false
+            "#,
+        )
+        .unwrap();
+        let ok = engine::Engine::evaluate(&root, "a: ok", false).unwrap();
+        assert!(!ok.has_errors());
+        let bad = engine::Engine::evaluate(&root, "a: ok\nb: no", false).unwrap();
+        assert!(bad.has_errors());
     }
 }

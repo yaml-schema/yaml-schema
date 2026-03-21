@@ -66,6 +66,7 @@ Should fail with exit code 1
 - [Object types](features/validation/objects.feature)
 - [Arrays](features/validation/arrays.feature)
 - [Composition](features/composition.feature)
+- [Unevaluated properties/items](features/validation/unevaluated.feature)
 
 See the [features](features/) folder for all examples.
 

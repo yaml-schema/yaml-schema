@@ -41,9 +41,15 @@ pub fn try_validate_value_against_properties(
     let sub_context = context.append_path(key);
     if let Some(schema) = properties.get(key) {
         debug!("Validating property '{key}' with schema: {schema}");
+        let err_before = context.errors.borrow().len();
         let result = schema.validate(&sub_context, value);
         return match result {
-            Ok(_) => Ok(true),
+            Ok(()) => {
+                if context.errors.borrow().len() == err_before {
+                    context.record_evaluated_property(key);
+                }
+                Ok(true)
+            }
             Err(e) => Err(e),
         };
     }
@@ -126,12 +132,17 @@ impl ObjectSchema {
             let mut matched_pattern_property = false;
             if let Some(pattern_properties) = &self.pattern_properties {
                 let pattern_context = context.append_path(&key_string);
+                let err_before_patterns = context.errors.borrow().len();
                 for pp in pattern_properties {
                     log::debug!("pattern: {}", pp.regex.as_str());
                     if pp.regex.is_match(key_string.as_ref()) {
                         matched_pattern_property = true;
                         pp.schema.validate(&pattern_context, value)?;
                     }
+                }
+                if matched_pattern_property && context.errors.borrow().len() == err_before_patterns
+                {
+                    context.record_evaluated_property(&key_string);
                 }
             }
 
@@ -141,12 +152,16 @@ impl ObjectSchema {
                 && !matched_pattern_property
                 && let Some(additional_properties) = &self.additional_properties
             {
+                let err_before_add = context.errors.borrow().len();
                 try_validate_value_against_additional_properties(
                     context,
                     &key_string,
                     value,
                     additional_properties,
                 )?;
+                if context.errors.borrow().len() == err_before_add {
+                    context.record_evaluated_property(&key_string);
+                }
             }
             // Finally, we check if it matches property_names
             if let Some(property_names) = &self.property_names {

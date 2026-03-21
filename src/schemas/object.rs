@@ -154,6 +154,9 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema {
                         object_schema.dependent_schemas =
                             Some(load_dependent_schemas_marked(value)?);
                     }
+                    "unevaluatedProperties" => {
+                        // Loaded on `Subschema`; ignore here when parsing `type: object` mapping.
+                    }
                     // Maybe this should be handled by the base schema?
                     "type" => {
                         if let YamlData::Value(Scalar::String(s)) = &value.data {

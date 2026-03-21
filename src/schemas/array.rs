@@ -121,6 +121,9 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ArraySchema {
                             ));
                         }
                     }
+                    "unevaluatedItems" => {
+                        // Loaded on `Subschema`; ignore here when parsing `type: array` mapping.
+                    }
                     _ => debug!("Unsupported key for ArraySchema: {}", s),
                 }
             } else {
@@ -142,6 +145,8 @@ impl Validator for ArraySchema {
         debug!("[ArraySchema] Validating value: {}", format_yaml_data(data));
 
         if let saphyr::YamlData::Sequence(array) = data {
+            let err_after_meta = context.errors.borrow().len();
+
             // validate contains with minContains / maxContains
             if let Some(min_items) = self.min_items
                 && array.len() < min_items
@@ -272,6 +277,10 @@ impl Validator for ArraySchema {
                 }
             }
 
+            if context.errors.borrow().len() == err_after_meta {
+                Self::record_unevaluated_array_annotations(self, context, array);
+            }
+
             Ok(())
         } else {
             debug!("[ArraySchema] context.fail_fast: {}", context.fail_fast);
@@ -284,6 +293,82 @@ impl Validator for ArraySchema {
             );
             fail_fast!(context);
             Ok(())
+        }
+    }
+}
+
+impl ArraySchema {
+    /// Update [`Context::array_unevaluated`] from this schema's `prefixItems` / `items` / `contains` (2020-12).
+    fn record_unevaluated_array_annotations(
+        schema: &ArraySchema,
+        context: &Context,
+        array: &[MarkedYaml],
+    ) {
+        let Some(cell) = context.array_unevaluated.as_ref() else {
+            return;
+        };
+        let mut ann = cell.borrow_mut();
+
+        if let Some(sub_schema) = &schema.contains {
+            ann.saw_relevant = true;
+            if array.is_empty() {
+                // Annotation still present for empty instance (Core §10.3.1.3).
+            } else {
+                let mut matching = HashSet::new();
+                for (i, item) in array.iter().enumerate() {
+                    let sub_context = Context {
+                        root_schema: context.root_schema,
+                        fail_fast: true,
+                        ..Default::default()
+                    };
+                    if sub_schema.validate(&sub_context, item).is_ok() && !sub_context.has_errors()
+                    {
+                        matching.insert(i);
+                    }
+                }
+                if matching.len() == array.len() {
+                    ann.contains_all = true;
+                } else {
+                    ann.contains_indices.extend(matching);
+                }
+            }
+        }
+
+        if let Some(prefix_items) = &schema.prefix_items
+            && !prefix_items.is_empty()
+            && !array.is_empty()
+        {
+            let n = array.len().min(prefix_items.len());
+            if n > 0 {
+                ann.saw_relevant = true;
+                let largest = n - 1;
+                ann.prefix_largest = Some(match ann.prefix_largest {
+                    Some(p) => p.max(largest),
+                    None => largest,
+                });
+            }
+        }
+
+        let prefix_len = schema.prefix_items.as_ref().map(|p| p.len()).unwrap_or(0);
+        let tail_non_empty = array.len() > prefix_len;
+        let items_covers_all = prefix_len == 0 && !array.is_empty();
+
+        if let Some(items) = &schema.items {
+            match items {
+                BooleanOrSchema::Boolean(true) => {
+                    if tail_non_empty || items_covers_all {
+                        ann.saw_relevant = true;
+                        ann.full_coverage = true;
+                    }
+                }
+                BooleanOrSchema::Schema(_) => {
+                    if tail_non_empty || items_covers_all {
+                        ann.saw_relevant = true;
+                        ann.full_coverage = true;
+                    }
+                }
+                BooleanOrSchema::Boolean(false) => {}
+            }
         }
     }
 }

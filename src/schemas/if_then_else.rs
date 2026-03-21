@@ -82,7 +82,7 @@ impl Validator for IfThenElseSchema {
             "if/then/else: validating instance against `if` schema: {}",
             self.if_schema
         );
-        let if_context = context.get_sub_context();
+        let if_context = context.get_sub_context_fresh_eval();
         let if_result = self.if_schema.validate(&if_context, value);
 
         let if_passed = match if_result {
@@ -91,6 +91,15 @@ impl Validator for IfThenElseSchema {
         };
 
         if if_passed {
+            if let (Some(p), Some(f)) = (&context.object_evaluated, &if_context.object_evaluated) {
+                p.extend(&f.snapshot());
+            }
+            if let (Some(pcell), Some(fcell)) =
+                (&context.array_unevaluated, &if_context.array_unevaluated)
+            {
+                let snap = fcell.borrow().clone();
+                pcell.borrow_mut().merge_from(&snap);
+            }
             if let Some(then_s) = &self.then_schema {
                 then_s.validate(context, value)?;
             }

@@ -70,12 +70,10 @@ pub fn validate_any_of(
     marked_yaml: &saphyr::MarkedYaml,
 ) -> Result<bool> {
     debug!("[AnyOf] &context: {context:p}");
+    let mut any_ok = false;
     for schema in schemas {
         debug!("[AnyOf] Validating value: {marked_yaml:?} against schema: {schema}");
-        // Since we're only looking for the first match, we can stop as soon as we find one
-        // That also means that when evaluating sub schemas, we can fail fast to short circuit
-        // the rest of the validation
-        let sub_context = context.get_sub_context();
+        let sub_context = context.get_sub_context_fresh_eval();
         debug!("[AnyOf]     context: {context:?}");
         debug!("[AnyOf] sub_context: {sub_context:?}");
         match schema.validate(&sub_context, marked_yaml) {
@@ -84,14 +82,24 @@ pub fn validate_any_of(
                     continue;
                 }
                 debug!("[AnyOf] Schema {schema:?} matched");
-                return Ok(true);
+                any_ok = true;
+                if let (Some(p), Some(b)) =
+                    (&context.object_evaluated, &sub_context.object_evaluated)
+                {
+                    p.extend(&b.snapshot());
+                }
+                if let (Some(pcell), Some(bcell)) =
+                    (&context.array_unevaluated, &sub_context.array_unevaluated)
+                {
+                    let snap = bcell.borrow().clone();
+                    pcell.borrow_mut().merge_from(&snap);
+                }
             }
             Err(e) => return Err(e),
         }
     }
-    debug!("[AnyOf] None of the schemas matched");
-    // If we get here, then none of the schemas matched
-    Ok(false)
+    debug!("[AnyOf] any_ok: {any_ok}");
+    Ok(any_ok)
 }
 
 #[cfg(test)]

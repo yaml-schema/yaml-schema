@@ -159,4 +159,19 @@ properties:
     patternProperties:
       "^[a-zA-Z0-9_-]+$":
         $ref: "#/$defs/schema"
+  unevaluatedProperties:
+    description: >-
+      JSON Schema 2020-12 unevaluated vocabulary. Applies to object properties not already
+      evaluated by properties, patternProperties, additionalProperties, or in-place applicators
+      (e.g. allOf).
+    oneOf:
+      - type: boolean
+      - $ref: "#/$defs/schema"
+  unevaluatedItems:
+    description: >-
+      JSON Schema 2020-12 unevaluated vocabulary. Applies to array elements not already
+      evaluated by prefixItems, items, contains, or in-place applicators.
+    oneOf:
+      - type: boolean
+      - $ref: "#/$defs/schema"
 additionalProperties: false

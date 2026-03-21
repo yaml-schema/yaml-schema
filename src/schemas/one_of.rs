@@ -12,6 +12,7 @@ use crate::YamlSchema;
 use crate::loader;
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
+use crate::validation::ArrayUnevaluatedAnnotations;
 
 /// The `oneOf` schema is a schema that matches if one, and only one of the schemas in the `oneOf` array match.
 /// The schemas are tried in order, and the first match is used. If no match is found, an error is added
@@ -74,13 +75,16 @@ pub fn validate_one_of(
     schemas: &[YamlSchema],
     value: &saphyr::MarkedYaml,
 ) -> Result<bool> {
-    let mut one_of_is_valid = false;
+    let mut match_count = 0usize;
+    let mut winning_obj = None;
+    let mut winning_arr: Option<ArrayUnevaluatedAnnotations> = None;
+
     for schema in schemas {
         debug!(
             "[OneOf] Validating value: {:?} against schema: {}",
             &value.data, schema
         );
-        let sub_context = context.get_sub_context();
+        let sub_context = context.get_sub_context_fresh_eval();
         let sub_result = schema.validate(&sub_context, value);
         match sub_result {
             Ok(()) | Err(Error::FailFast) => {
@@ -92,19 +96,37 @@ pub fn validate_one_of(
                     continue;
                 }
 
-                if one_of_is_valid {
-                    error!("[OneOf] Value matched multiple schemas in `oneOf`!");
-                    context.add_error(value, "Value matched multiple schemas in `oneOf`!");
-                    fail_fast!(context);
-                } else {
-                    one_of_is_valid = true;
+                match_count += 1;
+                if match_count == 1 {
+                    winning_obj = sub_context.object_evaluated.as_ref().map(|o| o.snapshot());
+                    winning_arr = sub_context
+                        .array_unevaluated
+                        .as_ref()
+                        .map(|a| a.borrow().clone());
                 }
             }
             Err(e) => return Err(e),
         }
     }
-    debug!("OneOf: one_of_is_valid: {one_of_is_valid}");
-    Ok(one_of_is_valid)
+
+    if match_count > 1 {
+        error!("[OneOf] Value matched multiple schemas in `oneOf`!");
+        context.add_error(value, "Value matched multiple schemas in `oneOf`!");
+        fail_fast!(context);
+        return Ok(false);
+    }
+
+    if match_count == 1 {
+        if let (Some(p), Some(s)) = (&context.object_evaluated, winning_obj) {
+            p.extend(&s);
+        }
+        if let (Some(pcell), Some(snap)) = (&context.array_unevaluated, winning_arr) {
+            pcell.borrow_mut().merge_from(&snap);
+        }
+    }
+
+    debug!("OneOf: match_count: {match_count}");
+    Ok(match_count == 1)
 }
 
 #[cfg(test)]

@@ -267,6 +267,28 @@ pub fn load_array_items_marked<'input>(value: &MarkedYaml<'input>) -> Result<Boo
     }
 }
 
+/// Load a boolean or schema mapping (e.g. `additionalProperties`, `unevaluatedProperties`, `unevaluatedItems`).
+pub fn load_boolean_or_schema_marked(value: &MarkedYaml<'_>) -> Result<BooleanOrSchema> {
+    match &value.data {
+        YamlData::Value(scalar) => match scalar {
+            Scalar::Boolean(b) => Ok(BooleanOrSchema::Boolean(*b)),
+            _ => Err(generic_error!(
+                "{} Expected a boolean scalar, but got: {:?}",
+                format_marker(&value.span.start),
+                scalar
+            )),
+        },
+        YamlData::Mapping(_) => {
+            let schema: YamlSchema = value.try_into()?;
+            Ok(BooleanOrSchema::schema(schema))
+        }
+        _ => Err(unsupported_type!(
+            "Expected boolean or mapping, but got: {:?}",
+            value
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use regex::Regex;
