@@ -26,8 +26,8 @@ Feature: CLI usage
     Then it should exit with status code 1
     And stderr output should end with:
       ```
-      [1:6] .foo: Expected a string, but got: Value(Integer(42))
-      [2:6] .bar: Expected a number, but got: Value(String("I'm a string"))
+      [1:6] .foo: Expected a string, but got: 42 (int)
+      [2:6] .bar: Expected a number, but got: "I'm a string" (string)
       ```
 
   Scenario: Basic validation with an invalid file and JSON output
