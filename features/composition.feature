@@ -217,3 +217,4 @@ Feature: Schema Composition
       ```
       true
       ```
+

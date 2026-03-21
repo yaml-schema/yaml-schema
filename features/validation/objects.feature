@@ -397,3 +397,132 @@ Feature: Object types
       c: 2
       d: 3
       ```
+
+  Scenario: dependentRequired when trigger absent
+    Given a YAML schema:
+      ```
+      type: object
+      dependentRequired:
+        credit_card:
+          - billing_address
+      properties:
+        name:
+          type: string
+      ```
+    Then it should accept:
+      ```
+      name: Alice
+      ```
+
+  Scenario: dependentRequired when trigger present without dependency
+    Given a YAML schema:
+      ```
+      type: object
+      dependentRequired:
+        credit_card:
+          - billing_address
+      properties:
+        credit_card:
+          type: string
+        billing_address:
+          type: string
+      ```
+    Then it should accept:
+      ```
+      credit_card: "4111"
+      billing_address: "1 Main St"
+      ```
+    But it should NOT accept:
+      ```
+      credit_card: "4111"
+      ```
+
+  Scenario: dependentSchemas when trigger absent
+    Given a YAML schema:
+      ```
+      type: object
+      dependentSchemas:
+        credit_card:
+          type: object
+          required:
+            - billing_address
+      properties:
+        name:
+          type: string
+      ```
+    Then it should accept:
+      ```
+      name: Alice
+      ```
+
+  Scenario: dependentSchemas when trigger present and subschema fails
+    Given a YAML schema:
+      ```
+      type: object
+      dependentSchemas:
+        credit_card:
+          type: object
+          required:
+            - billing_address
+      properties:
+        credit_card:
+          type: string
+        billing_address:
+          type: string
+      ```
+    But it should NOT accept:
+      ```
+      credit_card: "4111"
+      ```
+
+  Scenario: dependentSchemas when trigger present and subschema passes
+    Given a YAML schema:
+      ```
+      type: object
+      dependentSchemas:
+        credit_card:
+          type: object
+          required:
+            - billing_address
+      properties:
+        credit_card:
+          type: string
+        billing_address:
+          type: string
+      ```
+    Then it should accept:
+      ```
+      credit_card: "4111"
+      billing_address: "1 Main St"
+      ```
+
+  Scenario: dependentRequired and dependentSchemas together
+    Given a YAML schema:
+      ```
+      type: object
+      dependentRequired:
+        opt_in:
+          - email
+      dependentSchemas:
+        opt_in:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+      properties:
+        opt_in:
+          type: boolean
+        email:
+          type: string
+      ```
+    But it should NOT accept:
+      ```
+      opt_in: true
+      ```
+    Then it should accept:
+      ```
+      opt_in: true
+      email: "a@example.com"
+      ```

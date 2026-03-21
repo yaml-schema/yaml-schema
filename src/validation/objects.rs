@@ -1,4 +1,6 @@
 // A module to contain object type validation logic
+use std::collections::HashSet;
+
 use hashlink::LinkedHashMap;
 use log::{debug, error};
 
@@ -205,7 +207,60 @@ impl ObjectSchema {
             fail_fast!(context)
         }
 
+        // dependentRequired / dependentSchemas (JSON Schema 2020-12): after per-property and required/min/max.
+        if self.dependent_required.is_some() || self.dependent_schemas.is_some() {
+            let keys = Self::instance_property_keys(mapping)?;
+            if let Some(dr) = &self.dependent_required {
+                for (trigger, deps) in dr {
+                    if keys.contains(trigger) {
+                        for dep in deps {
+                            if !keys.contains(dep) {
+                                context.add_error(
+                                    object,
+                                    format!(
+                                        "{} When property '{}' is present, property '{}' is required by dependentRequired",
+                                        format_marker(&object.span.start),
+                                        trigger,
+                                        dep
+                                    ),
+                                );
+                                fail_fast!(context)
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(ds) = &self.dependent_schemas {
+                for (trigger, subschema) in ds {
+                    if keys.contains(trigger) {
+                        subschema.validate(context, object)?;
+                    }
+                }
+            }
+        }
+
         Ok(())
+    }
+
+    /// Property names present on the instance mapping (scalar keys only, same rules as the main validation loop).
+    fn instance_property_keys<'r>(
+        mapping: &saphyr::AnnotatedMapping<'r, saphyr::MarkedYaml<'r>>,
+    ) -> Result<HashSet<String>> {
+        let mut keys = HashSet::new();
+        for (k, _) in mapping {
+            let key_string = match &k.data {
+                saphyr::YamlData::Value(scalar) => scalar_to_string(scalar),
+                v => {
+                    return Err(expected_scalar!(
+                        "[{}] Expected a scalar key, got: {:?}",
+                        format_marker(&k.span.start),
+                        v
+                    ));
+                }
+            };
+            keys.insert(key_string);
+        }
+        Ok(keys)
     }
 }
 
@@ -214,6 +269,7 @@ mod tests {
     use crate::RootSchema;
     use crate::YamlSchema;
     use crate::engine;
+    use crate::loader;
     use crate::schemas::NumberSchema;
     use crate::schemas::StringSchema;
     use hashlink::LinkedHashMap;
@@ -256,5 +312,59 @@ mod tests {
             first_error.error,
             "Expected a string, but got: Value(Integer(42))"
         );
+    }
+
+    #[test]
+    fn dependent_required_validation() {
+        let yaml = r#"
+        type: object
+        dependentRequired:
+          credit_card:
+            - billing_address
+        properties:
+          credit_card:
+            type: string
+          billing_address:
+            type: string
+        "#;
+        let root_schema = loader::load_from_str(yaml).unwrap();
+        let ok = engine::Engine::evaluate(
+            &root_schema,
+            "credit_card: \"4111\"\nbilling_address: \"1 Main\"",
+            false,
+        )
+        .unwrap();
+        assert!(!ok.has_errors());
+
+        let bad = engine::Engine::evaluate(&root_schema, "credit_card: \"4111\"", false).unwrap();
+        assert!(bad.has_errors());
+    }
+
+    #[test]
+    fn dependent_schemas_validation() {
+        let yaml = r#"
+        type: object
+        dependentSchemas:
+          credit_card:
+            type: object
+            required:
+              - billing_address
+        properties:
+          credit_card:
+            type: string
+          billing_address:
+            type: string
+        "#;
+        let root_schema = loader::load_from_str(yaml).unwrap();
+        let ok = engine::Engine::evaluate(
+            &root_schema,
+            "credit_card: \"4111\"\nbilling_address: \"1 Main\"",
+            false,
+        )
+        .unwrap();
+        assert!(!ok.has_errors());
+
+        let bad = engine::Engine::evaluate(&root_schema, "credit_card: \"4111\"", false).unwrap();
+        assert!(bad.has_errors());
     }
 }

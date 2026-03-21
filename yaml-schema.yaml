@@ -51,6 +51,35 @@ $defs:
           - integer
           - number
           - boolean
+      if:
+        description: >-
+          Subschema used only to choose whether `then` or `else` is applied; its assertion
+          errors are not reported on the parent.
+        $ref: "#/$defs/schema"
+      then:
+        description: Applied when the instance validates against `if`.
+        $ref: "#/$defs/schema"
+      else:
+        description: Applied when the instance does not validate against `if`.
+        $ref: "#/$defs/schema"
+      dependentRequired:
+        description: >-
+          When a property named by a key is present, every string in the array must also
+          be a property of the instance.
+        type: object
+        patternProperties:
+          "^[a-zA-Z0-9_-]+$":
+            type: array
+            items:
+              type: string
+      dependentSchemas:
+        description: >-
+          When a property named by a key is present, the entire object instance must
+          validate against the corresponding subschema.
+        type: object
+        patternProperties:
+          "^[a-zA-Z0-9_-]+$":
+            $ref: "#/$defs/schema"
   array_of_schemas:
     description: >-
       An array of schemas
@@ -101,4 +130,33 @@ properties:
     $ref: "#/$defs/array_of_schemas"
   anyOf:
     $ref: "#/$defs/array_of_schemas"
+  if:
+    description: >-
+      Subschema used only to choose whether `then` or `else` is applied; its assertion
+      errors are not reported on the parent.
+    $ref: "#/$defs/schema"
+  then:
+    description: Applied when the instance validates against `if`.
+    $ref: "#/$defs/schema"
+  else:
+    description: Applied when the instance does not validate against `if`.
+    $ref: "#/$defs/schema"
+  dependentRequired:
+    description: >-
+      When a property named by a key is present, every string in the array must also be a
+      property of the instance.
+    type: object
+    patternProperties:
+      "^[a-zA-Z0-9_-]+$":
+        type: array
+        items:
+          type: string
+  dependentSchemas:
+    description: >-
+      When a property named by a key is present, the entire object instance must validate
+      against the corresponding subschema.
+    type: object
+    patternProperties:
+      "^[a-zA-Z0-9_-]+$":
+        $ref: "#/$defs/schema"
 additionalProperties: false

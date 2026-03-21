@@ -2,7 +2,6 @@ use log::debug;
 
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
-use saphyr::Scalar;
 use saphyr::YamlData;
 
 use crate::Context;
@@ -43,18 +42,14 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for AllOfSchema {
     type Error = crate::Error;
 
     fn try_from(mapping: &AnnotatedMapping<'r, MarkedYaml<'r>>) -> crate::Result<Self> {
-        let mut all_of_schema = AllOfSchema::default();
-        for (key, value) in mapping.iter() {
-            if let YamlData::Value(Scalar::String(key)) = &key.data {
-                match key.as_ref() {
-                    "allOf" => {
-                        all_of_schema.all_of = loader::load_array_of_schemas_marked(value)?;
-                    }
-                    _ => return Err(generic_error!("[allOf] Unsupported key: {}", key)),
-                }
+        let all_of = match mapping.get(&MarkedYaml::value_from_str("allOf")) {
+            Some(value) => loader::load_array_of_schemas_marked(value)?,
+            None => {
+                debug!("[allOf] No `allOf` key found!");
+                Vec::new()
             }
-        }
-        Ok(all_of_schema)
+        };
+        Ok(AllOfSchema { all_of })
     }
 }
 

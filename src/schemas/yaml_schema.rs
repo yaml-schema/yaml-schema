@@ -20,6 +20,7 @@ use crate::schemas::AllOfSchema;
 use crate::schemas::AnyOfSchema;
 use crate::schemas::ArraySchema;
 use crate::schemas::EnumSchema;
+use crate::schemas::IfThenElseSchema;
 use crate::schemas::IntegerSchema;
 use crate::schemas::NotSchema;
 use crate::schemas::NumberSchema;
@@ -323,6 +324,8 @@ pub struct Subschema {
     pub one_of: Option<OneOfSchema>,
     /// `not`
     pub not: Option<NotSchema>,
+    /// `if` / `then` / `else`
+    pub if_then_else: Option<IfThenElseSchema>,
     /// `type`
     pub r#type: SchemaType,
     /// `const`
@@ -484,6 +487,17 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema {
             })
             .transpose()?;
 
+        // if / then / else (only when `if` is present)
+        let if_then_else: Option<IfThenElseSchema> = mapping
+            .get(&MarkedYaml::value_from_str("if"))
+            .map(|_| {
+                debug!(
+                    "[Subschema#try_from] Trying to load `if`/`then`/`else` as IfThenElseSchema"
+                );
+                IfThenElseSchema::try_from(mapping)
+            })
+            .transpose()?;
+
         // const
         let mut r#const: Option<ConstValue> = None;
         if let Some(value) = mapping.get(&MarkedYaml::value_from_str("const")) {
@@ -584,6 +598,7 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema {
             all_of,
             one_of,
             not,
+            if_then_else,
             r#type,
             r#const,
             r#enum,
@@ -631,6 +646,9 @@ impl Display for Subschema {
         if let Some(not) = &self.not {
             write!(f, "not: ")?;
             not.fmt(f)?;
+        }
+        if let Some(ite) = &self.if_then_else {
+            write!(f, "if/then/else: {ite}")?;
         }
         write!(f, "}}")?;
         Ok(())
@@ -772,6 +790,11 @@ impl Validator for Subschema {
         if let Some(not) = &self.not {
             debug!("[Subschema] Validating not schema: {not:?}");
             not.validate(context, value)?;
+        }
+
+        if let Some(if_then_else) = &self.if_then_else {
+            debug!("[Subschema] Validating if/then/else: {if_then_else:?}");
+            if_then_else.validate(context, value)?;
         }
 
         match &self.r#type {
