@@ -6,6 +6,7 @@ use crate::Result;
 use crate::Validator;
 use crate::schemas::StringFormat;
 use crate::schemas::StringSchema;
+use crate::utils::humanize_yaml_data;
 use crate::validation::formats;
 
 impl Validator for StringSchema {
@@ -41,7 +42,10 @@ impl StringSchema {
                 s,
             );
         } else {
-            errors.push(format!("Expected a string, but got: {:?}", value.data));
+            errors.push(format!(
+                "Expected a string, but got: {}",
+                humanize_yaml_data(&value.data)
+            ));
         }
         errors
     }

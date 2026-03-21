@@ -325,10 +325,7 @@ mod tests {
         let errors = context.errors.borrow();
         let first_error = errors.first().unwrap();
         assert_eq!(first_error.path, "foo");
-        assert_eq!(
-            first_error.error,
-            "Expected a string, but got: Value(Integer(42))"
-        );
+        assert_eq!(first_error.error, "Expected a string, but got: 42 (int)");
     }
 
     #[test]

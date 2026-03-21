@@ -8,6 +8,7 @@ use crate::Number;
 use crate::Result;
 use crate::schemas::NumericBounds;
 use crate::utils::format_marker;
+use crate::utils::humanize_yaml_data;
 use crate::validation::Context;
 use crate::validation::Validator;
 
@@ -86,13 +87,25 @@ impl Validator for IntegerSchema {
                     self.bounds
                         .validate(context, value, Number::Integer(f as i64));
                 } else {
-                    context.add_error(value, format!("Expected an integer, but got: {data:?}"));
+                    context.add_error(
+                        value,
+                        format!("Expected an integer, but got: {}", humanize_yaml_data(data)),
+                    );
                 }
             } else {
-                context.add_error(value, format!("Expected a number, but got: {data:?}"));
+                context.add_error(
+                    value,
+                    format!("Expected a number, but got: {}", humanize_yaml_data(data)),
+                );
             }
         } else {
-            context.add_error(value, format!("Expected a scalar value, but got: {data:?}"));
+            context.add_error(
+                value,
+                format!(
+                    "Expected a scalar value, but got: {}",
+                    humanize_yaml_data(data)
+                ),
+            );
         }
         if !context.errors.borrow().is_empty() {
             fail_fast!(context)
@@ -121,7 +134,7 @@ mod tests {
         let first_error = errors.first().unwrap();
         assert_eq!(
             first_error.error,
-            "Expected a number, but got: Value(String(\"foo\"))"
+            r#"Expected a number, but got: "foo" (string)"#
         );
     }
 

@@ -53,6 +53,74 @@ ys -f schema.yaml invalid.yaml
 
 Should fail with exit code 1
 
+## JSON Output
+
+Pass `--json` to emit structured errors instead of plain text. Use it with the same options as usual.
+
+**Successful validation** (exit code `0`): stdout is empty.
+
+```
+ys --json -f schema.yaml valid.yaml
+```
+
+(no output on stdout)
+
+**Validation failures** (exit code `1`): stdout is a single JSON **array** of objects, one per error. Each object has:
+
+| Field   | Meaning |
+|--------|---------|
+| `index` | Byte offset into the source, or `null` if unknown |
+| `line`  | 1-based line number, or `null` if unknown |
+| `col`   | 0-based column index from the parser, or `null` if unknown |
+| `path`  | Dot-separated path from the document root (e.g. `foo`, `items.0`) |
+| `error` | Human-readable message |
+
+Using the same `schema.yaml` / `invalid.yaml` scenario as [above](#example-usage), with `foo` and `bar` violating their types:
+
+```sh
+ys --json -f schema.yaml invalid.yaml
+```
+
+stdout (pretty-printed; the tool emits compact JSON on one line):
+
+```json
+[
+  {
+    "col": 5,
+    "error": "Expected a string, but got: 42 (int)",
+    "index": 5,
+    "line": 1,
+    "path": "foo"
+  },
+  {
+    "col": 5,
+    "error": "Expected a number, but got: \"I'm a string\" (string)",
+    "index": 13,
+    "line": 2,
+    "path": "bar"
+  }
+]
+```
+
+**Other failures** (exit code `1`): schema load errors, missing arguments, YAML parse errors, and similar issues print a single JSON object on **stderr**: `{"error":"<message>"}`.
+
+If the schema file cannot be read:
+
+```sh
+ys --json -f /path/to/missing-schema.yaml valid.yaml
+```
+
+stderr:
+
+```json
+{"error":"Failed to read YAML schema file /path/to/missing-schema.yaml: No such file or directory (os error 2)"}
+```
+
+The exact `error` text depends on the failure (OS messages, parse errors, etc.).
+
+Validation errors are written to **stdout**; non-validation errors use **stderr**, so callers can distinguish validation results from tooling or I/O failures.
+
+
 ## Features
 
 **yaml-schema** uses [Cucumber](https://cucumber-rs.github.io/cucumber/main/) to specify and test features:

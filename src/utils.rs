@@ -100,6 +100,60 @@ pub fn format_marker(marker: &saphyr::Marker) -> String {
     format!("[{}, {}]", marker.line(), marker.col())
 }
 
+/// Formats [`YamlData`] for human-readable type-mismatch messages in validation errors. Scalar
+/// kinds get a short type suffix; other shapes use [`Debug`] like the previous `{:?}` output.
+///
+/// # Examples
+///
+/// ```
+/// use std::borrow::Cow;
+/// use ordered_float::OrderedFloat;
+/// use saphyr::Scalar;
+/// use saphyr::YamlData;
+/// use yaml_schema::utils::humanize_yaml_data;
+///
+/// let data = YamlData::Value(Scalar::Integer(42));
+/// assert_eq!(humanize_yaml_data(&data), "42 (int)");
+///
+/// let data = YamlData::Value(Scalar::FloatingPoint(OrderedFloat::from(3.14)));
+/// assert_eq!(humanize_yaml_data(&data), "3.14 (float)");
+///
+/// let data = YamlData::Value(Scalar::Boolean(true));
+/// assert_eq!(humanize_yaml_data(&data), "true (bool)");
+///
+/// // Strings are JSON-encoded (quoted, with escapes) and suffixed with `(string)`:
+///
+/// let data = YamlData::Value(Scalar::String(Cow::Borrowed("hello")));
+/// assert_eq!(humanize_yaml_data(&data), r#""hello" (string)"#);
+///
+/// let data = YamlData::Value(Scalar::String(Cow::Borrowed("a\"b")));
+/// assert_eq!(humanize_yaml_data(&data), r#""a\"b" (string)"#);
+///
+/// // `Scalar::Null` and other shapes not given a custom format fall back to [`Debug`]:
+///
+/// let data = YamlData::Value(Scalar::Null);
+/// let s = humanize_yaml_data(&data);
+/// assert!(s.contains("Null"), "{s}");
+/// ```
+pub fn humanize_yaml_data<'input>(data: &YamlData<'input, MarkedYaml<'input>>) -> String {
+    match data {
+        YamlData::Value(Scalar::String(s)) => format!(
+            "{} (string)",
+            serde_json::to_string(s.as_ref()).unwrap_or_else(|_| format!("{:?}", s.as_ref()))
+        ),
+        YamlData::Value(Scalar::Integer(i)) => format!("{i} (int)"),
+        YamlData::Value(Scalar::FloatingPoint(f)) => {
+            let x = f.into_inner();
+            format!(
+                "{} (float)",
+                serde_json::to_string(&x).unwrap_or_else(|_| format!("{x}"))
+            )
+        }
+        YamlData::Value(Scalar::Boolean(b)) => format!("{b} (bool)"),
+        _ => format!("{data:?}"),
+    }
+}
+
 /// Formats a vector of values as a string, by joining them with commas
 pub fn format_vec<V>(vec: &[V]) -> String
 where
@@ -242,6 +296,63 @@ mod tests {
         assert_eq!(
             "{ \"foo\": \"bar\" }",
             format_linked_hash_map(&linked_hash_map)
+        );
+    }
+
+    #[test]
+    fn humanize_yaml_data_integer() {
+        let docs = MarkedYaml::load_from_str("42").unwrap();
+        assert_eq!(humanize_yaml_data(&docs.first().unwrap().data), "42 (int)");
+    }
+
+    #[test]
+    fn humanize_yaml_data_float() {
+        let docs = MarkedYaml::load_from_str("3.14").unwrap();
+        assert_eq!(
+            humanize_yaml_data(&docs.first().unwrap().data),
+            "3.14 (float)"
+        );
+    }
+
+    #[test]
+    fn humanize_yaml_data_boolean() {
+        let docs = MarkedYaml::load_from_str("true").unwrap();
+        assert_eq!(
+            humanize_yaml_data(&docs.first().unwrap().data),
+            "true (bool)"
+        );
+        let docs = MarkedYaml::load_from_str("false").unwrap();
+        assert_eq!(
+            humanize_yaml_data(&docs.first().unwrap().data),
+            "false (bool)"
+        );
+    }
+
+    #[test]
+    fn humanize_yaml_data_string_plain() {
+        let docs = MarkedYaml::load_from_str("hello").unwrap();
+        assert_eq!(
+            humanize_yaml_data(&docs.first().unwrap().data),
+            r#""hello" (string)"#
+        );
+    }
+
+    #[test]
+    fn humanize_yaml_data_string_with_quotes_escaped() {
+        let docs = MarkedYaml::load_from_str(r#""str\" ing""#).unwrap();
+        assert_eq!(
+            humanize_yaml_data(&docs.first().unwrap().data),
+            r#""str\" ing" (string)"#
+        );
+    }
+
+    #[test]
+    fn humanize_yaml_data_non_scalar_uses_debug() {
+        let docs = MarkedYaml::load_from_str("a: 1").unwrap();
+        let s = humanize_yaml_data(&docs.first().unwrap().data);
+        assert!(
+            s.starts_with("Mapping("),
+            "expected Debug fallback for mapping, got {s:?}"
         );
     }
 }

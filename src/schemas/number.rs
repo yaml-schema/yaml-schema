@@ -11,6 +11,7 @@ use crate::Result;
 use crate::schemas::NumericBounds;
 use crate::utils::format_hash_map;
 use crate::utils::format_marker;
+use crate::utils::humanize_yaml_data;
 use crate::validation::Context;
 use crate::validation::Validator;
 
@@ -32,10 +33,19 @@ impl Validator for NumberSchema {
                 self.bounds
                     .validate(context, value, Number::Float(ordered_float.into_inner()));
             } else {
-                context.add_error(value, format!("Expected a number, but got: {data:?}"));
+                context.add_error(
+                    value,
+                    format!("Expected a number, but got: {}", humanize_yaml_data(data)),
+                );
             }
         } else {
-            context.add_error(value, format!("Expected a scalar value, but got: {data:?}"));
+            context.add_error(
+                value,
+                format!(
+                    "Expected a scalar value, but got: {}",
+                    humanize_yaml_data(data)
+                ),
+            );
         }
         if context.has_errors() {
             fail_fast!(context)
