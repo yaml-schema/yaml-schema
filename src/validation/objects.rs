@@ -116,27 +116,29 @@ impl ObjectSchema {
                 continue;
             }
 
-            // First, we check the explicitly defined properties, and validate against it if found
-            if let Some(properties) = &self.properties
-                && try_validate_value_against_properties(context, &key_string, value, properties)?
-            {
-                continue;
-            }
+            // `properties` and `patternProperties` both apply when they match (JSON Schema 2020-12).
+            let covered_by_properties = if let Some(properties) = &self.properties {
+                try_validate_value_against_properties(context, &key_string, value, properties)?
+            } else {
+                false
+            };
 
             let mut matched_pattern_property = false;
             if let Some(pattern_properties) = &self.pattern_properties {
+                let pattern_context = context.append_path(&key_string);
                 for pp in pattern_properties {
                     log::debug!("pattern: {}", pp.regex.as_str());
                     if pp.regex.is_match(key_string.as_ref()) {
                         matched_pattern_property = true;
-                        pp.schema.validate(context, value)?;
+                        pp.schema.validate(&pattern_context, value)?;
                     }
                 }
             }
 
-            // additionalProperties only applies when a property does not match
-            // either explicit properties or patternProperties.
-            if !matched_pattern_property
+            // additionalProperties applies only when the name is not in `properties` and matches
+            // no `patternProperties` regex (JSON Schema 2020-12).
+            if !covered_by_properties
+                && !matched_pattern_property
                 && let Some(additional_properties) = &self.additional_properties
             {
                 try_validate_value_against_additional_properties(
