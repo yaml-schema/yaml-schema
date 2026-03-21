@@ -177,3 +177,81 @@ Feature: Conditional schemas
       street_address: 1600 Pennsylvania Avenue NW
       postal_code: "K1M 1M4"
       ```
+
+  Scenario: If-Then-Else with allOf
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        street_address:
+          type: string
+        country:
+          default: United States of America
+          enum:
+            - United States of America
+            - Canada
+            - Netherlands
+      allOf:
+        - if:
+            properties:
+              country:
+                const: United States of America
+          then:
+            properties:
+              postal_code:
+                pattern: '[0-9]{5}(-[0-9]{4})?'
+        - if:
+            properties:
+              country:
+                const: Canada
+            required:
+              - country
+          then:
+            properties:
+              postal_code:
+                pattern: '[A-Z][0-9][A-Z] [0-9][A-Z][0-9]'
+        - if:
+            properties:
+              country:
+                const: Netherlands
+            required:
+              - country
+          then:
+            properties:
+              postal_code:
+                pattern: '[0-9]{4} [A-Z]{2}'
+      ```
+    Then it should accept:
+      ```
+      street_address: 1600 Pennsylvania Avenue NW
+      country: United States of America
+      postal_code: "20500"
+      ```
+    And it should accept:
+      ```
+      street_address: 1600 Pennsylvania Avenue NW
+      postal_code: "20500"
+      ```
+    And it should accept:
+      ```
+      street_address: 24 Sussex Drive
+      country: Canada
+      postal_code: "K1M 1M4"
+      ```
+    And it should accept:
+      ```
+      street_address: Adriaan Goekooplaan
+      country: Netherlands
+      postal_code: "2517 JX"
+      ```
+    But it should NOT accept:
+      ```
+      street_address: 24 Sussex Drive
+      country: Canada
+      postal_code: "10000"
+      ```
+    And it should NOT accept:
+      ```
+      street_address: 1600 Pennsylvania Avenue NW
+      postal_code: "K1M 1M4"
+      ```

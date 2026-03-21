@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Display;
 
 use hashlink::LinkedHashMap;
@@ -41,6 +42,10 @@ pub struct ObjectSchema {
     pub property_names: Option<StringSchema>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
+    /// JSON Schema `dependentRequired`: when a trigger property is present, all listed properties must be present.
+    pub dependent_required: Option<LinkedHashMap<String, Vec<String>>>,
+    /// JSON Schema `dependentSchemas`: when a trigger property is present, the whole object must match the subschema.
+    pub dependent_schemas: Option<LinkedHashMap<String, YamlSchema>>,
 }
 
 impl ObjectSchema {
@@ -141,6 +146,14 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema {
                             ));
                         }
                     }
+                    "dependentRequired" => {
+                        object_schema.dependent_required =
+                            Some(load_dependent_required_marked(value)?);
+                    }
+                    "dependentSchemas" => {
+                        object_schema.dependent_schemas =
+                            Some(load_dependent_schemas_marked(value)?);
+                    }
                     // Maybe this should be handled by the base schema?
                     "type" => {
                         if let YamlData::Value(Scalar::String(s)) = &value.data {
@@ -234,6 +247,93 @@ fn load_pattern_properties_marked<'r>(value: &MarkedYaml<'r>) -> Result<Vec<Patt
             "{} patternProperties: expected a mapping, but got: {:?}",
             format_marker(&value.span.start),
             value
+        ))
+    }
+}
+
+fn load_dependent_required_marked<'r>(
+    value: &MarkedYaml<'r>,
+) -> Result<LinkedHashMap<String, Vec<String>>> {
+    if let YamlData::Mapping(mapping) = &value.data {
+        let mut out = LinkedHashMap::new();
+        for (key, val) in mapping.iter() {
+            let YamlData::Value(Scalar::String(trigger)) = &key.data else {
+                return Err(generic_error!(
+                    "{} dependentRequired: Expected string key, got: {:?}",
+                    format_marker(&key.span.start),
+                    key.data
+                ));
+            };
+            let YamlData::Sequence(values) = &val.data else {
+                return Err(unsupported_type!(
+                    "{} dependentRequired: Expected array for key {:?}, got: {:?}",
+                    format_marker(&val.span.start),
+                    trigger.as_ref(),
+                    val.data
+                ));
+            };
+            let mut deps = Vec::new();
+            let mut seen = HashSet::new();
+            for v in values {
+                let YamlData::Value(Scalar::String(s)) = &v.data else {
+                    return Err(generic_error!(
+                        "{} dependentRequired: Expected string in array, got: {:?}",
+                        format_marker(&v.span.start),
+                        v.data
+                    ));
+                };
+                let dep = s.to_string();
+                if !seen.insert(dep.clone()) {
+                    return Err(generic_error!(
+                        "{} dependentRequired: duplicate property name {:?} for trigger {:?}",
+                        format_marker(&v.span.start),
+                        dep,
+                        trigger.as_ref()
+                    ));
+                }
+                deps.push(dep);
+            }
+            out.insert(trigger.to_string(), deps);
+        }
+        Ok(out)
+    } else {
+        Err(generic_error!(
+            "{} dependentRequired: expected a mapping, but got: {:?}",
+            format_marker(&value.span.start),
+            value.data
+        ))
+    }
+}
+
+fn load_dependent_schemas_marked<'r>(
+    value: &MarkedYaml<'r>,
+) -> Result<LinkedHashMap<String, YamlSchema>> {
+    if let YamlData::Mapping(mapping) = &value.data {
+        let mut out = LinkedHashMap::new();
+        for (key, val) in mapping.iter() {
+            let YamlData::Value(Scalar::String(name)) = &key.data else {
+                return Err(generic_error!(
+                    "{} dependentSchemas: Expected string key, got: {:?}",
+                    format_marker(&key.span.start),
+                    key.data
+                ));
+            };
+            if !val.data.is_mapping() {
+                return Err(generic_error!(
+                    "dependentSchemas: Expected a mapping for {:?}, but got: {:?}",
+                    name.as_ref(),
+                    val.data
+                ));
+            }
+            let schema: YamlSchema = val.try_into()?;
+            out.insert(name.to_string(), schema);
+        }
+        Ok(out)
+    } else {
+        Err(generic_error!(
+            "{} dependentSchemas: expected a mapping, but got: {:?}",
+            format_marker(&value.span.start),
+            value.data
         ))
     }
 }
@@ -463,5 +563,54 @@ office_number: 201",
                 .unwrap()
                 .contains_key("const")
         );
+    }
+
+    #[test]
+    fn test_dependent_required_loads() {
+        let yaml = r#"
+        type: object
+        dependentRequired:
+          a:
+            - b
+            - c
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let os: ObjectSchema = doc.first().unwrap().try_into().unwrap();
+        let dr = os.dependent_required.as_ref().unwrap();
+        assert_eq!(dr.get("a"), Some(&vec!["b".to_string(), "c".to_string()]));
+    }
+
+    #[test]
+    fn test_dependent_required_rejects_duplicate_dep() {
+        let yaml = r#"
+        type: object
+        dependentRequired:
+          a:
+            - b
+            - b
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let err = ObjectSchema::try_from(doc.first().unwrap()).unwrap_err();
+        assert!(
+            err.to_string().contains("duplicate property name"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn test_dependent_schemas_loads() {
+        let yaml = r#"
+        type: object
+        dependentSchemas:
+          foo:
+            type: object
+            required:
+              - bar
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let os: ObjectSchema = doc.first().unwrap().try_into().unwrap();
+        assert!(os.dependent_schemas.is_some());
+        let ds = os.dependent_schemas.as_ref().unwrap();
+        assert!(ds.contains_key("foo"));
     }
 }
