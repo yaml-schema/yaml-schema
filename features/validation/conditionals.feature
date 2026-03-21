@@ -123,3 +123,57 @@ Feature: Conditional schemas
       name: John Doe
       billing_address: 555 Debtor's Lane
       ```
+
+  Scenario: If-Then-Else
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        street_address:
+          type: string
+        country:
+          default: United States of America
+          enum:
+            - United States of America
+            - Canada
+      if:
+        properties:
+          country:
+            const: United States of America
+      then:
+        properties:
+          postal_code:
+            pattern: '[0-9]{5}(-[0-9]{4})?'
+      else:
+        properties:
+          postal_code:
+            pattern: '[A-Z][0-9][A-Z] [0-9][A-Z][0-9]'
+      ```
+    Then it should accept:
+      ```
+      street_address: 1600 Pennsylvania Avenue NW
+      country: United States of America
+      postal_code: "20500"
+      ```
+    And it should accept:
+      ```
+      street_address: 1600 Pennsylvania Avenue NW
+      postal_code: "20500"
+      ```
+    And it should accept:
+      ```
+      street_address: 24 Sussex Drive
+      country: Canada
+      postal_code: "K1M 1M4"
+      ```
+    But it should NOT accept:
+      ```
+      street_address: 24 Sussex Drive
+      country: Canada
+      postal_code: "20500"
+      ```
+    And it should NOT accept:
+      ```
+      street_address: 1600 Pennsylvania Avenue NW
+      postal_code: "K1M 1M4"
+      ```

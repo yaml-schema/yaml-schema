@@ -584,6 +584,23 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema {
             }
         }
 
+        // When `type` is omitted but `properties` is present, treat as `type: object` (JSON Schema-style).
+        if r#type.is_none() && mapping.contains_key(&MarkedYaml::value_from_str("properties")) {
+            r#type = SchemaType::new("object");
+            object_schema = ObjectSchema::try_from(mapping).map(Some)?;
+        }
+
+        // When `type` is omitted but string validation keywords are present, treat as `type: string`
+        // so `pattern` / `minLength` / `maxLength` are not ignored (JSON Schema-style).
+        if r#type.is_none()
+            && (mapping.contains_key(&MarkedYaml::value_from_str("pattern"))
+                || mapping.contains_key(&MarkedYaml::value_from_str("minLength"))
+                || mapping.contains_key(&MarkedYaml::value_from_str("maxLength")))
+        {
+            r#type = SchemaType::new("string");
+            string_schema = StringSchema::try_from(mapping).map(Some)?;
+        }
+
         debug!("[Subschema#try_from] array_schema: {array_schema:?}");
         debug!("[Subschema#try_from] integer_schema: {integer_schema:?}");
         debug!("[Subschema#try_from] number_schema: {number_schema:?}");
@@ -1028,6 +1045,7 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for MetadataAndAnnotations {
 mod tests {
     use saphyr::LoadableYamlNode;
 
+    use crate::engine;
     use crate::loader;
 
     use super::*;
@@ -1142,6 +1160,32 @@ mod tests {
         let errors = context.errors.borrow();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].error, "None of type: [string, number] matched");
+    }
+
+    #[test]
+    fn properties_without_type_infers_object_and_validates() {
+        let yaml = r#"
+        properties:
+          foo:
+            type: string
+        required:
+          - foo
+        "#;
+        let root = loader::load_from_str(yaml).unwrap();
+        let YamlSchema::Subschema(sub) = &root.schema else {
+            panic!("expected subschema");
+        };
+        assert!(
+            sub.r#type.is_or_contains("object"),
+            "expected inferred type object"
+        );
+        assert!(sub.object_schema.is_some());
+
+        let ok = engine::Engine::evaluate(&root, "foo: bar", false).unwrap();
+        assert!(!ok.has_errors());
+
+        let bad = engine::Engine::evaluate(&root, "other: x", false).unwrap();
+        assert!(bad.has_errors());
     }
 
     #[test]
