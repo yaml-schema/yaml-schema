@@ -5,6 +5,8 @@ use std::rc::Rc;
 
 use crate::RootSchema;
 use crate::YamlSchema;
+use crate::validation::ArrayUnevaluatedAnnotations;
+use crate::validation::ObjectEvaluatedNames;
 use crate::validation::ValidationError;
 
 /// The validation context
@@ -25,6 +27,10 @@ pub struct Context<'r> {
     pub resolving_refs: Rc<RefCell<HashSet<(String, usize)>>>,
     /// Cache of externally loaded schemas by absolute URI (without fragment) or `$id` when valid.
     pub schemas: Rc<RefCell<HashMap<String, Rc<RootSchema>>>>,
+    /// Property names successfully evaluated for JSON Schema `unevaluatedProperties` (same instance).
+    pub object_evaluated: Option<ObjectEvaluatedNames>,
+    /// Array annotation state for JSON Schema `unevaluatedItems` (same instance).
+    pub array_unevaluated: Option<Rc<RefCell<ArrayUnevaluatedAnnotations>>>,
 }
 
 impl Default for Context<'_> {
@@ -39,6 +45,8 @@ impl Default for Context<'_> {
             fail_fast: false,
             resolving_refs: Rc::new(RefCell::new(HashSet::new())),
             schemas: Rc::new(RefCell::new(HashMap::new())),
+            object_evaluated: None,
+            array_unevaluated: None,
         }
     }
 }
@@ -72,6 +80,25 @@ impl<'r> Context<'r> {
             fail_fast: self.fail_fast,
             resolving_refs: self.resolving_refs.clone(),
             schemas: self.schemas.clone(),
+            object_evaluated: self.object_evaluated.clone(),
+            array_unevaluated: self.array_unevaluated.clone(),
+        }
+    }
+
+    /// Like [`get_sub_context`], but with fresh unevaluated annotation carriers (for `anyOf` / `oneOf` branches).
+    pub fn get_sub_context_fresh_eval(&self) -> Context<'r> {
+        Context {
+            root_schema: self.root_schema,
+            current_schema: self.current_schema,
+            current_path: self.current_path.clone(),
+            stream_started: self.stream_started,
+            stream_ended: self.stream_ended,
+            errors: Rc::new(RefCell::new(Vec::new())),
+            fail_fast: self.fail_fast,
+            resolving_refs: self.resolving_refs.clone(),
+            schemas: self.schemas.clone(),
+            object_evaluated: Some(ObjectEvaluatedNames::new()),
+            array_unevaluated: Some(ArrayUnevaluatedAnnotations::new_shared()),
         }
     }
 
@@ -139,6 +166,53 @@ impl<'r> Context<'r> {
             stream_started: self.stream_started,
             resolving_refs: self.resolving_refs.clone(),
             schemas: self.schemas.clone(),
+            object_evaluated: None,
+            array_unevaluated: None,
+        }
+    }
+
+    /// Record a successfully evaluated object property name (`properties` / `patternProperties` / `additionalProperties`).
+    pub fn record_evaluated_property(&self, name: &str) {
+        if let Some(oe) = &self.object_evaluated {
+            oe.insert(name.to_string());
+        }
+    }
+
+    pub fn with_object_evaluated(
+        &self,
+        object_evaluated: Option<ObjectEvaluatedNames>,
+    ) -> Context<'r> {
+        Context {
+            root_schema: self.root_schema,
+            current_schema: self.current_schema,
+            current_path: self.current_path.clone(),
+            stream_started: self.stream_started,
+            stream_ended: self.stream_ended,
+            errors: self.errors.clone(),
+            fail_fast: self.fail_fast,
+            resolving_refs: self.resolving_refs.clone(),
+            schemas: self.schemas.clone(),
+            object_evaluated,
+            array_unevaluated: self.array_unevaluated.clone(),
+        }
+    }
+
+    pub fn with_array_unevaluated(
+        &self,
+        array_unevaluated: Option<Rc<RefCell<ArrayUnevaluatedAnnotations>>>,
+    ) -> Context<'r> {
+        Context {
+            root_schema: self.root_schema,
+            current_schema: self.current_schema,
+            current_path: self.current_path.clone(),
+            stream_started: self.stream_started,
+            stream_ended: self.stream_ended,
+            errors: self.errors.clone(),
+            fail_fast: self.fail_fast,
+            resolving_refs: self.resolving_refs.clone(),
+            schemas: self.schemas.clone(),
+            object_evaluated: self.object_evaluated.clone(),
+            array_unevaluated,
         }
     }
 

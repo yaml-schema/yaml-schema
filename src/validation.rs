@@ -4,11 +4,14 @@ use saphyr::Marker;
 
 use crate::Result;
 
+pub(crate) mod annotations;
 mod context;
 pub(crate) mod formats;
 mod objects;
 mod strings;
 
+pub use annotations::ArrayUnevaluatedAnnotations;
+pub use annotations::ObjectEvaluatedNames;
 pub use context::Context;
 
 /// A trait for validating a sahpyr::Yaml value against a schema
