@@ -114,6 +114,76 @@ pub fn load_external_schema(doc_url: &str) -> Result<RootSchema> {
     }
 }
 
+/// Reads the first YAML document and returns the string value of a top-level `$schema` key, if present.
+///
+/// Returns `Ok(None)` when there is no document, the root is not a mapping, or `$schema` is absent.
+/// Returns an error if `$schema` is present but not a string.
+pub fn extract_dollar_schema_from_yaml(contents: &str) -> Result<Option<String>> {
+    let docs = MarkedYaml::load_from_str(contents).map_err(Error::YamlParsingError)?;
+    let Some(first) = docs.first() else {
+        return Ok(None);
+    };
+    match &first.data {
+        YamlData::Mapping(mapping) => {
+            let key = MarkedYaml::value_from_str("$schema");
+            match mapping.get(&key) {
+                Some(v) => Ok(Some(marked_yaml_to_string(v, "$schema must be a string")?)),
+                None => Ok(None),
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Loads a root schema from a `$schema` reference: `http`/`https`/`file` URLs via [`load_external_schema`],
+/// otherwise as a filesystem path (relative paths are resolved against `instance_parent`).
+///
+/// Returns the loaded schema and a URI string suitable for [`RootSchema::cache_key`] fallback / preloaded map keys
+/// (matches `base_uri` after load).
+pub fn load_root_schema_from_ref(
+    schema_ref: &str,
+    instance_parent: &Path,
+) -> Result<(RootSchema, String)> {
+    let trimmed = schema_ref.trim();
+    if trimmed.is_empty() {
+        return Err(crate::generic_error!("$schema value is empty"));
+    }
+
+    let root = match ParseUrl::parse(trimmed) {
+        Ok(parsed) if matches!(parsed.scheme(), "http" | "https" | "file") => {
+            load_external_schema(trimmed)?
+        }
+        Ok(parsed) => {
+            return Err(crate::generic_error!(
+                "Unsupported URL scheme in $schema: {}",
+                parsed.scheme()
+            ));
+        }
+        Err(_) => {
+            let path = Path::new(trimmed);
+            let resolved = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                instance_parent.join(path)
+            };
+            let path_str = resolved
+                .to_str()
+                .ok_or_else(|| Error::GenericError("Non-UTF-8 schema path".to_string()))?;
+            load_file(path_str)?
+        }
+    };
+
+    let fallback = root
+        .base_uri
+        .as_ref()
+        .map(|u| u.to_string())
+        .ok_or_else(|| {
+            Error::GenericError("Internal error: loaded schema missing base URI".to_string())
+        })?;
+
+    Ok((root, fallback))
+}
+
 /// Fetches content from a URL. Returns the response body as a String and the request URL.
 ///
 /// The HTTP call runs on a dedicated OS thread so that `reqwest::blocking`
@@ -578,6 +648,50 @@ mod tests {
         let result = root_schema.validate(&context, value);
         assert!(result.is_ok());
         assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn extract_dollar_schema_from_mapping() {
+        let yaml = "$schema: ./x.yaml\nfoo: 1\n";
+        assert_eq!(
+            extract_dollar_schema_from_yaml(yaml).unwrap(),
+            Some("./x.yaml".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_dollar_schema_missing() {
+        assert_eq!(extract_dollar_schema_from_yaml("foo: 1\n").unwrap(), None);
+    }
+
+    #[test]
+    fn extract_dollar_schema_non_mapping_root() {
+        assert_eq!(extract_dollar_schema_from_yaml("- a\n").unwrap(), None);
+    }
+
+    #[test]
+    fn extract_dollar_schema_not_string_errors() {
+        let result = extract_dollar_schema_from_yaml("$schema: 42\n");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_root_schema_from_ref_relative_path() {
+        let dir = std::env::temp_dir().join(format!("yaml_schema_ref_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let schema_path = dir.join("sch.yaml");
+        std::fs::write(
+            &schema_path,
+            "type: object\nproperties:\n  a:\n    type: string\n",
+        )
+        .expect("write schema");
+        let (root, uri) = load_root_schema_from_ref("sch.yaml", &dir).expect("load");
+        assert!(uri.starts_with("file://"));
+        let YamlSchema::Subschema(sub) = &root.schema else {
+            panic!("expected Subschema");
+        };
+        assert_eq!(sub.r#type, SchemaType::new("object"));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

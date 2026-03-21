@@ -1,4 +1,4 @@
-$schema: https://json-schema.org/draft/2020-12/schema
+$schema: https://yaml-schema.net/yaml-schema.yaml
 $id: https://yaml-schema.net/draft/2025-11/meta-schema
 title: YAML Schema meta-schema
 description: Meta-schema for YAML Schema, based on JSON Schema meta-schema
