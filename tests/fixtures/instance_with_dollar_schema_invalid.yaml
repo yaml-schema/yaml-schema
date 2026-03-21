@@ -1,0 +1,3 @@
+$schema: schema.yaml
+foo: 42
+bar: "I'm a string"

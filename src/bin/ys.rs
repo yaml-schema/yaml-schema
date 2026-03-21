@@ -10,6 +10,7 @@ use serde_json::json;
 use url::Url;
 
 use yaml_schema::Engine;
+use yaml_schema::RootSchema;
 use yaml_schema::loader;
 use yaml_schema::validation::ValidationError;
 use yaml_schema::version;
@@ -26,6 +27,7 @@ pub struct Opts {
     pub command: Option<Commands>,
     /// Schema file(s) to load. The first is the root schema; additional schemas are
     /// pre-loaded for $ref resolution. May be specified multiple times (-f a.yaml -f b.yaml).
+    /// Omit when the instance YAML has a top-level string `$schema` (URL or path).
     #[arg(short = 'f', long = "schema")]
     pub schemas: Vec<String>,
     /// Specify this flag to exit (1) as soon as any error is encountered
@@ -102,71 +104,120 @@ fn schema_uri(path: &str) -> Result<String> {
     Ok(url.to_string())
 }
 
+fn insert_preloaded_entry(
+    preloaded: &mut HashMap<String, Rc<RootSchema>>,
+    schema: RootSchema,
+    uri: String,
+) -> Rc<RootSchema> {
+    let schema_rc = Rc::new(schema);
+    let key = schema_rc.cache_key(&uri);
+    // Insert under both `uri` and `key` when they differ so $ref resolution matches the CLI preload map.
+    if key != uri {
+        preloaded.insert(uri, Rc::clone(&schema_rc));
+    }
+    preloaded.insert(key, Rc::clone(&schema_rc));
+    schema_rc
+}
+
 /// The `ys validate` command
 fn command_validate(opts: Opts) -> Result<i32> {
     let json = opts.json;
-    if opts.schemas.is_empty() {
-        return Err(eyre::eyre!("No schema file(s) specified"));
-    }
-    if opts.file.is_none() {
-        return Err(eyre::eyre!("No YAML file specified"));
-    }
-
-    let root_path = opts.schemas.first().expect("No schema file(s) specified");
-    let root_schema = match loader::load_file(root_path) {
-        Ok(schema) => schema,
-        Err(e) => {
-            if json {
-                emit_json_error(&format!("Failed to read YAML schema file {root_path}: {e}"));
-            } else {
-                eprintln!("Failed to read YAML schema file: {root_path}");
-                log::error!("{e}");
-            }
-            return Ok(1);
-        }
+    let yaml_filename = match &opts.file {
+        Some(f) => f.as_str(),
+        None => return Err(eyre::eyre!("No YAML file specified")),
     };
 
-    let mut preloaded = HashMap::new();
-    for path in &opts.schemas {
-        let uri = match schema_uri(path) {
-            Ok(u) => u,
+    let yaml_contents = std::fs::read_to_string(yaml_filename)
+        .wrap_err_with(|| format!("Failed to read YAML file: {yaml_filename}"))?;
+
+    let (root_for_eval, preloaded) = if !opts.schemas.is_empty() {
+        let root_path = opts.schemas.first().expect("non-empty schemas");
+        let root_schema = match loader::load_file(root_path) {
+            Ok(schema) => schema,
             Err(e) => {
                 if json {
-                    emit_json_error(&format!("Failed to resolve schema path {path}: {e}"));
+                    emit_json_error(&format!("Failed to read YAML schema file {root_path}: {e}"));
                 } else {
-                    eprintln!("Failed to resolve schema path: {path}: {e}");
-                }
-                return Ok(1);
-            }
-        };
-        let schema = match loader::load_file(path) {
-            Ok(s) => s,
-            Err(e) => {
-                if json {
-                    emit_json_error(&format!("Failed to load schema file {path}: {e}"));
-                } else {
-                    eprintln!("Failed to load schema file: {path}");
+                    eprintln!("Failed to read YAML schema file: {root_path}");
                     log::error!("{e}");
                 }
                 return Ok(1);
             }
         };
-        let schema_rc = Rc::new(schema);
-        let key = schema_rc.cache_key(&uri);
-        // We need to insert the schema under both `uri` and `key` if they differ, because `cache_key` may normalize or canonicalize
-        // the schema reference (for example, following $id or resolving symlinks). This ensures both the original URI and any internal
-        // references will consistently resolve to the same Rc<Schema> instance during validation and $ref resolution.
-        if key != uri {
-            preloaded.insert(uri, Rc::clone(&schema_rc));
+
+        let mut preloaded = HashMap::new();
+        for path in &opts.schemas {
+            let uri = match schema_uri(path) {
+                Ok(u) => u,
+                Err(e) => {
+                    if json {
+                        emit_json_error(&format!("Failed to resolve schema path {path}: {e}"));
+                    } else {
+                        eprintln!("Failed to resolve schema path: {path}: {e}");
+                    }
+                    return Ok(1);
+                }
+            };
+            let schema = match loader::load_file(path) {
+                Ok(s) => s,
+                Err(e) => {
+                    if json {
+                        emit_json_error(&format!("Failed to load schema file {path}: {e}"));
+                    } else {
+                        eprintln!("Failed to load schema file: {path}");
+                        log::error!("{e}");
+                    }
+                    return Ok(1);
+                }
+            };
+            let _ = insert_preloaded_entry(&mut preloaded, schema, uri);
         }
-        preloaded.insert(key, schema_rc);
-    }
 
-    let yaml_filename = opts.file.as_ref().expect("No YAML file specified");
-    let yaml_contents = std::fs::read_to_string(yaml_filename)
-        .wrap_err_with(|| format!("Failed to read YAML file: {yaml_filename}"))?;
+        let root_rc = Rc::new(root_schema);
+        (root_rc, preloaded)
+    } else {
+        let instance_parent = Path::new(yaml_filename).parent().unwrap_or(Path::new("."));
+        let schema_ref = match loader::extract_dollar_schema_from_yaml(&yaml_contents) {
+            Ok(Some(s)) => s,
+            Ok(None) => {
+                return Err(eyre::eyre!(
+                    "No schema: pass -f/--schema or add a string `$schema` key to the YAML root mapping"
+                ));
+            }
+            Err(e) => {
+                return Err(eyre::eyre!(
+                    "Could not read `$schema` from instance YAML: {e}"
+                ));
+            }
+        };
 
-    match Engine::evaluate_with_schemas(&root_schema, &yaml_contents, opts.fail_fast, preloaded) {
+        let (root, uri) = match loader::load_root_schema_from_ref(&schema_ref, instance_parent) {
+            Ok(pair) => pair,
+            Err(e) => {
+                if json {
+                    emit_json_error(&format!(
+                        "Failed to load schema from $schema {schema_ref:?}: {e}"
+                    ));
+                } else {
+                    eprintln!("Failed to load schema from $schema: {schema_ref}");
+                    log::error!("{e}");
+                }
+                return Ok(1);
+            }
+        };
+
+        let mut preloaded = HashMap::new();
+        let root_rc = insert_preloaded_entry(&mut preloaded, root, uri);
+
+        (root_rc, preloaded)
+    };
+
+    match Engine::evaluate_with_schemas(
+        root_for_eval.as_ref(),
+        &yaml_contents,
+        opts.fail_fast,
+        preloaded,
+    ) {
         Ok(context) => {
             if context.has_errors() {
                 let errors = context.errors.borrow();
