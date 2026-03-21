@@ -6,10 +6,12 @@ use clap::Parser;
 use clap::Subcommand;
 use eyre::Context;
 use eyre::Result;
+use serde_json::json;
 use url::Url;
 
 use yaml_schema::Engine;
 use yaml_schema::loader;
+use yaml_schema::validation::ValidationError;
 use yaml_schema::version;
 
 #[derive(Parser, Debug, Default)]
@@ -29,6 +31,10 @@ pub struct Opts {
     /// Specify this flag to exit (1) as soon as any error is encountered
     #[arg(long = "fail-fast", default_value = "false")]
     pub fail_fast: bool,
+    /// Emit errors as JSON: validation failures as a JSON array on stdout; other failures as
+    /// {"error":"..."} on stderr.
+    #[arg(long = "json")]
+    pub json: bool,
     /// The YAML file to validate
     pub file: Option<String>,
 }
@@ -37,6 +43,26 @@ pub struct Opts {
 pub enum Commands {
     #[command(about = "Display the ys version")]
     Version,
+}
+
+fn emit_json_error(message: &str) {
+    eprintln!("{}", json!({ "error": message }));
+}
+
+fn emit_validation_errors_json(errors: &[ValidationError]) {
+    let entries: Vec<serde_json::Value> = errors
+        .iter()
+        .map(|e| {
+            json!({
+                "index": e.marker.map(|m| m.index()),
+                "line": e.marker.map(|m| m.line()),
+                "col": e.marker.map(|m| m.col()),
+                "path": e.path,
+                "error": e.error,
+            })
+        })
+        .collect();
+    println!("{}", serde_json::Value::Array(entries));
 }
 
 /// The main entrypoint function of the ys executable
@@ -50,12 +76,17 @@ fn main() {
             }
         }
     } else {
+        let json = opts.json;
         match command_validate(opts) {
             Ok(return_code) => {
                 std::process::exit(return_code);
             }
             Err(e) => {
-                eprintln!("Validation failed: {e}");
+                if json {
+                    emit_json_error(&e.to_string());
+                } else {
+                    eprintln!("Validation failed: {e}");
+                }
                 std::process::exit(1);
             }
         }
@@ -73,6 +104,7 @@ fn schema_uri(path: &str) -> Result<String> {
 
 /// The `ys validate` command
 fn command_validate(opts: Opts) -> Result<i32> {
+    let json = opts.json;
     if opts.schemas.is_empty() {
         return Err(eyre::eyre!("No schema file(s) specified"));
     }
@@ -84,8 +116,12 @@ fn command_validate(opts: Opts) -> Result<i32> {
     let root_schema = match loader::load_file(root_path) {
         Ok(schema) => schema,
         Err(e) => {
-            eprintln!("Failed to read YAML schema file: {root_path}");
-            log::error!("{e}");
+            if json {
+                emit_json_error(&format!("Failed to read YAML schema file {root_path}: {e}"));
+            } else {
+                eprintln!("Failed to read YAML schema file: {root_path}");
+                log::error!("{e}");
+            }
             return Ok(1);
         }
     };
@@ -95,15 +131,23 @@ fn command_validate(opts: Opts) -> Result<i32> {
         let uri = match schema_uri(path) {
             Ok(u) => u,
             Err(e) => {
-                eprintln!("Failed to resolve schema path: {path}: {e}");
+                if json {
+                    emit_json_error(&format!("Failed to resolve schema path {path}: {e}"));
+                } else {
+                    eprintln!("Failed to resolve schema path: {path}: {e}");
+                }
                 return Ok(1);
             }
         };
         let schema = match loader::load_file(path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Failed to load schema file: {path}");
-                log::error!("{e}");
+                if json {
+                    emit_json_error(&format!("Failed to load schema file {path}: {e}"));
+                } else {
+                    eprintln!("Failed to load schema file: {path}");
+                    log::error!("{e}");
+                }
                 return Ok(1);
             }
         };
@@ -125,15 +169,24 @@ fn command_validate(opts: Opts) -> Result<i32> {
     match Engine::evaluate_with_schemas(&root_schema, &yaml_contents, opts.fail_fast, preloaded) {
         Ok(context) => {
             if context.has_errors() {
-                for error in context.errors.borrow().iter() {
-                    eprintln!("{error}");
+                let errors = context.errors.borrow();
+                if json {
+                    emit_validation_errors_json(errors.as_slice());
+                } else {
+                    for error in errors.iter() {
+                        eprintln!("{error}");
+                    }
                 }
                 return Ok(1);
             }
             Ok(0)
         }
         Err(e) => {
-            eprintln!("Validation failed: {e}");
+            if json {
+                emit_json_error(&format!("Validation failed: {e}"));
+            } else {
+                eprintln!("Validation failed: {e}");
+            }
             Ok(1)
         }
     }

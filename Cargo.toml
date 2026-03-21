@@ -25,6 +25,7 @@ ordered-float = "5.0.0"
 regex = "1.10.4"
 reqwest = { version = "0.12.22", features = ["blocking", "json", "native-tls"], default-features = false }
 saphyr = "0.0.6"
+serde_json = "~1.0"
 thiserror = "2.0"
 url = "2.5.7"
 

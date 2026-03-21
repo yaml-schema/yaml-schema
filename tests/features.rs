@@ -5,7 +5,9 @@ use cucumber::gherkin::Step;
 use cucumber::given;
 use cucumber::then;
 use cucumber::when;
-use log::{debug, error};
+use log::debug;
+use log::error;
+use serde_json::Value;
 use std::cell::RefCell;
 use std::rc::Rc;
 use yaml_schema::Engine;
@@ -158,6 +160,40 @@ async fn stderr_output_should_end_with(world: &mut FeaturesWorld, step: &Step) {
     assert!(
         actual.ends_with(expected),
         "Expected stderr to end with:\n{expected}\nBut got:\n{actual}"
+    );
+}
+
+#[then(regex = "stdout should be a JSON array with two validation errors for paths foo and bar")]
+async fn stdout_json_two_validation_errors(world: &mut FeaturesWorld) {
+    let output = world
+        .command_output
+        .as_ref()
+        .expect("No command has been run");
+    let v: Value = serde_json::from_str(output.stdout.trim()).expect("stdout should be JSON");
+    let arr = v.as_array().expect("stdout should be a JSON array");
+    assert_eq!(
+        arr.len(),
+        2,
+        "expected two validation errors, got {}",
+        arr.len()
+    );
+    for entry in arr {
+        let obj = entry.as_object().expect("each error should be an object");
+        for key in ["index", "line", "col", "path", "error"] {
+            assert!(obj.contains_key(key), "missing key {key} in {obj:?}");
+        }
+    }
+    let paths: Vec<&str> = arr
+        .iter()
+        .map(|e| {
+            e.get("path")
+                .and_then(|p| p.as_str())
+                .expect("path should be a string")
+        })
+        .collect();
+    assert!(
+        paths.contains(&"foo") && paths.contains(&"bar"),
+        "expected paths foo and bar, got {paths:?}"
     );
 }
 
