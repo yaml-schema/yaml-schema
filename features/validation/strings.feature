@@ -46,6 +46,21 @@ Feature: String validation
       "ABCD"
       ```
 
+  Scenario: length counts Unicode characters not UTF-8 bytes
+    Given a YAML schema:
+      ```
+      type: string
+      maxLength: 2
+      ```
+    Then it should accept:
+      ```
+      "αβ"
+      ```
+    But it should NOT accept:
+      ```
+      "αβγ"
+      ```
+
   Scenario: pattern validation
     Given a YAML schema:
       ```
