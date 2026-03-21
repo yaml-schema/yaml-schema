@@ -240,6 +240,29 @@ Feature: Object types
       whatever: 21
       ```
 
+  Scenario: properties and patternProperties both apply to the same key
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        foo:
+          type: number
+          minimum: 0
+      patternProperties:
+        ^f:
+          type: number
+          maximum: 10
+      additionalProperties: false
+      ```
+    Then it should accept:
+      ```
+      foo: 5
+      ```
+    But it should NOT accept:
+      ```
+      foo: 50
+      ```
+
   Scenario: additionalProperties as a object schemas with unused properties
     Given a YAML schema:
       ```
