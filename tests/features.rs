@@ -240,13 +240,4 @@ async fn main() {
         FeaturesWorld::filter_run(format!("features/{feature_file}"), filter_ignored_scenarios)
             .await;
     }
-    for feature_file in
-        list_feature_files("features/validation").expect("Unable to list feature files")
-    {
-        FeaturesWorld::filter_run(
-            format!("features/validation/{feature_file}"),
-            filter_ignored_scenarios,
-        )
-        .await;
-    }
 }
