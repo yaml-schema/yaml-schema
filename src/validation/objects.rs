@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 
 use hashlink::LinkedHashMap;
-use log::{debug, error};
+use log::debug;
 
 use crate::Error;
 use crate::Result;
@@ -25,7 +25,7 @@ impl Validator for ObjectSchema {
                 "[ObjectSchema] {} Expected an object, but got: {data:?}",
                 format_marker(&value.span.start)
             );
-            error!("{error_message}");
+            debug!("{error_message}");
             context.add_error(value, error_message);
             Ok(())
         }

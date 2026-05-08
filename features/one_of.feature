@@ -48,3 +48,43 @@ Feature: oneOf
       ```
       type: boolean
       ```
+
+  Scenario: oneOf with string and object branches
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            oneOf:
+              - type: string
+                minLength: 1
+              - type: object
+                required:
+                  - name
+                properties:
+                  name:
+                    type: string
+      ```
+    Then it should accept:
+      ```
+      items:
+        - hello
+        - name: world
+      ```
+    And it should accept:
+      ```
+      items:
+        - just_a_string
+      ```
+    And it should accept:
+      ```
+      items:
+        - name: structured
+      ```
+    But it should NOT accept:
+      ```
+      items:
+        - ""
+      ```
