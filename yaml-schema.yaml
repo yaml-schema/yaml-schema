@@ -80,6 +80,11 @@ $defs:
         patternProperties:
           "^[a-zA-Z0-9_-]+$":
             $ref: "#/$defs/schema"
+      propertyKeys:
+        description: >-
+          YAML-only extension (not JSON Schema): subschema validated against each mapping
+          key node as a YAML value.
+        $ref: "#/$defs/schema"
   array_of_schemas:
     description: >-
       An array of schemas
@@ -159,6 +164,11 @@ properties:
     patternProperties:
       "^[a-zA-Z0-9_-]+$":
         $ref: "#/$defs/schema"
+  propertyKeys:
+    description: >-
+      YAML-only extension (not JSON Schema): subschema validated against each mapping key
+      node as a YAML value.
+    $ref: "#/$defs/schema"
   unevaluatedProperties:
     description: >-
       JSON Schema 2020-12 unevaluated vocabulary. Applies to object properties not already

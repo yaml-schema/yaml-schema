@@ -421,6 +421,59 @@ Feature: Object types
       ```
     And the error message should be "[1:1] .: Property name '-001 invalid' does not match pattern '^[A-Za-z_][A-Za-z0-9_]*$'"
 
+  # propertyKeys validates each mapping key as a YAML scalar (YAML extension; not JSON Schema).
+  Scenario: Property keys integer
+    Given a YAML schema:
+      ```
+      type: object
+      propertyKeys:
+        type: integer
+      ```
+    Then it should accept:
+      ```
+      1: one
+      2: two
+      ```
+    But it should NOT accept:
+      ```
+      hello: world
+      ```
+
+  Scenario: Property keys string enum on key
+    Given a YAML schema:
+      ```
+      type: object
+      propertyKeys:
+        type: string
+        enum:
+          - alpha
+          - beta
+      ```
+    Then it should accept:
+      ```
+      alpha: 1
+      beta: 2
+      ```
+    But it should NOT accept:
+      ```
+      gamma: 3
+      ```
+
+  Scenario: Property keys and property names together
+    Given a YAML schema:
+      ```
+      type: object
+      propertyKeys:
+        type: integer
+      propertyNames:
+        pattern: "^a$"
+      ```
+    Then it should NOT accept:
+      ```
+      1: ok
+      ```
+    And the error message should be "[1:1] .: Property name '1' does not match pattern '^a$'"
+
   Scenario: Size
     Given a YAML schema:
       ```

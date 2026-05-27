@@ -163,7 +163,12 @@ impl ObjectSchema {
                     context.record_evaluated_property(&key_string);
                 }
             }
-            // Finally, we check if it matches property_names
+            // propertyKeys: YAML extension — validate each key node as an instance (before propertyNames).
+            if let Some(property_keys) = &self.property_keys {
+                let keys_context = context.append_path(&key_string);
+                property_keys.validate(&keys_context, k)?;
+            }
+            // propertyNames: string projection + pattern (JSON Schema compatible).
             if let Some(property_names) = &self.property_names {
                 if let Some(re) = &property_names.pattern {
                     debug!("Regex for property names: {}", re.as_str());

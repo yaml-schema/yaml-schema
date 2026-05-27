@@ -12,6 +12,8 @@ expressed as YAML.
 
 When writing schemas or instances in YAML, remember that **mapping keys are parsed by YAML first**. Unquoted keys such as `1` become a number; keys that start with `@`, `#`, or other special characters may be invalid or require [quoting](https://stackoverflow.com/questions/19109912/do-i-need-quotes-for-strings-in-yaml). Use explicit quotes (e.g. `"@id"`, `"1"`) when the property name must be that exact string. See also [issue #62](https://github.com/yaml-schema/yaml-schema/issues/62).
 
+**JSON Schema vs YAML:** JSON object keys are always strings. YAML allows other **scalar** mapping keys (e.g. integers). The `propertyNames` keyword stays JSON-compatible: it applies to the canonical string form of the key. The **`propertyKeys`** keyword is a YAML Schema extension: use a normal subschema (e.g. `type: integer`, `enum`) to validate each **key node** as YAML data. When both are present, `propertyKeys` runs first, then `propertyNames`. See the [Types](https://yaml-schema.net/features/types.html) documentation for details.
+
 ## Example Usage
 
 Given a `schema.yaml` file containing:

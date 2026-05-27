@@ -41,6 +41,8 @@ pub struct ObjectSchema {
     pub additional_properties: Option<BooleanOrSchema>,
     pub pattern_properties: Option<Vec<PatternProperty>>,
     pub property_names: Option<StringSchema>,
+    /// YAML extension: subschema applied to each mapping **key** node (scalar), not JSON Schema.
+    pub property_keys: Option<YamlSchema>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
     /// JSON Schema `dependentRequired`: when a trigger property is present, all listed properties must be present.
@@ -119,6 +121,16 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema {
                         } else {
                             return Err(unsupported_type!(
                                 "propertyNames: Expected a mapping, but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
+                    "propertyKeys" => {
+                        if value.data.is_mapping() {
+                            object_schema.property_keys = Some(value.try_into()?);
+                        } else {
+                            return Err(unsupported_type!(
+                                "propertyKeys: Expected a mapping (subschema), but got: {:?}",
                                 value
                             ));
                         }
@@ -428,6 +440,11 @@ impl ObjectSchemaBuilder {
         self.0.property_names = Some(property_names);
         self
     }
+
+    pub fn property_keys(&mut self, schema: YamlSchema) -> &mut Self {
+        self.0.property_keys = Some(schema);
+        self
+    }
 }
 
 #[cfg(test)]
@@ -556,6 +573,69 @@ office_number: 201",
             os.properties.as_ref().unwrap().contains_key("1"),
             "unquoted numeric mapping key should become string property name \"1\""
         );
+    }
+
+    #[test]
+    fn test_property_keys_loads_integer_schema() {
+        let yaml = r#"
+        type: object
+        propertyKeys:
+          type: integer
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let os: ObjectSchema = doc.first().unwrap().try_into().unwrap();
+        assert!(
+            os.property_keys.is_some(),
+            "propertyKeys subschema should be loaded"
+        );
+    }
+
+    #[test]
+    fn test_property_keys_rejects_non_mapping() {
+        let yaml = r#"
+        type: object
+        propertyKeys: integer
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        assert!(ObjectSchema::try_from(doc.first().unwrap()).is_err());
+    }
+
+    #[test]
+    fn test_property_keys_validation_accepts_integer_keys() {
+        let yaml = r#"
+        type: object
+        propertyKeys:
+          type: integer
+        "#;
+        let schema: ObjectSchema = MarkedYaml::load_from_str(yaml)
+            .unwrap()
+            .first()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let inst = MarkedYaml::load_from_str("1: a\n2: b").unwrap();
+        let ctx = crate::Context::default();
+        schema.validate(&ctx, inst.first().unwrap()).unwrap();
+        assert!(!ctx.has_errors());
+    }
+
+    #[test]
+    fn test_property_keys_validation_rejects_string_key() {
+        let yaml = r#"
+        type: object
+        propertyKeys:
+          type: integer
+        "#;
+        let schema: ObjectSchema = MarkedYaml::load_from_str(yaml)
+            .unwrap()
+            .first()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let inst = MarkedYaml::load_from_str("x: 1").unwrap();
+        let ctx = crate::Context::default();
+        schema.validate(&ctx, inst.first().unwrap()).unwrap();
+        assert!(ctx.has_errors(), "non-integer keys should surface errors");
     }
 
     #[test]
