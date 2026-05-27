@@ -18,6 +18,7 @@ use crate::RootSchema;
 use crate::schemas::BooleanOrSchema;
 use crate::schemas::YamlSchema;
 use crate::utils::format_marker;
+use crate::utils::scalar_to_string;
 use crate::utils::try_unwrap_saphyr_scalar;
 
 /// Load a YAML schema from a file.
@@ -255,6 +256,22 @@ pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) 
         Ok(s.to_string())
     } else {
         Err(Error::ExpectedScalar(msg.into()))
+    }
+}
+
+/// Property name / mapping key as a string, matching instance validation (`scalar_to_string`).
+///
+/// YAML may parse unquoted keys as integers or floats; quote the key in YAML if you need a specific
+/// string label (e.g. `"1"` vs `1`).
+pub fn marked_yaml_mapping_key_to_string(yaml: &MarkedYaml) -> Result<String> {
+    if let YamlData::Value(scalar) = &yaml.data {
+        Ok(scalar_to_string(scalar))
+    } else {
+        Err(expected_scalar!(
+            "[{}] Expected a scalar mapping key, got: {:?}",
+            format_marker(&yaml.span.start),
+            yaml
+        ))
     }
 }
 

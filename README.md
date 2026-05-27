@@ -10,6 +10,8 @@ expressed as YAML.
 
 **yaml-schema** is both a Rust library _and_ an executable.
 
+When writing schemas or instances in YAML, remember that **mapping keys are parsed by YAML first**. Unquoted keys such as `1` become a number; keys that start with `@`, `#`, or other special characters may be invalid or require [quoting](https://stackoverflow.com/questions/19109912/do-i-need-quotes-for-strings-in-yaml). Use explicit quotes (e.g. `"@id"`, `"1"`) when the property name must be that exact string. See also [issue #62](https://github.com/yaml-schema/yaml-schema/issues/62).
+
 ## Example Usage
 
 Given a `schema.yaml` file containing:

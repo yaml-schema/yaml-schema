@@ -40,6 +40,38 @@ Feature: Object types
       ["An", "array", "not", "an", "object"]
       ```
 
+  Scenario: Schema properties with numeric keys
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        1:
+          type: string
+      ```
+    Then it should accept:
+      ```
+      1: m
+      ```
+
+  Scenario: Quoted mapping keys in schema and instance
+    Given a YAML schema:
+      ```
+      type: object
+      properties:
+        "@leading":
+          type: string
+        "#tag":
+          type: string
+        "-dash key":
+          type: string
+      ```
+    Then it should accept:
+      ```
+      "@leading": hello
+      "#tag": world
+      "-dash key": okay
+      ```
+
   Scenario: properties
     Given a YAML schema:
       ```
@@ -370,6 +402,8 @@ Feature: Object types
       email: null
       ```
 
+  # propertyNames matches the resolved string key; YAML quotes do not change it.
+  # Keys starting with @ or #, or ambiguous numeric-like labels, must be quoted in YAML to parse.
   Scenario: Property names
     Given a YAML schema:
       ```
