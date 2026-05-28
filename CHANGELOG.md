@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Release notes for publi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- `propertyKeys` — YAML-only object keyword: a subschema validated against each mapping **key** node (scalar); `propertyNames` remains JSON-compatible on the string projection of keys.
+
 ## [0.9.1] - 2026-03-21
 
 ### Added

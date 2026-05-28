@@ -25,7 +25,7 @@ pub use validation::Validator;
 
 use utils::format_marker;
 
-use crate::loader::marked_yaml_to_string;
+use crate::loader::marked_yaml_mapping_key_to_string;
 
 // Returns the library version, which reflects the crate version
 pub fn version() -> String {
@@ -218,7 +218,7 @@ impl<'a> TryFrom<&YamlData<'a, MarkedYaml<'a>>> for ConstValue {
             YamlData::Mapping(mapping) => {
                 let mut obj = LinkedHashMap::new();
                 for (key, val) in mapping.iter() {
-                    let key_str = marked_yaml_to_string(key, "const object key must be a string")?;
+                    let key_str = marked_yaml_mapping_key_to_string(key)?;
                     let val_cv: ConstValue = val.try_into()?;
                     obj.insert(key_str, val_cv);
                 }

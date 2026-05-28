@@ -17,6 +17,7 @@ use crate::Result;
 use crate::Validator;
 use crate::loader::load_boolean_or_schema_marked;
 use crate::loader::load_external_schema;
+use crate::loader::marked_yaml_mapping_key_to_string;
 use crate::loader::marked_yaml_to_string;
 use crate::schemas::AllOfSchema;
 use crate::schemas::AnyOfSchema;
@@ -416,7 +417,7 @@ fn try_load_defs<'r>(marked_yaml: &MarkedYaml<'r>) -> Result<LinkedHashMap<Strin
         mapping
             .iter()
             .try_fold(LinkedHashMap::new(), |mut acc, (key, value)| {
-                let key = marked_yaml_to_string(key, "key must be a string")?;
+                let key = marked_yaml_mapping_key_to_string(key)?;
                 acc.insert(key, value.try_into()?);
                 Ok(acc)
             })
