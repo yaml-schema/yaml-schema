@@ -13,6 +13,7 @@ use crate::Error;
 use crate::Result;
 use crate::YamlSchema;
 use crate::loader::load_integer_marked;
+use crate::loader::marked_yaml_mapping_key_to_string;
 use crate::schemas::BooleanOrSchema;
 use crate::schemas::StringSchema;
 use crate::utils::format_annotated_mapping;
@@ -40,6 +41,8 @@ pub struct ObjectSchema {
     pub additional_properties: Option<BooleanOrSchema>,
     pub pattern_properties: Option<Vec<PatternProperty>>,
     pub property_names: Option<StringSchema>,
+    /// YAML extension: subschema applied to each mapping **key** node (scalar), not JSON Schema.
+    pub property_keys: Option<YamlSchema>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
     /// JSON Schema `dependentRequired`: when a trigger property is present, all listed properties must be present.
@@ -122,6 +125,16 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema {
                             ));
                         }
                     }
+                    "propertyKeys" => {
+                        if value.data.is_mapping() {
+                            object_schema.property_keys = Some(value.try_into()?);
+                        } else {
+                            return Err(unsupported_type!(
+                                "propertyKeys: Expected a mapping (subschema), but got: {:?}",
+                                value
+                            ));
+                        }
+                    }
                     "required" => {
                         if let YamlData::Sequence(values) = &value.data {
                             let required = values
@@ -190,22 +203,15 @@ fn load_properties_marked<'r>(value: &MarkedYaml<'r>) -> Result<LinkedHashMap<St
     if let YamlData::Mapping(mapping) = &value.data {
         let mut properties = LinkedHashMap::new();
         for (key, value) in mapping.iter() {
-            if let YamlData::Value(Scalar::String(key)) = &key.data {
-                if value.data.is_mapping() {
-                    let schema: YamlSchema = value.try_into()?;
-                    properties.insert(key.to_string(), schema);
-                } else {
-                    return Err(generic_error!(
-                        "properties: Expected a mapping for \"{}\", but got: {:?}",
-                        key,
-                        value
-                    ));
-                }
+            let key_string = marked_yaml_mapping_key_to_string(key)?;
+            if value.data.is_mapping() {
+                let schema: YamlSchema = value.try_into()?;
+                properties.insert(key_string, schema);
             } else {
                 return Err(generic_error!(
-                    "{} Expected a string key, but got: {:?}",
-                    format_marker(&key.span.start),
-                    key
+                    "properties: Expected a mapping for \"{}\", but got: {:?}",
+                    key_string,
+                    value
                 ));
             }
         }
@@ -223,24 +229,17 @@ fn load_pattern_properties_marked<'r>(value: &MarkedYaml<'r>) -> Result<Vec<Patt
     if let YamlData::Mapping(mapping) = &value.data {
         let mut pattern_properties = Vec::new();
         for (key, value) in mapping.iter() {
-            if let YamlData::Value(Scalar::String(pattern)) = &key.data {
-                let regex = Regex::new(pattern.as_ref())
-                    .map_err(|_e| Error::InvalidRegularExpression(pattern.to_string()))?;
-                if value.data.is_mapping() {
-                    let schema: YamlSchema = value.try_into()?;
-                    pattern_properties.push(PatternProperty { regex, schema });
-                } else {
-                    return Err(generic_error!(
-                        "patternProperties: Expected a mapping for \"{}\", but got: {:?}",
-                        pattern,
-                        value
-                    ));
-                }
+            let pattern = marked_yaml_mapping_key_to_string(key)?;
+            let regex = Regex::new(pattern.as_ref())
+                .map_err(|_e| Error::InvalidRegularExpression(pattern.clone()))?;
+            if value.data.is_mapping() {
+                let schema: YamlSchema = value.try_into()?;
+                pattern_properties.push(PatternProperty { regex, schema });
             } else {
                 return Err(generic_error!(
-                    "{} Expected a string key, but got: {:?}",
-                    format_marker(&key.span.start),
-                    key
+                    "patternProperties: Expected a mapping for \"{}\", but got: {:?}",
+                    pattern,
+                    value
                 ));
             }
         }
@@ -260,18 +259,12 @@ fn load_dependent_required_marked<'r>(
     if let YamlData::Mapping(mapping) = &value.data {
         let mut out = LinkedHashMap::new();
         for (key, val) in mapping.iter() {
-            let YamlData::Value(Scalar::String(trigger)) = &key.data else {
-                return Err(generic_error!(
-                    "{} dependentRequired: Expected string key, got: {:?}",
-                    format_marker(&key.span.start),
-                    key.data
-                ));
-            };
+            let trigger = marked_yaml_mapping_key_to_string(key)?;
             let YamlData::Sequence(values) = &val.data else {
                 return Err(unsupported_type!(
                     "{} dependentRequired: Expected array for key {:?}, got: {:?}",
                     format_marker(&val.span.start),
-                    trigger.as_ref(),
+                    trigger,
                     val.data
                 ));
             };
@@ -291,12 +284,12 @@ fn load_dependent_required_marked<'r>(
                         "{} dependentRequired: duplicate property name {:?} for trigger {:?}",
                         format_marker(&v.span.start),
                         dep,
-                        trigger.as_ref()
+                        trigger
                     ));
                 }
                 deps.push(dep);
             }
-            out.insert(trigger.to_string(), deps);
+            out.insert(trigger, deps);
         }
         Ok(out)
     } else {
@@ -314,22 +307,16 @@ fn load_dependent_schemas_marked<'r>(
     if let YamlData::Mapping(mapping) = &value.data {
         let mut out = LinkedHashMap::new();
         for (key, val) in mapping.iter() {
-            let YamlData::Value(Scalar::String(name)) = &key.data else {
-                return Err(generic_error!(
-                    "{} dependentSchemas: Expected string key, got: {:?}",
-                    format_marker(&key.span.start),
-                    key.data
-                ));
-            };
+            let name = marked_yaml_mapping_key_to_string(key)?;
             if !val.data.is_mapping() {
                 return Err(generic_error!(
                     "dependentSchemas: Expected a mapping for {:?}, but got: {:?}",
-                    name.as_ref(),
+                    name,
                     val.data
                 ));
             }
             let schema: YamlSchema = val.try_into()?;
-            out.insert(name.to_string(), schema);
+            out.insert(name, schema);
         }
         Ok(out)
     } else {
@@ -453,6 +440,11 @@ impl ObjectSchemaBuilder {
         self.0.property_names = Some(property_names);
         self
     }
+
+    pub fn property_keys(&mut self, schema: YamlSchema) -> &mut Self {
+        self.0.property_keys = Some(schema);
+        self
+    }
 }
 
 #[cfg(test)]
@@ -566,6 +558,84 @@ office_number: 201",
                 .unwrap()
                 .contains_key("const")
         );
+    }
+
+    #[test]
+    fn test_properties_numeric_mapping_key_loads() {
+        let yaml = "
+        type: object
+        properties:
+          1:
+            type: string";
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let os: ObjectSchema = doc.first().unwrap().try_into().unwrap();
+        assert!(
+            os.properties.as_ref().unwrap().contains_key("1"),
+            "unquoted numeric mapping key should become string property name \"1\""
+        );
+    }
+
+    #[test]
+    fn test_property_keys_loads_integer_schema() {
+        let yaml = r#"
+        type: object
+        propertyKeys:
+          type: integer
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let os: ObjectSchema = doc.first().unwrap().try_into().unwrap();
+        assert!(
+            os.property_keys.is_some(),
+            "propertyKeys subschema should be loaded"
+        );
+    }
+
+    #[test]
+    fn test_property_keys_rejects_non_mapping() {
+        let yaml = r#"
+        type: object
+        propertyKeys: integer
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        assert!(ObjectSchema::try_from(doc.first().unwrap()).is_err());
+    }
+
+    #[test]
+    fn test_property_keys_validation_accepts_integer_keys() {
+        let yaml = r#"
+        type: object
+        propertyKeys:
+          type: integer
+        "#;
+        let schema: ObjectSchema = MarkedYaml::load_from_str(yaml)
+            .unwrap()
+            .first()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let inst = MarkedYaml::load_from_str("1: a\n2: b").unwrap();
+        let ctx = crate::Context::default();
+        schema.validate(&ctx, inst.first().unwrap()).unwrap();
+        assert!(!ctx.has_errors());
+    }
+
+    #[test]
+    fn test_property_keys_validation_rejects_string_key() {
+        let yaml = r#"
+        type: object
+        propertyKeys:
+          type: integer
+        "#;
+        let schema: ObjectSchema = MarkedYaml::load_from_str(yaml)
+            .unwrap()
+            .first()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let inst = MarkedYaml::load_from_str("x: 1").unwrap();
+        let ctx = crate::Context::default();
+        schema.validate(&ctx, inst.first().unwrap()).unwrap();
+        assert!(ctx.has_errors(), "non-integer keys should surface errors");
     }
 
     #[test]
