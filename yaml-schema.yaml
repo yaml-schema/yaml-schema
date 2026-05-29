@@ -82,9 +82,10 @@ $defs:
             $ref: "#/$defs/schema"
       propertyNames:
         description: >-
-          Subschema validated against each mapping key. When no `type` is provided, the
-          subschema is treated as `type: string` and validates the canonical string form
-          of the key. Non-string types validate the YAML key node directly.
+          Subschema validated against each mapping key (scalar types only; array and object
+          are rejected). When no `type` is provided, the subschema is treated as `type: string`
+          and validates the canonical string form of the key. Non-string scalar types validate
+          the YAML key node directly.
         $ref: "#/$defs/schema"
   array_of_schemas:
     description: >-
@@ -167,9 +168,10 @@ properties:
         $ref: "#/$defs/schema"
   propertyNames:
     description: >-
-      Subschema validated against each mapping key. When no `type` is provided, the
-      subschema is treated as `type: string` and validates the canonical string form of
-      the key. Non-string types validate the YAML key node directly.
+      Subschema validated against each mapping key (scalar types only; array and object
+      are rejected). When no `type` is provided, the subschema is treated as `type: string`
+      and validates the canonical string form of the key. Non-string scalar types validate
+      the YAML key node directly.
     $ref: "#/$defs/schema"
   unevaluatedProperties:
     description: >-

@@ -487,6 +487,15 @@ Feature: Object types
       gamma: 3
       ```
 
+  Scenario: Property names rejects array or object types at load time
+    Given a YAML schema:
+      ```
+      type: object
+      propertyNames:
+        type: array
+      ```
+    Then it should fail with "Generic YAML schema error: [4, 2] propertyNames: type 'array' is not allowed; only scalar types (string, integer, number, boolean, null) are permitted"
+
   Scenario: Size
     Given a YAML schema:
       ```
