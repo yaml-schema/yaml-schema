@@ -6,9 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-05-29
+
 ### Added
 
-- `propertyNames` — full subschema validation for mapping keys. When no `type` is provided, the subschema is treated as implicit `type: string` and validates the canonical string form of each key. Non-string types (e.g. `integer`, `enum`) validate the YAML key node directly.
+- `propertyNames` — full subschema validation for mapping keys. When no `type` is provided, the subschema is treated as implicit `type: string` and validates the canonical string form of each key. Non-string scalar types (e.g. `integer`, `enum`) validate the YAML key node directly; `array` and `object` types are rejected at load time.
+
+### Removed
+
+- `propertyKeys` — removed; use `propertyNames` instead.
 
 ## [0.9.1] - 2026-03-21
 
@@ -69,5 +75,6 @@ Major update: schema architecture refactor, new validation features, bug fixes, 
 - **v0.9.0-rc1**: NumericBounds, PatternProperty, and extended const validation ([#39](https://github.com/yaml-schema/yaml-schema/pull/39)).
 - **v0.9.0**: CLI Cucumber step definitions.
 
+[0.9.2]: https://github.com/yaml-schema/yaml-schema/releases/tag/v0.9.2
 [0.9.1]: https://github.com/yaml-schema/yaml-schema/releases/tag/v0.9.1
 [0.9.0]: https://github.com/yaml-schema/yaml-schema/releases/tag/v0.9.0
