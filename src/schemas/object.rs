@@ -15,7 +15,6 @@ use crate::YamlSchema;
 use crate::loader::load_integer_marked;
 use crate::loader::marked_yaml_mapping_key_to_string;
 use crate::schemas::BooleanOrSchema;
-use crate::schemas::StringSchema;
 use crate::utils::format_annotated_mapping;
 use crate::utils::format_marker;
 use crate::utils::linked_hash_map;
@@ -40,9 +39,8 @@ pub struct ObjectSchema {
     pub required: Option<Vec<String>>,
     pub additional_properties: Option<BooleanOrSchema>,
     pub pattern_properties: Option<Vec<PatternProperty>>,
-    pub property_names: Option<StringSchema>,
-    /// YAML extension: subschema applied to each mapping **key** node (scalar), not JSON Schema.
-    pub property_keys: Option<YamlSchema>,
+    /// JSON Schema `propertyNames`: subschema validated against each mapping key.
+    pub property_names: Option<YamlSchema>,
     pub min_properties: Option<usize>,
     pub max_properties: Option<usize>,
     /// JSON Schema `dependentRequired`: when a trigger property is present, all listed properties must be present.
@@ -101,36 +99,11 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema {
                             Some(load_pattern_properties_marked(value)?);
                     }
                     "propertyNames" => {
-                        if let YamlData::Mapping(mapping) = &value.data {
-                            let pattern_key = MarkedYaml::value_from_str("pattern");
-                            if !mapping.contains_key(&pattern_key) {
-                                return Err(generic_error!(
-                                    "{} propertyNames: Missing required key: pattern",
-                                    format_marker(&value.span.start)
-                                ));
-                            }
-                            if let Some(v) = &mapping.get(&pattern_key)
-                                && let YamlData::Value(Scalar::String(pattern)) = &v.data
-                            {
-                                let regex = Regex::new(pattern.as_ref()).map_err(|_e| {
-                                    Error::InvalidRegularExpression(pattern.to_string())
-                                })?;
-                                object_schema.property_names =
-                                    Some(StringSchema::builder().pattern(regex).build());
-                            }
-                        } else {
-                            return Err(unsupported_type!(
-                                "propertyNames: Expected a mapping, but got: {:?}",
-                                value
-                            ));
-                        }
-                    }
-                    "propertyKeys" => {
                         if value.data.is_mapping() {
-                            object_schema.property_keys = Some(value.try_into()?);
+                            object_schema.property_names = Some(value.try_into()?);
                         } else {
                             return Err(unsupported_type!(
-                                "propertyKeys: Expected a mapping (subschema), but got: {:?}",
+                                "propertyNames: Expected a mapping (subschema), but got: {:?}",
                                 value
                             ));
                         }
@@ -436,13 +409,8 @@ impl ObjectSchemaBuilder {
         self
     }
 
-    pub fn property_names(&mut self, property_names: StringSchema) -> &mut Self {
-        self.0.property_names = Some(property_names);
-        self
-    }
-
-    pub fn property_keys(&mut self, schema: YamlSchema) -> &mut Self {
-        self.0.property_keys = Some(schema);
+    pub fn property_names(&mut self, schema: YamlSchema) -> &mut Self {
+        self.0.property_names = Some(schema);
         self
     }
 }
@@ -576,35 +544,35 @@ office_number: 201",
     }
 
     #[test]
-    fn test_property_keys_loads_integer_schema() {
+    fn test_property_names_loads_integer_schema() {
         let yaml = r#"
         type: object
-        propertyKeys:
+        propertyNames:
           type: integer
         "#;
         let doc = MarkedYaml::load_from_str(yaml).unwrap();
         let os: ObjectSchema = doc.first().unwrap().try_into().unwrap();
         assert!(
-            os.property_keys.is_some(),
-            "propertyKeys subschema should be loaded"
+            os.property_names.is_some(),
+            "propertyNames subschema should be loaded"
         );
     }
 
     #[test]
-    fn test_property_keys_rejects_non_mapping() {
+    fn test_property_names_rejects_non_mapping() {
         let yaml = r#"
         type: object
-        propertyKeys: integer
+        propertyNames: integer
         "#;
         let doc = MarkedYaml::load_from_str(yaml).unwrap();
         assert!(ObjectSchema::try_from(doc.first().unwrap()).is_err());
     }
 
     #[test]
-    fn test_property_keys_validation_accepts_integer_keys() {
+    fn test_property_names_validation_accepts_integer_keys() {
         let yaml = r#"
         type: object
-        propertyKeys:
+        propertyNames:
           type: integer
         "#;
         let schema: ObjectSchema = MarkedYaml::load_from_str(yaml)
@@ -620,10 +588,10 @@ office_number: 201",
     }
 
     #[test]
-    fn test_property_keys_validation_rejects_string_key() {
+    fn test_property_names_validation_rejects_string_key() {
         let yaml = r#"
         type: object
-        propertyKeys:
+        propertyNames:
           type: integer
         "#;
         let schema: ObjectSchema = MarkedYaml::load_from_str(yaml)
@@ -636,6 +604,30 @@ office_number: 201",
         let ctx = crate::Context::default();
         schema.validate(&ctx, inst.first().unwrap()).unwrap();
         assert!(ctx.has_errors(), "non-integer keys should surface errors");
+    }
+
+    #[test]
+    fn test_property_names_implicit_string_type_accepts_pattern() {
+        let yaml = r#"
+        type: object
+        propertyNames:
+          pattern: "^[a-z]+$"
+        "#;
+        let schema: ObjectSchema = MarkedYaml::load_from_str(yaml)
+            .unwrap()
+            .first()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let ok = MarkedYaml::load_from_str("alpha: 1").unwrap();
+        let ctx = crate::Context::default();
+        schema.validate(&ctx, ok.first().unwrap()).unwrap();
+        assert!(!ctx.has_errors());
+
+        let bad = MarkedYaml::load_from_str("Beta: 1").unwrap();
+        let ctx = crate::Context::default();
+        schema.validate(&ctx, bad.first().unwrap()).unwrap();
+        assert!(ctx.has_errors());
     }
 
     #[test]

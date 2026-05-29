@@ -88,3 +88,27 @@ Feature: oneOf
       items:
         - ""
       ```
+
+  Scenario: oneOf for propertyNames
+    Given a YAML schema:
+      ```
+      type: array
+      items:
+        oneOf:
+          - type: string
+            enum: [alpha, beta]
+          - type: integer
+          - type: boolean
+      ```
+    Then it should accept:
+      ```
+      - alpha
+      - beta
+      - 1
+      - true
+      ```
+    But it should NOT accept:
+      ```
+      - gamma
+      ```
+    And the error message should be "[1:3] .: None of the schemas in `oneOf` matched!"
