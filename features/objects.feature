@@ -401,32 +401,37 @@ Feature: Object types
       address: Henley Street, Stratford-upon-Avon, Warwickshire, England
       email: null
       ```
-
   # propertyNames matches the resolved string key; YAML quotes do not change it.
   # Keys starting with @ or #, or ambiguous numeric-like labels, must be quoted in YAML to parse.
+
   Scenario: Property names
     Given a YAML schema:
       ```
       type: object
       propertyNames:
-        pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
+        pattern: "^[A-Za-z0-9_]*$"
       ```
     Then it should accept:
       ```
       _a_proper_token_001: "value"
       ```
+    # integer keys are valid
+    And it should accept:
+      ```
+      1: "value"
+      ```
     But it should NOT accept:
       ```
       -001 invalid: "value"
       ```
-    And the error message should be "[1:1] .: Property name '-001 invalid' does not match pattern '^[A-Za-z_][A-Za-z0-9_]*$'"
+    And the error message should be "[1:1] .-001 invalid: String does not match regular expression ^[A-Za-z0-9_]*$!"
+  # propertyNames with non-string type validates each mapping key as a YAML scalar.
 
-  # propertyKeys validates each mapping key as a YAML scalar (YAML extension; not JSON Schema).
-  Scenario: Property keys integer
+  Scenario: Property names integer keys
     Given a YAML schema:
       ```
       type: object
-      propertyKeys:
+      propertyNames:
         type: integer
       ```
     Then it should accept:
@@ -439,11 +444,11 @@ Feature: Object types
       hello: world
       ```
 
-  Scenario: Property keys string enum on key
+  Scenario: Property names string enum on key
     Given a YAML schema:
       ```
       type: object
-      propertyKeys:
+      propertyNames:
         type: string
         enum:
           - alpha
@@ -459,20 +464,28 @@ Feature: Object types
       gamma: 3
       ```
 
-  Scenario: Property keys and property names together
+  Scenario: Property names subschema
     Given a YAML schema:
       ```
       type: object
-      propertyKeys:
-        type: integer
       propertyNames:
-        pattern: "^a$"
+        oneOf:
+          - type: string
+            enum: [alpha, beta]
+          - type: integer
+          - type: boolean
       ```
-    Then it should NOT accept:
+    Then it should accept:
       ```
-      1: ok
+      alpha: 1
+      beta: 2
+      1: one
+      true: yes
       ```
-    And the error message should be "[1:1] .: Property name '1' does not match pattern '^a$'"
+    But it should NOT accept:
+      ```
+      gamma: 3
+      ```
 
   Scenario: Size
     Given a YAML schema:

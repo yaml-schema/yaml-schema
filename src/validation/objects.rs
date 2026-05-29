@@ -1,10 +1,12 @@
 // A module to contain object type validation logic
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 use hashlink::LinkedHashMap;
 use log::debug;
+use saphyr::Scalar;
+use saphyr::YamlData;
 
-use crate::Error;
 use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
@@ -163,31 +165,16 @@ impl ObjectSchema {
                     context.record_evaluated_property(&key_string);
                 }
             }
-            // propertyKeys: YAML extension — validate each key node as an instance (before propertyNames).
-            if let Some(property_keys) = &self.property_keys {
-                let keys_context = context.append_path(&key_string);
-                property_keys.validate(&keys_context, k)?;
-            }
-            // propertyNames: string projection + pattern (JSON Schema compatible).
+            // propertyNames: validate each mapping key against the subschema.
             if let Some(property_names) = &self.property_names {
-                if let Some(re) = &property_names.pattern {
-                    debug!("Regex for property names: {}", re.as_str());
-                    if !re.is_match(key_string.as_ref()) {
-                        context.add_error(
-                            k,
-                            format!(
-                                "Property name '{}' does not match pattern '{}'",
-                                key_string,
-                                re.as_str()
-                            ),
-                        );
-                        fail_fast!(context)
-                    }
+                let names_context = context.append_path(&key_string);
+                let key_to_validate = if property_names_validates_string_projection(property_names)
+                {
+                    string_projection_of_key(k, &key_string)
                 } else {
-                    return Err(Error::GenericError(
-                        "Expected a pattern for `property_names`".to_string(),
-                    ));
-                }
+                    k.clone()
+                };
+                property_names.validate(&names_context, &key_to_validate)?;
             }
         }
 
@@ -284,6 +271,31 @@ impl ObjectSchema {
         }
         Ok(keys)
     }
+}
+
+/// Whether `propertyNames` validates the canonical string form of each key.
+fn property_names_validates_string_projection(schema: &YamlSchema) -> bool {
+    if let YamlSchema::Subschema(subschema) = schema {
+        // For composition (`oneOf` / `anyOf` / `allOf`), validating the original YAML key node is
+        // necessary so non-string key types (e.g. integer/boolean) can match their branches.
+        if subschema.one_of.is_some() || subschema.any_of.is_some() || subschema.all_of.is_some() {
+            return false;
+        }
+
+        subschema.r#type.is_none_or_string()
+    } else {
+        true
+    }
+}
+
+/// Build a key node whose value is the string projection of `key`, preserving the key span.
+fn string_projection_of_key<'r>(
+    key: &saphyr::MarkedYaml<'r>,
+    key_string: &str,
+) -> saphyr::MarkedYaml<'r> {
+    let mut projected = key.clone();
+    projected.data = YamlData::Value(Scalar::String(Cow::Owned(key_string.to_string())));
+    projected
 }
 
 #[cfg(test)]

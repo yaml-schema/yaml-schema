@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `propertyKeys` — YAML-only object keyword: a subschema validated against each mapping **key** node (scalar); `propertyNames` remains JSON-compatible on the string projection of keys.
+- `propertyNames` — full subschema validation for mapping keys. When no `type` is provided, the subschema is treated as implicit `type: string` and validates the canonical string form of each key. Non-string types (e.g. `integer`, `enum`) validate the YAML key node directly.
 
 ## [0.9.1] - 2026-03-21
 

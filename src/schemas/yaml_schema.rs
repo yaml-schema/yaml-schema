@@ -298,6 +298,16 @@ impl SchemaType {
             SchemaType::Multiple(values) => values.contains(&r#type.to_string()),
         }
     }
+
+    /// Checks if this SchemaType is `None` or `Single("string")`. Used to determine if `propertyNames`
+    /// validates the canonical string form of each key.
+    pub fn is_none_or_string(&self) -> bool {
+        match self {
+            SchemaType::None => true,
+            SchemaType::Single(s) => s == "string",
+            SchemaType::Multiple(_) => false,
+        }
+    }
 }
 
 impl Display for SchemaType {
