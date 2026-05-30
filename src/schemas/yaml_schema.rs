@@ -603,21 +603,22 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for Subschema {
             }
         }
 
-        // When `type` is omitted but `properties` is present, treat as `type: object` (JSON Schema-style).
-        if r#type.is_none() && mapping.contains_key(&MarkedYaml::value_from_str("properties")) {
-            r#type = SchemaType::new("object");
-            object_schema = ObjectSchema::try_from(mapping).map(Some)?;
-        }
+        if r#type.is_none() {
+            // When `type` is omitted but `properties` is present, try to load as `type: object` (JSON Schema-style).
+            if mapping.contains_key(&MarkedYaml::value_from_str("properties")) {
+                // r#type = SchemaType::new("object");
+                object_schema = ObjectSchema::try_from(mapping).map(Some)?;
+            }
 
-        // When `type` is omitted but string validation keywords are present, treat as `type: string`
-        // so `pattern` / `minLength` / `maxLength` are not ignored (JSON Schema-style).
-        if r#type.is_none()
-            && (mapping.contains_key(&MarkedYaml::value_from_str("pattern"))
+            // When `type` is omitted but string validation keywords are present, try to load as `type: string`
+            // so `pattern` / `minLength` / `maxLength` are not ignored (JSON Schema-style).
+            if mapping.contains_key(&MarkedYaml::value_from_str("pattern"))
                 || mapping.contains_key(&MarkedYaml::value_from_str("minLength"))
-                || mapping.contains_key(&MarkedYaml::value_from_str("maxLength")))
-        {
-            r#type = SchemaType::new("string");
-            string_schema = StringSchema::try_from(mapping).map(Some)?;
+                || mapping.contains_key(&MarkedYaml::value_from_str("maxLength"))
+            {
+                r#type = SchemaType::new("string");
+                string_schema = StringSchema::try_from(mapping).map(Some)?;
+            }
         }
 
         let unevaluated_properties = mapping
@@ -849,7 +850,15 @@ impl Validator for Subschema {
         }
 
         match &self.r#type {
-            SchemaType::None => (),
+            SchemaType::None => {
+                if self
+                    .object_schema
+                    .as_ref()
+                    .is_some_and(|object_schema| object_schema.properties.is_some())
+                {
+                    self.validate_by_type(&ctx, "object", value)?;
+                }
+            }
             SchemaType::Single(s) => self.validate_by_type(&ctx, s.as_ref(), value)?,
             SchemaType::Multiple(values) => {
                 debug!(
@@ -1314,10 +1323,7 @@ mod tests {
         let YamlSchema::Subschema(sub) = &root.schema else {
             panic!("expected subschema");
         };
-        assert!(
-            sub.r#type.is_or_contains("object"),
-            "expected inferred type object"
-        );
+        assert!(sub.r#type.is_none(), "expected type: none");
         assert!(sub.object_schema.is_some());
 
         let ok = engine::Engine::evaluate(&root, "foo: bar", false).unwrap();

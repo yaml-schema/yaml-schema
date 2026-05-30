@@ -26,6 +26,17 @@ $defs:
       - type: array
         items:
           $ref: "#/$defs/valid_types"
+  property_names_subschema:
+    description: >-
+      JSON Schema `propertyNames`: a full subschema validated against each mapping key
+      (scalar keys only on instances). The subschema cannot be `type: array` or
+      `type: object` (or use array/object keywords such as `items` or `properties`);
+      only scalar types (`string`, `integer`, `number`, `boolean`, `null`) are
+      permitted. Supports other keywords from `#/$defs/schema` (e.g. `enum`, `const`,
+      `pattern`, `oneOf`, `anyOf`, `allOf`). When no `type` is provided, the subschema
+      is treated as `type: string` and validates the canonical string form of the key.
+      Non-string scalar types validate the YAML key node directly.
+    $ref: "#/$defs/schema"
   schema:
     description: >-
       A meta schema for a YAML object schema
@@ -81,11 +92,7 @@ $defs:
           "^[a-zA-Z0-9_-]+$":
             $ref: "#/$defs/schema"
       propertyNames:
-        description: >-
-          Subschema validated against each mapping key. When no `type` is provided, the
-          subschema is treated as `type: string` and validates the canonical string form
-          of the key. Non-string types validate the YAML key node directly.
-        $ref: "#/$defs/schema"
+        $ref: "#/$defs/property_names_subschema"
   array_of_schemas:
     description: >-
       An array of schemas
@@ -166,11 +173,7 @@ properties:
       "^[a-zA-Z0-9_-]+$":
         $ref: "#/$defs/schema"
   propertyNames:
-    description: >-
-      Subschema validated against each mapping key. When no `type` is provided, the
-      subschema is treated as `type: string` and validates the canonical string form of
-      the key. Non-string types validate the YAML key node directly.
-    $ref: "#/$defs/schema"
+    $ref: "#/$defs/property_names_subschema"
   unevaluatedProperties:
     description: >-
       JSON Schema 2020-12 unevaluated vocabulary. Applies to object properties not already
