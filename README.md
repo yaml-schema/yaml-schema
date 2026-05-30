@@ -1,7 +1,7 @@
 ys - yaml-schema
 ====
 
-[![CI Tests](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml/badge.svg)](https://github.com/aisrael/yaml-schema/actions/workflows/ci-tests.yaml)
+[![CI Tests](https://github.com/yaml-schema/yaml-schema/actions/workflows/ci-tests.yaml/badge.svg)](https://github.com/yaml-schema/yaml-schema/actions/workflows/ci-tests.yaml)
 
 **yaml-schema** is a tool to validate YAML files against a YAML schema.
 
@@ -16,7 +16,7 @@ See detailed documentation at [https://yaml-schema.net/](https://yaml-schema.net
 
 When writing schemas or instances in YAML, remember that **mapping keys are parsed by YAML first**. Unquoted keys such as `1` become a number; keys that start with `@`, `#`, or other special characters may be invalid or require [quoting](https://stackoverflow.com/questions/19109912/do-i-need-quotes-for-strings-in-yaml). Use explicit quotes (e.g. `"@id"`, `"1"`) when the property name must be that exact string. See also [issue #62](https://github.com/yaml-schema/yaml-schema/issues/62).
 
-**JSON Schema vs YAML:** JSON object keys are always strings. YAML allows other **scalar** mapping keys (e.g. integers). The `propertyNames` keyword validates each mapping key against a subschema (scalar types only: `string`, `integer`, `number`, `boolean`, `null`; `array` and `object` are rejected at load time). When no `type` is provided, the subschema is treated as `type: string` and validates the canonical string form of the key (JSON Schema compatible). When a non-string `type` is specified (e.g. `integer`, `enum`), the YAML key node is validated directly. See the [Types](https://yaml-schema.net/features/types.html) documentation for details.
+**JSON Schema vs YAML:** JSON object keys are always strings. YAML allows other **scalar** mapping keys (e.g. integers, booleans). The `propertyNames` keyword validates each mapping key against a subschema. Only scalar types are permitted (`string`, `integer`, `number`, `boolean`, `null`); `array` and `object` types (and array/object keywords such as `items` or `properties`) are rejected at load time. Composition keywords (`oneOf`, `anyOf`, `allOf`) are supported when every branch uses scalar types. When no `type` is provided, the subschema is treated as `type: string` and validates the canonical string form of the key (JSON Schema compatible). String keywords such as `pattern` and `enum` work without an explicit `type`. When a non-string scalar `type` is specified (e.g. `integer`), the YAML key node is validated directly. See the [Types](https://yaml-schema.net/features/types.html) documentation for details.
 
 ## Example Usage
 
@@ -135,14 +135,14 @@ Validation errors are written to **stdout**; non-validation errors use **stderr*
 
 - [CLI usage](features/cli.feature)
 - [Basic features](features/basics.feature)
-- [String validation](features/validation/strings.feature)
-- [Numeric types](features/validation/numbers.feature)
-- [Const](features/validation/const.feature)
-- [Enums](features/validation/enums.feature)
-- [Object types](features/validation/objects.feature)
-- [Arrays](features/validation/arrays.feature)
+- [String validation](features/strings.feature)
+- [Numeric types](features/numeric.feature)
+- [Const](features/const.feature)
+- [Enums](features/enums.feature)
+- [Object types](features/objects.feature) (includes `propertyNames`)
+- [Arrays](features/arrays.feature)
 - [Composition](features/composition.feature)
-- [Unevaluated properties/items](features/validation/unevaluated.feature)
+- [Unevaluated properties/items](features/unevaluated.feature)
 
 See the [features](features/) folder for all examples.
 
@@ -182,8 +182,13 @@ Arguments:
   [FILE]  The YAML file to validate
 
 Options:
-  -f, --schema <SCHEMAS>  The schema to validate against
+  -f, --schema <SCHEMAS>  Schema file(s) to load. The first is the root schema; additional
+                          schemas are pre-loaded for $ref resolution. May be specified multiple
+                          times (-f a.yaml -f b.yaml). Omit when the instance YAML has a
+                          top-level string `$schema` (URL or path)
       --fail-fast         Specify this flag to exit (1) as soon as any error is encountered
+      --json              Emit errors as JSON: validation failures as a JSON array on stdout;
+                          other failures as {"error":"..."} on stderr
   -h, --help              Print help
   -V, --version           Print version
   ```
