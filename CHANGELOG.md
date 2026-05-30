@@ -10,11 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `propertyNames` — full subschema validation for mapping keys. When no `type` is provided, the subschema is treated as implicit `type: string` and validates the canonical string form of each key. Non-string scalar types (e.g. `integer`, `enum`) validate the YAML key node directly; `array` and `object` types are rejected at load time.
+- `propertyNames` — JSON Schema-compatible subschema validation for mapping keys, extended for YAML scalar keys (`string`, `integer`, `number`, `boolean`, `null`). Supports keywords such as `pattern`, `enum`, and `const`, and composition (`oneOf`, `anyOf`, `allOf`) when every branch uses scalar types only. When no `type` is provided, the subschema is treated as implicit `type: string` and validates the canonical string form of each key; non-string scalar types validate the YAML key node directly. `array` and `object` types (and array/object keywords such as `items` or `properties`) are rejected at load time.
 
 ### Removed
 
 - `propertyKeys` — removed; use `propertyNames` instead.
+
+### Fixed
+
+- Subschema loading: when `type` is omitted but object keywords (e.g. `properties`) are present, the subschema is no longer inferred as `type: object` at load time; object validation is applied at runtime when appropriate.
 
 ## [0.9.1] - 2026-03-21
 
