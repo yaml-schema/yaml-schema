@@ -80,10 +80,11 @@ $defs:
         patternProperties:
           "^[a-zA-Z0-9_-]+$":
             $ref: "#/$defs/schema"
-      propertyKeys:
+      propertyNames:
         description: >-
-          YAML-only extension (not JSON Schema): subschema validated against each mapping
-          key node as a YAML value.
+          Subschema validated against each mapping key. When no `type` is provided, the
+          subschema is treated as `type: string` and validates the canonical string form
+          of the key. Non-string types validate the YAML key node directly.
         $ref: "#/$defs/schema"
   array_of_schemas:
     description: >-
@@ -164,10 +165,11 @@ properties:
     patternProperties:
       "^[a-zA-Z0-9_-]+$":
         $ref: "#/$defs/schema"
-  propertyKeys:
+  propertyNames:
     description: >-
-      YAML-only extension (not JSON Schema): subschema validated against each mapping key
-      node as a YAML value.
+      Subschema validated against each mapping key. When no `type` is provided, the
+      subschema is treated as `type: string` and validates the canonical string form of
+      the key. Non-string types validate the YAML key node directly.
     $ref: "#/$defs/schema"
   unevaluatedProperties:
     description: >-
