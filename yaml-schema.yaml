@@ -50,6 +50,11 @@ $defs:
         patternProperties:
           "^[a-zA-Z0-9_-]+$":
             $ref: "#/$defs/schema"
+      required:
+        description: An array of property names that must be present on the instance
+        type: array
+        items:
+          type: string
       description:
         type: string
       enum:
@@ -131,6 +136,11 @@ properties:
     patternProperties:
       "^[a-zA-Z0-9_-]+$":
         $ref: "#/$defs/schema"
+  required:
+    description: An array of property names that must be present on the instance
+    type: array
+    items:
+      type: string
   additionalProperties:
     oneOf:
       - type: boolean
