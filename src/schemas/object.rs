@@ -15,6 +15,7 @@ use crate::YamlSchema;
 use crate::loader::load_integer_marked;
 use crate::loader::marked_yaml_mapping_key_to_string;
 use crate::schemas::BooleanOrSchema;
+use crate::schemas::SchemaType;
 use crate::utils::format_annotated_mapping;
 use crate::utils::format_marker;
 use crate::utils::linked_hash_map;
@@ -100,7 +101,9 @@ impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for ObjectSchema {
                     }
                     "propertyNames" => {
                         if value.data.is_mapping() {
-                            object_schema.property_names = Some(value.try_into()?);
+                            let schema: YamlSchema = value.try_into()?;
+                            validate_property_names_subschema(&schema, &value.span.start)?;
+                            object_schema.property_names = Some(schema);
                         } else {
                             return Err(unsupported_type!(
                                 "propertyNames: Expected a mapping (subschema), but got: {:?}",
@@ -299,6 +302,73 @@ fn load_dependent_schemas_marked<'r>(
             value.data
         ))
     }
+}
+
+const PROPERTY_NAMES_SCALAR_TYPES: &[&str] = &["string", "integer", "number", "boolean", "null"];
+
+/// Reject `propertyNames` subschemas that target array or object instances (mapping keys are scalars).
+fn validate_property_names_subschema(schema: &YamlSchema, location: &saphyr::Marker) -> Result<()> {
+    match schema {
+        YamlSchema::Empty | YamlSchema::Null | YamlSchema::BooleanLiteral(_) => Ok(()),
+        YamlSchema::Subschema(subschema) => {
+            if subschema.r#type.is_or_contains("array") || subschema.r#type.is_or_contains("object")
+            {
+                return Err(property_names_complex_type_error(
+                    location,
+                    &subschema.r#type,
+                ));
+            }
+            if subschema.array_schema.is_some() || subschema.object_schema.is_some() {
+                return Err(generic_error!(
+                    "{} propertyNames: array and object schemas are not allowed; only scalar types ({}) are permitted",
+                    format_marker(location),
+                    PROPERTY_NAMES_SCALAR_TYPES.join(", ")
+                ));
+            }
+            if let Some(one_of) = &subschema.one_of {
+                for branch in &one_of.one_of {
+                    validate_property_names_subschema(branch, location)?;
+                }
+            }
+            if let Some(any_of) = &subschema.any_of {
+                for branch in &any_of.any_of {
+                    validate_property_names_subschema(branch, location)?;
+                }
+            }
+            if let Some(all_of) = &subschema.all_of {
+                for branch in &all_of.all_of {
+                    validate_property_names_subschema(branch, location)?;
+                }
+            }
+            if let Some(not) = &subschema.not {
+                validate_property_names_subschema(&not.not, location)?;
+            }
+            if let Some(conditional) = &subschema.if_then_else {
+                validate_property_names_subschema(&conditional.if_schema, location)?;
+                if let Some(then_schema) = &conditional.then_schema {
+                    validate_property_names_subschema(then_schema, location)?;
+                }
+                if let Some(else_schema) = &conditional.else_schema {
+                    validate_property_names_subschema(else_schema, location)?;
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+fn property_names_complex_type_error(location: &saphyr::Marker, schema_type: &SchemaType) -> Error {
+    let type_name = match schema_type {
+        SchemaType::None => "none".to_string(),
+        SchemaType::Single(s) => s.clone(),
+        SchemaType::Multiple(values) => values.join(", "),
+    };
+    generic_error!(
+        "{} propertyNames: type '{}' is not allowed; only scalar types ({}) are permitted",
+        format_marker(location),
+        type_name,
+        PROPERTY_NAMES_SCALAR_TYPES.join(", ")
+    )
 }
 
 fn load_additional_properties_marked<'r>(marked_yaml: &MarkedYaml<'r>) -> Result<BooleanOrSchema> {
@@ -604,6 +674,49 @@ office_number: 201",
         let ctx = crate::Context::default();
         schema.validate(&ctx, inst.first().unwrap()).unwrap();
         assert!(ctx.has_errors(), "non-integer keys should surface errors");
+    }
+
+    #[test]
+    fn test_property_names_rejects_type_array() {
+        let yaml = r#"
+        type: object
+        propertyNames:
+          type: array
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let err = ObjectSchema::try_from(doc.first().unwrap()).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("array and object schemas are not allowed")
+                || err.to_string().contains("type"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn test_property_names_rejects_type_object() {
+        let yaml = r#"
+        type: object
+        propertyNames:
+          type: object
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let err = ObjectSchema::try_from(doc.first().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("not allowed"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn test_property_names_rejects_one_of_with_array_branch() {
+        let yaml = r#"
+        type: object
+        propertyNames:
+          oneOf:
+            - type: string
+            - type: array
+        "#;
+        let doc = MarkedYaml::load_from_str(yaml).unwrap();
+        let err = ObjectSchema::try_from(doc.first().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("not allowed"), "unexpected: {err}");
     }
 
     #[test]

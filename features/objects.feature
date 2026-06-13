@@ -487,6 +487,102 @@ Feature: Object types
       gamma: 3
       ```
 
+  Scenario: Property names pattern with explicit type string
+    Given a YAML schema:
+      ```
+      type: object
+      propertyNames:
+        type: string
+        pattern: "^[a-z]+$"
+      ```
+    Then it should accept:
+      ```
+      alpha: 1
+      beta: 2
+      ```
+    But it should NOT accept:
+      ```
+      Beta: 1
+      ```
+
+  Scenario: Property names enum without explicit type
+    Given a YAML schema:
+      ```
+      type: object
+      propertyNames:
+        enum:
+          - alpha
+          - beta
+      ```
+    Then it should accept:
+      ```
+      alpha: 1
+      beta: 2
+      ```
+    But it should NOT accept:
+      ```
+      gamma: 3
+      ```
+
+  Scenario: Property names number keys
+    Given a YAML schema:
+      ```
+      type: object
+      propertyNames:
+        type: number
+      ```
+    Then it should accept:
+      ```
+      1.5: one-and-a-half
+      2: two
+      ```
+    But it should NOT accept:
+      ```
+      hello: world
+      ```
+
+  Scenario: Property names boolean keys
+    Given a YAML schema:
+      ```
+      type: object
+      propertyNames:
+        type: boolean
+      ```
+    Then it should accept:
+      ```
+      true: yes
+      false: no
+      ```
+    But it should NOT accept:
+      ```
+      maybe: perhaps
+      ```
+
+  Scenario: Property names null key
+    Given a YAML schema:
+      ```
+      type: object
+      propertyNames:
+        type: null
+      ```
+    Then it should accept:
+      ```
+      null: only-null-key
+      ```
+    But it should NOT accept:
+      ```
+      foo: bar
+      ```
+
+  Scenario: Property names rejects array or object types at load time
+    Given a YAML schema:
+      ```
+      type: object
+      propertyNames:
+        type: array
+      ```
+    Then it should fail with "Generic YAML schema error: [4, 2] propertyNames: type 'array' is not allowed; only scalar types (string, integer, number, boolean, null) are permitted"
+
   Scenario: Size
     Given a YAML schema:
       ```
