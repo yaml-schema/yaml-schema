@@ -736,6 +736,30 @@ mod tests {
         Ok(())
     }
 
+    // Regression test for https://github.com/yaml-schema/yaml-schema/issues/67:
+    // `required` must be an allowed keyword in the bundled meta-schema.
+    #[test]
+    fn test_meta_schema_accepts_required() -> Result<()> {
+        let root_schema = loader::load_file("yaml-schema.yaml")?;
+        let instance = r#"
+type: object
+properties:
+  any_property:
+    type: string
+required:
+  - any_property
+"#;
+        let context = Engine::evaluate(&root_schema, instance, false)?;
+        if context.has_errors() {
+            for error in context.errors.borrow().iter() {
+                eprintln!("{error}");
+            }
+        }
+        assert!(!context.has_errors());
+
+        Ok(())
+    }
+
     #[test]
     fn test_download_from_url() {
         // This is an integration test that requires internet access
