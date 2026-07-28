@@ -33,6 +33,7 @@ jobs:
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
+        continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -48,3 +49,21 @@ jobs:
           # or https://code.claude.com/docs/en/cli-reference for available options
           # claude_args: '--allowed-tools Bash(gh pr *)'
 
+      - name: Save and upload Claude debug output
+        if: always()
+        run: |
+          DEBUG_FILE=/home/runner/work/_temp/claude-execution-output.json
+          echo "Looking for debug file: $DEBUG_FILE"
+          if [ -f "$DEBUG_FILE" ]; then
+            echo "=== Claude debug output ==="
+            cat "$DEBUG_FILE"
+          else
+            echo "No debug file found at $DEBUG_FILE"
+          fi
+          
+      - name: Upload Claude debug artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-debug
+          path: /home/runner/work/_temp/claude-execution-output.json
