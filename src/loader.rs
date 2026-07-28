@@ -196,7 +196,7 @@ pub fn fetch_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<(Stri
     std::thread::spawn(move || {
         let client = Client::builder()
             .timeout(timeout)
-            .use_native_tls()
+            .use_rustls_tls()
             .build()?;
 
         let url = Url::parse(&url_owned).map_err(|e| Error::UrlLoadError(e.into()))?;

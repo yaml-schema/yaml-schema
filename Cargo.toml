@@ -23,7 +23,7 @@ jsonptr = "0.7.1"
 log = "0.4.21"
 ordered-float = "5.0.0"
 regex = "1.10.4"
-reqwest = { version = "0.12.22", features = ["blocking", "json", "native-tls"], default-features = false }
+reqwest = { version = "0.12.22", features = ["blocking", "json", "rustls-tls"], default-features = false }
 saphyr = "0.0.11"
 serde_json = "~1.0"
 thiserror = "2.0"
