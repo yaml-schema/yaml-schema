@@ -194,6 +194,7 @@ pub fn fetch_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<(Stri
     let timeout = Duration::from_secs(timeout_seconds.unwrap_or(30));
 
     std::thread::spawn(move || {
+        // rustls-tls avoids the openssl-sys build dependency that broke pre-commit.ci: https://github.com/yaml-schema/yaml-schema/pull/72
         let client = Client::builder()
             .timeout(timeout)
             .use_rustls_tls()
