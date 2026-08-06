@@ -155,7 +155,7 @@ impl ObjectSchema {
                 && let Some(additional_properties) = &self.additional_properties
             {
                 let err_before_add = context.errors.borrow().len();
-                try_validate_value_against_additional_properties(
+                let passed = try_validate_value_against_additional_properties(
                     context,
                     &key_string,
                     value,
@@ -163,6 +163,9 @@ impl ObjectSchema {
                 )?;
                 if context.errors.borrow().len() == err_before_add {
                     context.record_evaluated_property(&key_string);
+                }
+                if !passed {
+                    fail_fast!(context)
                 }
             }
             // propertyNames: validate each mapping key against the subschema.

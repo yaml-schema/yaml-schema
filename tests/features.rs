@@ -163,6 +163,21 @@ async fn stderr_output_should_end_with(world: &mut FeaturesWorld, step: &Step) {
     );
 }
 
+#[then(regex = "stderr output should start with:")]
+async fn stderr_output_should_start_with(world: &mut FeaturesWorld, step: &Step) {
+    let expected = step.docstring().expect("Expected a docstring");
+    let expected = expected.trim();
+    let output = world
+        .command_output
+        .as_ref()
+        .expect("No command has been run");
+    let actual = output.stderr.trim();
+    assert!(
+        actual.starts_with(expected),
+        "Expected stderr to start with:\n{expected}\nBut got:\n{actual}"
+    );
+}
+
 #[then(regex = "stdout should be a JSON array with two validation errors for paths foo and bar")]
 async fn stdout_json_two_validation_errors(world: &mut FeaturesWorld) {
     let output = world
@@ -182,6 +197,50 @@ async fn stdout_json_two_validation_errors(world: &mut FeaturesWorld) {
         for key in ["index", "line", "col", "path", "error"] {
             assert!(obj.contains_key(key), "missing key {key} in {obj:?}");
         }
+    }
+    let paths: Vec<&str> = arr
+        .iter()
+        .map(|e| {
+            e.get("path")
+                .and_then(|p| p.as_str())
+                .expect("path should be a string")
+        })
+        .collect();
+    assert!(
+        paths.contains(&"foo") && paths.contains(&"bar"),
+        "expected paths foo and bar, got {paths:?}"
+    );
+}
+
+#[then(
+    expr = "stdout should be a JSON array of validation errors tagged with file {string}, for paths foo and bar"
+)]
+async fn stdout_json_two_validation_errors_tagged_with_file(
+    world: &mut FeaturesWorld,
+    expected_file: String,
+) {
+    let output = world
+        .command_output
+        .as_ref()
+        .expect("No command has been run");
+    let v: Value = serde_json::from_str(output.stdout.trim()).expect("stdout should be JSON");
+    let arr = v.as_array().expect("stdout should be a JSON array");
+    assert_eq!(
+        arr.len(),
+        2,
+        "expected two validation errors, got {}",
+        arr.len()
+    );
+    for entry in arr {
+        let obj = entry.as_object().expect("each error should be an object");
+        for key in ["index", "line", "col", "path", "error", "file"] {
+            assert!(obj.contains_key(key), "missing key {key} in {obj:?}");
+        }
+        assert_eq!(
+            obj.get("file").and_then(|f| f.as_str()),
+            Some(expected_file.as_str()),
+            "unexpected file tag in {obj:?}"
+        );
     }
     let paths: Vec<&str> = arr
         .iter()

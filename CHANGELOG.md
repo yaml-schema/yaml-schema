@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-08-06
+
+### Added
+
+- CLI: `ys` accepts multiple positional file arguments (`ys [OPTIONS] [FILES...]`); the schema is resolved once and validated against each file, with per-file filename headers in human output and a `"file"` key in `--json` output ([#76](https://github.com/yaml-schema/yaml-schema/pull/76)).
+
+### Fixed
+
+- `--fail-fast` now stops at the first `additionalProperties` violation instead of continuing to scan the rest of the mapping, and no longer escapes as a hard error when the fail-fast signal originates at the top level of validation ([#76](https://github.com/yaml-schema/yaml-schema/pull/76)). `--fail-fast` also now stops a multi-file run as soon as any file produces an error.
+
 ## [0.9.2] - 2026-05-29
 
 ### Added
@@ -79,6 +89,7 @@ Major update: schema architecture refactor, new validation features, bug fixes, 
 - **v0.9.0-rc1**: NumericBounds, PatternProperty, and extended const validation ([#39](https://github.com/yaml-schema/yaml-schema/pull/39)).
 - **v0.9.0**: CLI Cucumber step definitions.
 
+[0.9.3]: https://github.com/yaml-schema/yaml-schema/releases/tag/v0.9.3
 [0.9.2]: https://github.com/yaml-schema/yaml-schema/releases/tag/v0.9.2
 [0.9.1]: https://github.com/yaml-schema/yaml-schema/releases/tag/v0.9.1
 [0.9.0]: https://github.com/yaml-schema/yaml-schema/releases/tag/v0.9.0
