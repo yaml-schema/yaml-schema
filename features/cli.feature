@@ -56,3 +56,62 @@ Feature: CLI usage
       ```
     Then it should exit with status code 1
     And stdout should be a JSON array with two validation errors for paths foo and bar
+
+  Scenario: Multiple valid files with -f
+    When the following command is run:
+      ```
+      ys -f tests/fixtures/schema.yaml tests/fixtures/valid.yaml tests/fixtures/valid.yaml
+      ```
+    Then it should exit with status code 0
+
+  Scenario: Multiple files with -f, first invalid, fails fast
+    When the following command is run:
+      ```
+      ys -f tests/fixtures/schema.yaml tests/fixtures/invalid.yaml tests/fixtures/valid.yaml
+      ```
+    Then it should exit with status code 1
+    And stderr output should end with:
+      ```
+      tests/fixtures/invalid.yaml:
+      [1:6] .foo: Expected a string, but got: 42 (int)
+      [2:6] .bar: Expected a number, but got: "I'm a string" (string)
+      ```
+
+  Scenario: Multiple files with -f and JSON output tags each error with its file
+    When the following command is run:
+      ```
+      ys --json -f tests/fixtures/schema.yaml tests/fixtures/invalid.yaml tests/fixtures/valid.yaml
+      ```
+    Then it should exit with status code 1
+    And stdout should be a JSON array of validation errors tagged with file "tests/fixtures/invalid.yaml", for paths foo and bar
+
+  Scenario: Multiple valid files using top-level $schema instead of -f
+    When the following command is run:
+      ```
+      ys tests/fixtures/instance_with_dollar_schema_valid.yaml tests/fixtures/instance_with_dollar_schema_valid.yaml
+      ```
+    Then it should exit with status code 0
+
+  Scenario: Multiple files using $schema, first invalid, fails fast
+    When the following command is run:
+      ```
+      ys tests/fixtures/instance_with_dollar_schema_invalid.yaml tests/fixtures/instance_with_dollar_schema_valid.yaml
+      ```
+    Then it should exit with status code 1
+    And stderr output should end with:
+      ```
+      tests/fixtures/instance_with_dollar_schema_invalid.yaml:
+      [2:6] .foo: Expected a string, but got: 42 (int)
+      [3:6] .bar: Expected a number, but got: "I'm a string" (string)
+      ```
+
+  Scenario: Multiple files without -f, first file missing $schema fails fast
+    When the following command is run:
+      ```
+      ys tests/fixtures/valid.yaml tests/fixtures/instance_with_dollar_schema_valid.yaml
+      ```
+    Then it should exit with status code 1
+    And stderr output should start with:
+      ```
+      Validation failed: No schema: pass -f/--schema or add a string `$schema` key to the YAML root mapping
+      ```

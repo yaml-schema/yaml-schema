@@ -37,8 +37,9 @@ pub struct Opts {
     /// {"error":"..."} on stderr.
     #[arg(long = "json")]
     pub json: bool,
-    /// The YAML file to validate
-    pub file: Option<String>,
+    /// The YAML file(s) to validate
+    #[arg(value_name = "FILES")]
+    pub files: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -51,17 +52,30 @@ fn emit_json_error(message: &str) {
     eprintln!("{}", json!({ "error": message }));
 }
 
-fn emit_validation_errors_json(errors: &[ValidationError]) {
+fn emit_error(json: bool, message: &str, e: impl std::fmt::Display) {
+    if json {
+        emit_json_error(&format!("{message}: {e}"));
+    } else {
+        eprintln!("{message}: {e}");
+        log::error!("{e}");
+    }
+}
+
+fn emit_validation_errors_json(errors: &[ValidationError], file_label: Option<&str>) {
     let entries: Vec<serde_json::Value> = errors
         .iter()
         .map(|e| {
-            json!({
+            let mut entry = json!({
                 "index": e.marker.map(|m| m.index()),
                 "line": e.marker.map(|m| m.line()),
                 "col": e.marker.map(|m| m.col()),
                 "path": e.path,
                 "error": e.error,
-            })
+            });
+            if let Some(file) = file_label {
+                entry["file"] = json!(file);
+            }
+            entry
         })
         .collect();
     println!("{}", serde_json::Value::Array(entries));
@@ -84,11 +98,7 @@ fn main() {
                 std::process::exit(return_code);
             }
             Err(e) => {
-                if json {
-                    emit_json_error(&e.to_string());
-                } else {
-                    eprintln!("Validation failed: {e}");
-                }
+                emit_error(json, "Validation failed", e);
                 std::process::exit(1);
             }
         }
@@ -119,111 +129,120 @@ fn insert_preloaded_entry(
     schema_rc
 }
 
-/// The `ys validate` command
-fn command_validate(opts: Opts) -> Result<i32> {
+/// Outcome of resolving the root schema and preload map for a given instance file.
+enum SchemaResolution {
+    /// The schema was resolved successfully and is ready for evaluation.
+    Ready(Rc<RootSchema>, HashMap<String, Rc<RootSchema>>),
+    /// Resolution failed; an error has already been emitted, so the caller should
+    /// stop and return this exit code as-is.
+    Failed(i32),
+}
+
+/// Resolves the root schema (and any preloaded `$ref` targets) from `-f/--schema`. Only the
+/// first `-f` is used as the root; this does not depend on any particular instance file, so
+/// the caller resolves it once and reuses it across every file being validated.
+fn resolve_schema_from_flag(opts: &Opts) -> Result<SchemaResolution> {
     let json = opts.json;
-    let yaml_filename = match &opts.file {
-        Some(f) => f.as_str(),
-        None => return Err(eyre::eyre!("No YAML file specified")),
-    };
 
-    let yaml_contents = std::fs::read_to_string(yaml_filename)
-        .wrap_err_with(|| format!("Failed to read YAML file: {yaml_filename}"))?;
-
-    let (root_for_eval, preloaded) = if !opts.schemas.is_empty() {
-        let root_path = opts.schemas.first().expect("non-empty schemas");
-        let root_schema = match loader::load_file(root_path) {
-            Ok(schema) => schema,
-            Err(e) => {
-                if json {
-                    emit_json_error(&format!("Failed to read YAML schema file {root_path}: {e}"));
-                } else {
-                    eprintln!("Failed to read YAML schema file: {root_path}");
-                    log::error!("{e}");
-                }
-                return Ok(1);
-            }
-        };
-
-        let mut preloaded = HashMap::new();
-        for path in &opts.schemas {
-            let uri = match schema_uri(path) {
-                Ok(u) => u,
-                Err(e) => {
-                    if json {
-                        emit_json_error(&format!("Failed to resolve schema path {path}: {e}"));
-                    } else {
-                        eprintln!("Failed to resolve schema path: {path}: {e}");
-                    }
-                    return Ok(1);
-                }
-            };
-            let schema = match loader::load_file(path) {
-                Ok(s) => s,
-                Err(e) => {
-                    if json {
-                        emit_json_error(&format!("Failed to load schema file {path}: {e}"));
-                    } else {
-                        eprintln!("Failed to load schema file: {path}");
-                        log::error!("{e}");
-                    }
-                    return Ok(1);
-                }
-            };
-            let _ = insert_preloaded_entry(&mut preloaded, schema, uri);
+    let root_path = opts.schemas.first().expect("non-empty schemas");
+    let root_schema = match loader::load_file(root_path) {
+        Ok(schema) => schema,
+        Err(e) => {
+            emit_error(
+                json,
+                &format!("Failed to read YAML schema file: {root_path}"),
+                e,
+            );
+            return Ok(SchemaResolution::Failed(1));
         }
-
-        let root_rc = Rc::new(root_schema);
-        (root_rc, preloaded)
-    } else {
-        let instance_parent = Path::new(yaml_filename).parent().unwrap_or(Path::new("."));
-        let schema_ref = match loader::extract_dollar_schema_from_yaml(&yaml_contents) {
-            Ok(Some(s)) => s,
-            Ok(None) => {
-                return Err(eyre::eyre!(
-                    "No schema: pass -f/--schema or add a string `$schema` key to the YAML root mapping"
-                ));
-            }
-            Err(e) => {
-                return Err(eyre::eyre!(
-                    "Could not read `$schema` from instance YAML: {e}"
-                ));
-            }
-        };
-
-        let (root, uri) = match loader::load_root_schema_from_ref(&schema_ref, instance_parent) {
-            Ok(pair) => pair,
-            Err(e) => {
-                if json {
-                    emit_json_error(&format!(
-                        "Failed to load schema from $schema {schema_ref:?}: {e}"
-                    ));
-                } else {
-                    eprintln!("Failed to load schema from $schema: {schema_ref}");
-                    log::error!("{e}");
-                }
-                return Ok(1);
-            }
-        };
-
-        let mut preloaded = HashMap::new();
-        let root_rc = insert_preloaded_entry(&mut preloaded, root, uri);
-
-        (root_rc, preloaded)
     };
 
-    match Engine::evaluate_with_schemas(
-        root_for_eval.as_ref(),
-        &yaml_contents,
-        opts.fail_fast,
-        preloaded,
-    ) {
+    let mut preloaded = HashMap::new();
+    for path in &opts.schemas {
+        let uri = match schema_uri(path) {
+            Ok(u) => u,
+            Err(e) => {
+                emit_error(json, &format!("Failed to resolve schema path: {path}"), e);
+                return Ok(SchemaResolution::Failed(1));
+            }
+        };
+        let schema = match loader::load_file(path) {
+            Ok(s) => s,
+            Err(e) => {
+                emit_error(json, &format!("Failed to load schema file: {path}"), e);
+                return Ok(SchemaResolution::Failed(1));
+            }
+        };
+        let _ = insert_preloaded_entry(&mut preloaded, schema, uri);
+    }
+
+    let root_rc = Rc::new(root_schema);
+    Ok(SchemaResolution::Ready(root_rc, preloaded))
+}
+
+/// Resolves the root schema (and any preloaded `$ref` targets) from the instance's own
+/// top-level `$schema` key. Each file's parent dir and `$schema` value can differ, so this
+/// is resolved fresh per file.
+fn resolve_schema_from_instance(
+    opts: &Opts,
+    yaml_filename: &str,
+    yaml_contents: &str,
+) -> Result<SchemaResolution> {
+    let json = opts.json;
+
+    let instance_parent = Path::new(yaml_filename).parent().unwrap_or(Path::new("."));
+    let schema_ref = match loader::extract_dollar_schema_from_yaml(yaml_contents) {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return Err(eyre::eyre!(
+                "No schema: pass -f/--schema or add a string `$schema` key to the YAML root mapping"
+            ));
+        }
+        Err(e) => {
+            return Err(eyre::eyre!(
+                "Could not read `$schema` from instance YAML: {e}"
+            ));
+        }
+    };
+
+    let (root, uri) = match loader::load_root_schema_from_ref(&schema_ref, instance_parent) {
+        Ok(pair) => pair,
+        Err(e) => {
+            emit_error(
+                json,
+                &format!("Failed to load schema from $schema: {schema_ref}"),
+                e,
+            );
+            return Ok(SchemaResolution::Failed(1));
+        }
+    };
+
+    let mut preloaded = HashMap::new();
+    let root_rc = insert_preloaded_entry(&mut preloaded, root, uri);
+
+    Ok(SchemaResolution::Ready(root_rc, preloaded))
+}
+
+/// Evaluates `yaml_contents` against `root_for_eval` (with `preloaded` available for `$ref`
+/// resolution) and reports the outcome, returning the process exit code.
+fn evaluate_and_report(
+    root_for_eval: &RootSchema,
+    yaml_contents: &str,
+    fail_fast: bool,
+    preloaded: HashMap<String, Rc<RootSchema>>,
+    json: bool,
+    file_label: Option<&str>,
+) -> Result<i32> {
+    match Engine::evaluate_with_schemas(root_for_eval, yaml_contents, fail_fast, preloaded) {
         Ok(context) => {
             if context.has_errors() {
                 let errors = context.errors.borrow();
                 if json {
-                    emit_validation_errors_json(errors.as_slice());
+                    emit_validation_errors_json(errors.as_slice(), file_label);
                 } else {
+                    if let Some(file) = file_label {
+                        eprintln!("{file}:");
+                    }
                     for error in errors.iter() {
                         eprintln!("{error}");
                     }
@@ -233,12 +252,64 @@ fn command_validate(opts: Opts) -> Result<i32> {
             Ok(0)
         }
         Err(e) => {
-            if json {
-                emit_json_error(&format!("Validation failed: {e}"));
-            } else {
-                eprintln!("Validation failed: {e}");
-            }
+            let message = match file_label {
+                Some(file) => format!("{file}: Validation failed"),
+                None => "Validation failed".to_string(),
+            };
+            emit_error(json, &message, e);
             Ok(1)
         }
     }
+}
+
+/// The `ys validate` command
+fn command_validate(opts: Opts) -> Result<i32> {
+    let json = opts.json;
+    if opts.files.is_empty() {
+        return Err(eyre::eyre!("No YAML files specified"));
+    }
+
+    // Resolved once and reused across every file, since only a single `-f` root is supported.
+    let flag_schema = if opts.schemas.is_empty() {
+        None
+    } else {
+        match resolve_schema_from_flag(&opts)? {
+            SchemaResolution::Ready(root, preloaded) => Some((root, preloaded)),
+            SchemaResolution::Failed(code) => return Ok(code),
+        }
+    };
+
+    for yaml_filename in &opts.files {
+        let yaml_contents = std::fs::read_to_string(yaml_filename)
+            .wrap_err_with(|| format!("Failed to read YAML file: {yaml_filename}"))?;
+
+        let (root_for_eval, preloaded) = if let Some((root, preloaded)) = &flag_schema {
+            (Rc::clone(root), preloaded.clone())
+        } else {
+            match resolve_schema_from_instance(&opts, yaml_filename, &yaml_contents)? {
+                SchemaResolution::Ready(root, preloaded) => (root, preloaded),
+                SchemaResolution::Failed(code) => return Ok(code),
+            }
+        };
+
+        let file_label = if opts.files.len() > 1 {
+            Some(yaml_filename.as_str())
+        } else {
+            None
+        };
+        let code = evaluate_and_report(
+            root_for_eval.as_ref(),
+            &yaml_contents,
+            opts.fail_fast,
+            preloaded,
+            json,
+            file_label,
+        )?;
+        if code != 0 {
+            // Fail fast: stop validating the rest of the batch as soon as any file errors.
+            return Ok(code);
+        }
+    }
+
+    Ok(0)
 }

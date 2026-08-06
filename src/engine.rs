@@ -45,9 +45,10 @@ impl<'a> Engine<'a> {
         let engine = Engine::new(root_schema, context);
         let docs = saphyr::MarkedYaml::load_from_str(value).map_err(Error::YamlParsingError)?;
         match docs.first() {
-            Some(yaml) => {
-                engine.root_schema.validate(&engine.context, yaml)?;
-            }
+            Some(yaml) => match engine.root_schema.validate(&engine.context, yaml) {
+                Ok(()) | Err(Error::FailFast) => {}
+                Err(e) => return Err(e),
+            },
             None => match &engine.root_schema.schema {
                 YamlSchema::Empty | YamlSchema::BooleanLiteral(true) => (),
                 _ => engine
