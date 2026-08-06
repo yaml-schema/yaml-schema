@@ -8,7 +8,7 @@ Feature: CLI usage
     Then it should exit with status code 0
     And it should output:
       ```
-      ys 0.9.2
+      ys 0.9.3
       ```
 
   Scenario: Basic validation with a valid file
