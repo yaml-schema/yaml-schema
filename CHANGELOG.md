@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- CLI: `ys` accepts multiple positional file arguments (`ys [OPTIONS] [FILES...]`); the schema is resolved once and validated against each file, with per-file filename headers in human output and a `"file"` key in `--json` output ([#76](https://github.com/yaml-schema/yaml-schema/pull/76)).
+
+### Fixed
+
+- `--fail-fast` now stops at the first `additionalProperties` violation instead of continuing to scan the rest of the mapping, and no longer escapes as a hard error when the fail-fast signal originates at the top level of validation ([#76](https://github.com/yaml-schema/yaml-schema/pull/76)). `--fail-fast` also now stops a multi-file run as soon as any file produces an error.
+
 ## [0.9.2] - 2026-05-29
 
 ### Added
