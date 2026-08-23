@@ -1,0 +1,1231 @@
+$schema: https://yaml-schema.net/yaml-schema.yaml
+title: GitHub Actions Workflow
+description: >-
+  Schema for GitHub Actions workflow files, converted from
+  https://json.schemastore.org/github-workflow.json
+type: object
+additionalProperties: false
+required:
+  - "on"
+  - jobs
+properties:
+  name:
+    description: The name of the workflow, displayed on the Actions page.
+    type: string
+  on:
+    description: The event(s) that trigger the workflow.
+    oneOf:
+      - $ref: "#/$defs/event"
+      - type: array
+        items:
+          $ref: "#/$defs/event"
+        minItems: 1
+      - type: object
+        additionalProperties: false
+        properties:
+          branch_protection_rule:
+            description: Runs the workflow when a branch protection rule event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, edited, deleted]
+                    minItems: 1
+                  - type: string
+          check_run:
+            description: Runs the workflow when a check_run event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, rerequested, completed, requested_action]
+                    minItems: 1
+                  - type: string
+          check_suite:
+            description: Runs the workflow when a check_suite event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [completed, requested, rerequested]
+                    minItems: 1
+                  - type: string
+          create:
+            description: Runs the workflow when someone creates a branch or tag.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          delete:
+            description: Runs the workflow when someone deletes a branch or tag.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          deployment:
+            description: Runs the workflow when someone creates a deployment.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          deployment_status:
+            description: Runs the workflow when a third party provides a deployment status.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          discussion:
+            description: Runs the workflow when a discussion event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum:
+                        - created
+                        - edited
+                        - deleted
+                        - transferred
+                        - pinned
+                        - unpinned
+                        - labeled
+                        - unlabeled
+                        - locked
+                        - unlocked
+                        - category_changed
+                        - answered
+                        - unanswered
+                    minItems: 1
+                  - type: string
+          discussion_comment:
+            description: Runs the workflow when a discussion_comment event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, edited, deleted]
+                    minItems: 1
+                  - type: string
+          fork:
+            description: Runs the workflow when someone forks the repository.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          gollum:
+            description: Runs the workflow when someone creates or updates a Wiki page.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          issue_comment:
+            description: Runs the workflow when an issue_comment event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, edited, deleted]
+                    minItems: 1
+                  - type: string
+          issues:
+            description: Runs the workflow when an issues event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum:
+                        - opened
+                        - edited
+                        - deleted
+                        - transferred
+                        - pinned
+                        - unpinned
+                        - closed
+                        - reopened
+                        - assigned
+                        - unassigned
+                        - labeled
+                        - unlabeled
+                        - locked
+                        - unlocked
+                        - milestoned
+                        - demilestoned
+                        - typed
+                        - untyped
+                        - field_added
+                        - field_removed
+                    minItems: 1
+                  - type: string
+          label:
+            description: Runs the workflow when a label event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, edited, deleted]
+                    minItems: 1
+                  - type: string
+          merge_group:
+            description: Runs the workflow when a pull request is added to a merge queue.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [checks_requested]
+                    minItems: 1
+                  - type: string
+          milestone:
+            description: Runs the workflow when a milestone event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, closed, opened, edited, deleted]
+                    minItems: 1
+                  - type: string
+          page_build:
+            description: Runs the workflow when someone pushes to a GitHub Pages-enabled branch.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          project:
+            description: Runs the workflow when a project event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, updated, closed, reopened, edited, deleted]
+                    minItems: 1
+                  - type: string
+          project_card:
+            description: Runs the workflow when a project_card event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, moved, converted, edited, deleted]
+                    minItems: 1
+                  - type: string
+          project_column:
+            description: Runs the workflow when a project_column event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, updated, moved, deleted]
+                    minItems: 1
+                  - type: string
+          public:
+            description: Runs the workflow when someone makes a private repository public.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          pull_request:
+            description: Runs the workflow when a pull_request event occurs.
+            oneOf:
+              - type: "null"
+              - allOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      types:
+                        oneOf:
+                          - type: array
+                            items:
+                              type: string
+                              enum:
+                                - assigned
+                                - unassigned
+                                - labeled
+                                - unlabeled
+                                - opened
+                                - edited
+                                - closed
+                                - reopened
+                                - synchronize
+                                - converted_to_draft
+                                - ready_for_review
+                                - locked
+                                - unlocked
+                                - milestoned
+                                - demilestoned
+                                - review_requested
+                                - review_request_removed
+                                - auto_merge_enabled
+                                - auto_merge_disabled
+                                - enqueued
+                                - dequeued
+                            minItems: 1
+                          - type: string
+                      branches:
+                        $ref: "#/$defs/branch"
+                      branches-ignore:
+                        $ref: "#/$defs/branch"
+                      tags:
+                        $ref: "#/$defs/branch"
+                      tags-ignore:
+                        $ref: "#/$defs/branch"
+                      paths:
+                        $ref: "#/$defs/path"
+                      paths-ignore:
+                        $ref: "#/$defs/path"
+                  - not:
+                      type: object
+                      required: [branches, branches-ignore]
+                  - not:
+                      type: object
+                      required: [tags, tags-ignore]
+                  - not:
+                      type: object
+                      required: [paths, paths-ignore]
+          pull_request_review:
+            description: Runs the workflow when a pull_request_review event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [submitted, edited, dismissed]
+                    minItems: 1
+                  - type: string
+          pull_request_review_comment:
+            description: Runs the workflow when a pull_request_review_comment event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [created, edited, deleted]
+                    minItems: 1
+                  - type: string
+          pull_request_target:
+            description: Like pull_request, but runs in the context of the base repository.
+            oneOf:
+              - type: "null"
+              - allOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      types:
+                        oneOf:
+                          - type: array
+                            items:
+                              type: string
+                              enum:
+                                - assigned
+                                - unassigned
+                                - labeled
+                                - unlabeled
+                                - opened
+                                - edited
+                                - closed
+                                - reopened
+                                - synchronize
+                                - converted_to_draft
+                                - ready_for_review
+                                - locked
+                                - unlocked
+                                - review_requested
+                                - review_request_removed
+                                - auto_merge_enabled
+                                - auto_merge_disabled
+                            minItems: 1
+                          - type: string
+                      branches:
+                        $ref: "#/$defs/branch"
+                      branches-ignore:
+                        $ref: "#/$defs/branch"
+                      tags:
+                        $ref: "#/$defs/branch"
+                      tags-ignore:
+                        $ref: "#/$defs/branch"
+                      paths:
+                        $ref: "#/$defs/path"
+                      paths-ignore:
+                        $ref: "#/$defs/path"
+                  - not:
+                      type: object
+                      required: [branches, branches-ignore]
+                  - not:
+                      type: object
+                      required: [tags, tags-ignore]
+                  - not:
+                      type: object
+                      required: [paths, paths-ignore]
+          push:
+            description: Runs the workflow when someone pushes to a repository branch.
+            oneOf:
+              - type: "null"
+              - allOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      branches:
+                        $ref: "#/$defs/branch"
+                      branches-ignore:
+                        $ref: "#/$defs/branch"
+                      tags:
+                        $ref: "#/$defs/branch"
+                      tags-ignore:
+                        $ref: "#/$defs/branch"
+                      paths:
+                        $ref: "#/$defs/path"
+                      paths-ignore:
+                        $ref: "#/$defs/path"
+                  - not:
+                      type: object
+                      required: [branches, branches-ignore]
+                  - not:
+                      type: object
+                      required: [tags, tags-ignore]
+                  - not:
+                      type: object
+                      required: [paths, paths-ignore]
+          registry_package:
+            description: Runs the workflow when a package is published or updated.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [published, updated]
+                    minItems: 1
+                  - type: string
+          release:
+            description: Runs the workflow when a release event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum:
+                        - published
+                        - unpublished
+                        - created
+                        - edited
+                        - deleted
+                        - prereleased
+                        - released
+                    minItems: 1
+                  - type: string
+          status:
+            description: Runs the workflow when the status of a Git commit changes.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          watch:
+            description: Runs the workflow when a watch event occurs.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          workflow_call:
+            description: Allows this workflow to be reused/called by other workflows.
+            type: object
+            properties:
+              inputs:
+                description: Inputs passed to the called workflow from the caller.
+                type: object
+                additionalProperties: false
+                patternProperties:
+                  "^[_a-zA-Z][a-zA-Z0-9_-]*$":
+                    type: object
+                    additionalProperties: false
+                    required: [type]
+                    properties:
+                      description:
+                        type: string
+                      required:
+                        type: boolean
+                      type:
+                        type: string
+                        enum: [boolean, number, string]
+                      default:
+                        type: [boolean, number, string]
+              outputs:
+                description: Outputs that the caller workflow can use.
+                type: object
+                additionalProperties: false
+                patternProperties:
+                  "^[_a-zA-Z][a-zA-Z0-9_-]*$":
+                    type: object
+                    additionalProperties: false
+                    required: [value]
+                    properties:
+                      description:
+                        type: string
+                      value:
+                        type: string
+              secrets:
+                description: Secrets that can be used in the called workflow.
+                type: object
+                additionalProperties: false
+                patternProperties:
+                  "^[_a-zA-Z][a-zA-Z0-9_-]*$":
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      description:
+                        type: string
+                      required:
+                        type: boolean
+          workflow_dispatch:
+            description: Manually triggered workflow with a "Run workflow" button on the Actions tab.
+            type: object
+            additionalProperties: false
+            properties:
+              inputs:
+                description: Input parameters passed as environment variables.
+                type: object
+                additionalProperties: false
+                patternProperties:
+                  "^[_a-zA-Z][a-zA-Z0-9_-]*$":
+                    $ref: "#/$defs/workflowDispatchInput"
+          workflow_run:
+            description: Runs when another workflow's run is requested or completed.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+            properties:
+              types:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                      enum: [requested, completed, in_progress]
+                    minItems: 1
+                  - type: string
+              workflows:
+                type: array
+                items:
+                  type: string
+                minItems: 1
+          repository_dispatch:
+            description: Triggered by a POST to the repository_dispatch API endpoint.
+            allOf:
+              - $ref: "#/$defs/eventObject"
+          schedule:
+            description: Runs the workflow at scheduled UTC times using POSIX cron syntax.
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: [cron]
+              properties:
+                cron:
+                  type: string
+                timezone:
+                  type: string
+            minItems: 1
+  env:
+    description: A map of environment variables available to all jobs and steps.
+    $ref: "#/$defs/env"
+  defaults:
+    description: Default settings applied to all jobs in the workflow.
+    $ref: "#/$defs/defaults"
+  concurrency:
+    description: Ensures only a single job or workflow using the same concurrency group runs at a time.
+    oneOf:
+      - type: string
+      - $ref: "#/$defs/concurrency"
+  jobs:
+    description: A workflow run is made up of one or more jobs, keyed by job id.
+    type: object
+    additionalProperties: false
+    minProperties: 1
+    patternProperties:
+      "^[_a-zA-Z][a-zA-Z0-9_-]*$":
+        oneOf:
+          - $ref: "#/$defs/normalJob"
+          - $ref: "#/$defs/reusableWorkflowCallJob"
+  run-name:
+    description: The name for workflow runs generated from the workflow.
+    type: string
+  permissions:
+    $ref: "#/$defs/permissions"
+
+$defs:
+  architecture:
+    type: string
+    enum: [ARM32, x64, x86]
+
+  branch:
+    description: Glob patterns matching branch or tag names.
+    $ref: "#/$defs/globs"
+
+  concurrency:
+    type: object
+    additionalProperties: false
+    required: [group]
+    properties:
+      group:
+        description: The concurrency group name or expression.
+        type: string
+      cancel-in-progress:
+        description: Cancel any currently running job/workflow in the same group.
+        oneOf:
+          - type: boolean
+          - $ref: "#/$defs/expressionSyntax"
+      queue:
+        description: Controls how pending runs are queued within a concurrency group.
+        type: string
+        enum: [single, max]
+
+  configuration:
+    oneOf:
+      - type: string
+      - type: number
+      - type: boolean
+      - type: object
+        additionalProperties:
+          $ref: "#/$defs/configuration"
+      - type: array
+        items:
+          $ref: "#/$defs/configuration"
+
+  jobContainer:
+    type: object
+    additionalProperties: false
+    required: [image]
+    properties:
+      image:
+        description: The Docker image to use as the container to run the action.
+        type: string
+      credentials:
+        description: Username/password for the container registry, if authentication is required.
+        type: object
+        properties:
+          username:
+            type: string
+          password:
+            type: string
+      env:
+        description: Environment variables to set in the container.
+        $ref: "#/$defs/env"
+      ports:
+        description: Ports to expose on the container.
+        type: array
+        items:
+          oneOf:
+            - type: number
+            - type: string
+        minItems: 1
+      volumes:
+        description: Volumes for the container to use.
+        type: array
+        items:
+          type: string
+        minItems: 1
+      options:
+        description: Additional Docker container resource options.
+        type: string
+
+  serviceContainer:
+    type: object
+    additionalProperties: false
+    required: [image]
+    properties:
+      image:
+        description: The Docker image to use as the service container.
+        type: string
+      credentials:
+        type: object
+        properties:
+          username:
+            type: string
+          password:
+            type: string
+      env:
+        $ref: "#/$defs/env"
+      ports:
+        type: array
+        items:
+          oneOf:
+            - type: number
+            - type: string
+        minItems: 1
+      volumes:
+        type: array
+        items:
+          type: string
+        minItems: 1
+      options:
+        type: string
+      command:
+        description: Overrides the Docker image's default command.
+        type: string
+      entrypoint:
+        description: Overrides the Docker image's default entrypoint.
+        type: string
+
+  defaults:
+    type: object
+    additionalProperties: false
+    minProperties: 1
+    properties:
+      run:
+        type: object
+        additionalProperties: false
+        minProperties: 1
+        properties:
+          shell:
+            $ref: "#/$defs/shell"
+          working-directory:
+            $ref: "#/$defs/working-directory"
+
+  permissions:
+    description: Modifies the default permissions granted to the GITHUB_TOKEN.
+    oneOf:
+      - type: string
+        enum: [read-all, write-all]
+      - $ref: "#/$defs/permissions-event"
+
+  permissions-event:
+    type: object
+    additionalProperties: false
+    properties:
+      actions:
+        $ref: "#/$defs/permissions-level"
+      artifact-metadata:
+        $ref: "#/$defs/permissions-level"
+      attestations:
+        $ref: "#/$defs/permissions-level"
+      checks:
+        $ref: "#/$defs/permissions-level"
+      code-quality:
+        $ref: "#/$defs/permissions-level"
+      contents:
+        $ref: "#/$defs/permissions-level"
+      deployments:
+        $ref: "#/$defs/permissions-level"
+      discussions:
+        $ref: "#/$defs/permissions-level"
+      id-token:
+        $ref: "#/$defs/permissions-level"
+      issues:
+        $ref: "#/$defs/permissions-level"
+      models:
+        type: string
+        enum: [read, none]
+      packages:
+        $ref: "#/$defs/permissions-level"
+      pages:
+        $ref: "#/$defs/permissions-level"
+      pull-requests:
+        $ref: "#/$defs/permissions-level"
+      repository-projects:
+        $ref: "#/$defs/permissions-level"
+      security-events:
+        $ref: "#/$defs/permissions-level"
+      statuses:
+        $ref: "#/$defs/permissions-level"
+
+  permissions-level:
+    type: string
+    enum: [read, write, none]
+
+  env:
+    description: A map of environment variables, or an expression string.
+    oneOf:
+      - type: object
+        additionalProperties:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+      - $ref: "#/$defs/stringContainingExpressionSyntax"
+
+  environment:
+    description: The environment that the job references.
+    type: object
+    additionalProperties: false
+    required: [name]
+    properties:
+      name:
+        description: The name of the environment configured in the repo.
+        type: string
+      url:
+        description: A deployment URL.
+        type: string
+      deployment:
+        description: Whether to create a deployment record for this job.
+        oneOf:
+          - type: boolean
+          - $ref: "#/$defs/expressionSyntax"
+
+  event:
+    type: string
+    enum:
+      - branch_protection_rule
+      - check_run
+      - check_suite
+      - create
+      - delete
+      - deployment
+      - deployment_status
+      - discussion
+      - discussion_comment
+      - fork
+      - gollum
+      - issue_comment
+      - issues
+      - label
+      - merge_group
+      - milestone
+      - page_build
+      - project
+      - project_card
+      - project_column
+      - public
+      - pull_request
+      - pull_request_review
+      - pull_request_review_comment
+      - pull_request_target
+      - push
+      - registry_package
+      - release
+      - status
+      - watch
+      - workflow_call
+      - workflow_dispatch
+      - workflow_run
+      - repository_dispatch
+
+  eventObject:
+    oneOf:
+      - type: object
+      - type: "null"
+
+  expressionSyntax:
+    description: A GitHub Actions expression, e.g. "${{ github.ref }}".
+    type: string
+    pattern: "^\\$\\{\\{(.|[\r\n])*\\}\\}$"
+
+  stringContainingExpressionSyntax:
+    description: A string that contains at least one GitHub Actions expression.
+    type: string
+    pattern: "^.*\\$\\{\\{(.|[\r\n])*\\}\\}.*$"
+
+  globs:
+    type: array
+    items:
+      type: string
+      minLength: 1
+    minItems: 1
+
+  machine:
+    type: string
+    enum: [linux, macos, windows]
+
+  name:
+    type: string
+    pattern: "^[_a-zA-Z][a-zA-Z0-9_-]*$"
+
+  path:
+    description: Glob patterns matching file paths, for push/pull_request filtering.
+    $ref: "#/$defs/globs"
+
+  shell:
+    description: Overrides the default shell used to run step commands.
+    anyOf:
+      - type: string
+      - type: string
+        enum: [bash, pwsh, python, sh, cmd, powershell]
+
+  snapshot:
+    description: Generates a custom runner image from this job.
+    oneOf:
+      - type: string
+      - type: object
+        additionalProperties: false
+        required: [image-name]
+        properties:
+          image-name:
+            type: string
+          version:
+            type: string
+            pattern: "^\\d+(\\.\\d+|\\*)?$"
+
+  step:
+    type: object
+    additionalProperties: false
+    dependentRequired:
+      working-directory: [run]
+      shell: [run]
+    oneOf:
+      - type: object
+        required: [uses]
+      - type: object
+        required: [run]
+      - type: object
+        required: [wait]
+      - type: object
+        required: [wait-all]
+      - type: object
+        required: [cancel]
+      - type: object
+        required: [parallel]
+    properties:
+      id:
+        description: A unique identifier for the step, referenced in contexts.
+        type: string
+      if:
+        description: Prevents the step from running unless the condition is met.
+        type: [boolean, number, string]
+      name:
+        description: A name for the step, displayed on GitHub.
+        type: string
+      uses:
+        description: Selects an action to run as part of this step.
+        type: string
+      run:
+        description: Runs command-line programs using the OS shell.
+        type: string
+      working-directory:
+        $ref: "#/$defs/working-directory"
+      shell:
+        $ref: "#/$defs/shell"
+      with:
+        description: Input parameters defined by the action, as a map.
+        $ref: "#/$defs/env"
+      env:
+        description: Environment variables for this step.
+        $ref: "#/$defs/env"
+      continue-on-error:
+        description: Allows the job to pass even when this step fails.
+        oneOf:
+          - type: boolean
+          - $ref: "#/$defs/expressionSyntax"
+      timeout-minutes:
+        description: The maximum number of minutes to run the step before killing it.
+        oneOf:
+          - type: number
+          - $ref: "#/$defs/expressionSyntax"
+      background:
+        description: Runs the step asynchronously without waiting for it to finish.
+        type: boolean
+      wait:
+        description: Pauses the job until one or more background steps complete.
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+            minItems: 1
+      wait-all:
+        description: Pauses the job until all active background steps complete.
+        type: [boolean, "null"]
+      cancel:
+        description: Gracefully terminates a running background step by id.
+        type: string
+      parallel:
+        description: Runs a group of steps concurrently as background steps.
+        type: array
+        items:
+          $ref: "#/$defs/step"
+        minItems: 1
+
+  types:
+    description: Selects the activity types that trigger the workflow.
+    oneOf:
+      - type: array
+        minItems: 1
+      - type: string
+
+  working-directory:
+    description: The working directory in which to run the command.
+    type: string
+
+  jobNeeds:
+    description: Jobs that must complete successfully before this job runs.
+    oneOf:
+      - type: array
+        items:
+          $ref: "#/$defs/name"
+        minItems: 1
+      - $ref: "#/$defs/name"
+
+  matrix:
+    description: A build matrix of different configurations of the virtual environment.
+    oneOf:
+      - type: object
+        minProperties: 1
+        patternProperties:
+          "^(in|ex)clude$":
+            oneOf:
+              - $ref: "#/$defs/expressionSyntax"
+              - type: array
+                items:
+                  type: object
+                  additionalProperties:
+                    $ref: "#/$defs/configuration"
+                minItems: 1
+        additionalProperties:
+          oneOf:
+            - type: array
+              items:
+                $ref: "#/$defs/configuration"
+              minItems: 1
+            - $ref: "#/$defs/expressionSyntax"
+      - $ref: "#/$defs/expressionSyntax"
+
+  reusableWorkflowCallJob:
+    description: A job that calls a reusable workflow.
+    type: object
+    additionalProperties: false
+    required: [uses]
+    properties:
+      name:
+        description: The name of the job, displayed on GitHub.
+        type: string
+      needs:
+        $ref: "#/$defs/jobNeeds"
+      permissions:
+        $ref: "#/$defs/permissions"
+      if:
+        description: Prevents the job from running unless the condition is met.
+        type: [boolean, number, string]
+      uses:
+        description: The location and version of the reusable workflow file to run as a job.
+        type: string
+        pattern: "^(.+\\/)+(.+)\\.(ya?ml)(@.+)?$"
+      with:
+        description: Inputs passed to the called workflow.
+        $ref: "#/$defs/env"
+      secrets:
+        description: Secrets passed to the called workflow, or "inherit".
+        oneOf:
+          - $ref: "#/$defs/env"
+          - type: string
+            enum: [inherit]
+      strategy:
+        description: Creates a build matrix for this job.
+        type: object
+        additionalProperties: false
+        required: [matrix]
+        properties:
+          matrix:
+            $ref: "#/$defs/matrix"
+          fail-fast:
+            description: Cancels all in-progress matrix jobs if any job fails.
+            type: [boolean, string]
+          max-parallel:
+            description: The maximum number of matrix jobs that can run simultaneously.
+            type: [number, string]
+      concurrency:
+        oneOf:
+          - type: string
+          - $ref: "#/$defs/concurrency"
+
+  normalJob:
+    description: A job in the workflow, keyed by a unique job id.
+    type: object
+    additionalProperties: false
+    required: [runs-on]
+    properties:
+      name:
+        description: The name of the job, displayed on GitHub.
+        type: string
+      needs:
+        $ref: "#/$defs/jobNeeds"
+      snapshot:
+        $ref: "#/$defs/snapshot"
+      permissions:
+        $ref: "#/$defs/permissions"
+      runs-on:
+        description: The type of machine to run the job on.
+        anyOf:
+          - type: string
+          - type: array
+            anyOf:
+              - prefixItems:
+                  - type: string
+                minItems: 1
+                items:
+                  type: string
+          - type: object
+            properties:
+              group:
+                type: string
+              labels:
+                oneOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: string
+          - $ref: "#/$defs/stringContainingExpressionSyntax"
+          - $ref: "#/$defs/expressionSyntax"
+      environment:
+        description: The environment that the job references.
+        oneOf:
+          - type: string
+          - $ref: "#/$defs/environment"
+      outputs:
+        description: Outputs for the job, available to all downstream jobs.
+        type: object
+        additionalProperties:
+          type: string
+        minProperties: 1
+      env:
+        description: Environment variables available to all steps in the job.
+        $ref: "#/$defs/env"
+      defaults:
+        description: Default settings applied to all steps in the job.
+        $ref: "#/$defs/defaults"
+      if:
+        description: Prevents the job from running unless the condition is met.
+        type: [boolean, number, string]
+      steps:
+        description: A sequence of tasks called steps.
+        type: array
+        items:
+          $ref: "#/$defs/step"
+        minItems: 1
+      timeout-minutes:
+        description: The maximum number of minutes to let the job run before it's cancelled.
+        oneOf:
+          - type: number
+          - $ref: "#/$defs/expressionSyntax"
+      strategy:
+        description: Creates a build matrix for this job.
+        type: object
+        additionalProperties: false
+        required: [matrix]
+        properties:
+          matrix:
+            $ref: "#/$defs/matrix"
+          fail-fast:
+            type: [boolean, string]
+          max-parallel:
+            type: [number, string]
+      continue-on-error:
+        description: Allows the workflow run to pass even when this job fails.
+        oneOf:
+          - type: boolean
+          - $ref: "#/$defs/expressionSyntax"
+      container:
+        description: A container to run any steps that don't already specify one.
+        oneOf:
+          - type: string
+          - $ref: "#/$defs/jobContainer"
+      services:
+        description: Additional containers to host services for the job.
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/serviceContainer"
+      concurrency:
+        oneOf:
+          - type: string
+          - $ref: "#/$defs/concurrency"
+
+  workflowDispatchInput:
+    description: Metadata for a workflow_dispatch input parameter.
+    type: object
+    additionalProperties: false
+    properties:
+      description:
+        type: string
+      deprecationMessage:
+        type: string
+      required:
+        type: boolean
+      default: {}
+      type:
+        type: string
+        enum: [string, choice, boolean, number, environment]
+      options:
+        description: The dropdown options, if the input type is "choice".
+        type: array
+        items:
+          type: string
+        minItems: 1
+    allOf:
+      - if:
+          required: [type]
+          properties:
+            type:
+              const: string
+        then:
+          properties:
+            default:
+              type: string
+      - if:
+          required: [type]
+          properties:
+            type:
+              const: boolean
+        then:
+          properties:
+            default:
+              type: boolean
+      - if:
+          required: [type]
+          properties:
+            type:
+              const: number
+        then:
+          properties:
+            default:
+              type: number
+      - if:
+          required: [type]
+          properties:
+            type:
+              const: environment
+        then:
+          properties:
+            default:
+              type: string
+      - if:
+          required: [type]
+          properties:
+            type:
+              const: choice
+        then:
+          type: object
+          required: [options]
