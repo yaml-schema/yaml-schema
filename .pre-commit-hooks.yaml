@@ -1,0 +1,6 @@
+- id: ys
+  name: ys (yaml-schema)
+  description: Validate YAML files against a YAML Schema
+  entry: ys
+  language: rust
+  types: [yaml]
