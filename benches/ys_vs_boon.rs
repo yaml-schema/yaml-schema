@@ -38,10 +38,9 @@ fn boon() {
     loader.register("file", Box::new(FileUrlLoader));
     compiler.use_loader(Box::new(loader));
 
-    let mut schema_value: serde_json::Value = serde_yaml::from_reader(
-        File::open("yaml-schema.yaml").expect("Failed to open YAML file"),
-    )
-    .expect("Failed to read YAML file");
+    let mut schema_value: serde_json::Value =
+        serde_yaml::from_reader(File::open("yaml-schema.yaml").expect("Failed to open YAML file"))
+            .expect("Failed to read YAML file");
     // yaml-schema.yaml's `$schema` is a self-referential, non-standard meta-schema URL
     // that boon can't resolve to a known JSON Schema draft (boon explicitly rejects a
     // schema whose `$schema` points back at itself). Drop it so boon falls back to its
