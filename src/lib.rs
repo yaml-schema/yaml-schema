@@ -272,7 +272,7 @@ impl std::fmt::Display for ConstValue {
 
 /// Use the ctor crate to initialize the logger for tests
 #[cfg(test)]
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn init() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Trace)
