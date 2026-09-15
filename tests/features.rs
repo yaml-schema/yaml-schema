@@ -57,22 +57,19 @@ fn evaluate(world: &mut FeaturesWorld, s: &str) -> Result<bool> {
     Ok(!context.has_errors())
 }
 
+fn evaluate_docstring(world: &mut FeaturesWorld, step: &Step) -> bool {
+    let input = expected_docstring(step);
+    evaluate(world, input).expect("Evaluation failed")
+}
+
 #[then(regex = "it should accept:")]
 async fn it_should_accept(world: &mut FeaturesWorld, step: &Step) {
-    let raw_input = step.docstring().expect("Expected a docstring");
-    let input_without_beginning_newline =
-        raw_input.strip_prefix('\n').expect("Expected a docstring");
-    let result = evaluate(world, input_without_beginning_newline).expect("Evaluation failed");
-    assert!(result);
+    assert!(evaluate_docstring(world, step));
 }
 
 #[then(regex = "it should NOT accept:")]
 async fn it_should_not_accept(world: &mut FeaturesWorld, step: &Step) {
-    let raw_input = step.docstring().expect("Expected a docstring");
-    let input_without_beginning_newline =
-        raw_input.strip_prefix('\n').expect("Expected a docstring");
-    let result = evaluate(world, input_without_beginning_newline).expect("Evaluation failed");
-    assert!(!result);
+    assert!(!evaluate_docstring(world, step));
 }
 
 #[then(expr = "the error message should be {string}")]
@@ -123,12 +120,20 @@ async fn the_following_command_is_run(world: &mut FeaturesWorld, step: &Step) {
     });
 }
 
-#[then(expr = "it should exit with status code {int}")]
-async fn it_should_exit_with_status_code(world: &mut FeaturesWorld, expected_code: i32) {
-    let output = world
+fn command_output(world: &FeaturesWorld) -> &CommandOutput {
+    world
         .command_output
         .as_ref()
-        .expect("No command has been run");
+        .expect("No command has been run")
+}
+
+fn expected_docstring(step: &Step) -> &str {
+    step.docstring().expect("Expected a docstring").trim()
+}
+
+#[then(expr = "it should exit with status code {int}")]
+async fn it_should_exit_with_status_code(world: &mut FeaturesWorld, expected_code: i32) {
+    let output = command_output(world);
     assert_eq!(
         output.exit_code, expected_code,
         "Expected exit code {expected_code}, got {}.\nstdout: {}\nstderr: {}",
@@ -138,24 +143,16 @@ async fn it_should_exit_with_status_code(world: &mut FeaturesWorld, expected_cod
 
 #[then(regex = "it should output:")]
 async fn it_should_output(world: &mut FeaturesWorld, step: &Step) {
-    let expected = step.docstring().expect("Expected a docstring");
-    let expected = expected.trim();
-    let output = world
-        .command_output
-        .as_ref()
-        .expect("No command has been run");
+    let expected = expected_docstring(step);
+    let output = command_output(world);
     let actual = output.stdout.trim();
     assert_eq!(actual, expected, "stdout mismatch");
 }
 
 #[then(regex = "stderr output should end with:")]
 async fn stderr_output_should_end_with(world: &mut FeaturesWorld, step: &Step) {
-    let expected = step.docstring().expect("Expected a docstring");
-    let expected = expected.trim();
-    let output = world
-        .command_output
-        .as_ref()
-        .expect("No command has been run");
+    let expected = expected_docstring(step);
+    let output = command_output(world);
     let actual = output.stderr.trim();
     assert!(
         actual.ends_with(expected),
@@ -165,12 +162,8 @@ async fn stderr_output_should_end_with(world: &mut FeaturesWorld, step: &Step) {
 
 #[then(regex = "stderr output should start with:")]
 async fn stderr_output_should_start_with(world: &mut FeaturesWorld, step: &Step) {
-    let expected = step.docstring().expect("Expected a docstring");
-    let expected = expected.trim();
-    let output = world
-        .command_output
-        .as_ref()
-        .expect("No command has been run");
+    let expected = expected_docstring(step);
+    let output = command_output(world);
     let actual = output.stderr.trim();
     assert!(
         actual.starts_with(expected),
@@ -180,10 +173,7 @@ async fn stderr_output_should_start_with(world: &mut FeaturesWorld, step: &Step)
 
 #[then(regex = "stdout should be a JSON array with two validation errors for paths foo and bar")]
 async fn stdout_json_two_validation_errors(world: &mut FeaturesWorld) {
-    let output = world
-        .command_output
-        .as_ref()
-        .expect("No command has been run");
+    let output = command_output(world);
     let v: Value = serde_json::from_str(output.stdout.trim()).expect("stdout should be JSON");
     let arr = v.as_array().expect("stdout should be a JSON array");
     assert_eq!(
@@ -219,10 +209,7 @@ async fn stdout_json_two_validation_errors_tagged_with_file(
     world: &mut FeaturesWorld,
     expected_file: String,
 ) {
-    let output = world
-        .command_output
-        .as_ref()
-        .expect("No command has been run");
+    let output = command_output(world);
     let v: Value = serde_json::from_str(output.stdout.trim()).expect("stdout should be JSON");
     let arr = v.as_array().expect("stdout should be a JSON array");
     assert_eq!(
