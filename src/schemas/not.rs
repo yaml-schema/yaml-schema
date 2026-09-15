@@ -3,12 +3,11 @@ use std::fmt::Display;
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
-use saphyr::YamlData;
 
 use crate::Context;
-use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
+use crate::try_from_mapping;
 
 /// The `not` keyword declares that an instance validates if it doesn't validate against the given subschema.
 #[derive(Debug, PartialEq)]
@@ -22,17 +21,7 @@ impl Display for NotSchema {
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for NotSchema {
-    type Error = crate::Error;
-
-    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
-        if let YamlData::Mapping(mapping) = &value.data {
-            NotSchema::try_from(mapping)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
+try_from_mapping!(NotSchema);
 
 impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for NotSchema {
     type Error = crate::Error;

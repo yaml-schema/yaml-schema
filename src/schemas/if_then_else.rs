@@ -5,13 +5,12 @@ use std::fmt::Display;
 use log::debug;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
-use saphyr::YamlData;
 
 use crate::Context;
 use crate::Error;
-use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
+use crate::try_from_mapping;
 
 /// Conditional schema: `if` outcome selects `then` or `else`; `if` errors are not asserted on the parent.
 #[derive(Debug, PartialEq)]
@@ -34,17 +33,7 @@ impl Display for IfThenElseSchema {
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for IfThenElseSchema {
-    type Error = crate::Error;
-
-    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
-        if let YamlData::Mapping(mapping) = &value.data {
-            IfThenElseSchema::try_from(mapping)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
+try_from_mapping!(IfThenElseSchema);
 
 impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for IfThenElseSchema {
     type Error = crate::Error;

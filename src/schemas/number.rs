@@ -9,6 +9,7 @@ use saphyr::YamlData;
 use crate::Number;
 use crate::Result;
 use crate::schemas::NumericBounds;
+use crate::try_from_mapping;
 use crate::utils::format_hash_map;
 use crate::utils::format_marker;
 use crate::utils::humanize_yaml_data;
@@ -54,17 +55,7 @@ impl Validator for NumberSchema {
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for NumberSchema {
-    type Error = crate::Error;
-
-    fn try_from(value: &MarkedYaml) -> Result<NumberSchema> {
-        if let YamlData::Mapping(mapping) = &value.data {
-            Ok(NumberSchema::try_from(mapping)?)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
+try_from_mapping!(NumberSchema);
 
 impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NumberSchema {
     type Error = crate::Error;

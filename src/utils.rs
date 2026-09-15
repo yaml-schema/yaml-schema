@@ -203,6 +203,26 @@ pub fn collect_keys(a: &'static [&'static str], b: &'static [&'static str]) -> V
     keys
 }
 
+/// Implements `TryFrom<&MarkedYaml>` for `$ty` by delegating to its existing
+/// `TryFrom<&AnnotatedMapping>` impl, via `expected_mapping!` if the value
+/// isn't a mapping.
+#[macro_export]
+macro_rules! try_from_mapping {
+    ($ty:ty) => {
+        impl TryFrom<&saphyr::MarkedYaml<'_>> for $ty {
+            type Error = $crate::Error;
+
+            fn try_from(value: &saphyr::MarkedYaml<'_>) -> $crate::Result<Self> {
+                if let saphyr::YamlData::Mapping(mapping) = &value.data {
+                    <$ty>::try_from(mapping)
+                } else {
+                    Err($crate::expected_mapping!(value))
+                }
+            }
+        }
+    };
+}
+
 /// Filters a saphyr::Mapping and returns a new mapping with only the keys that are in the list.
 pub fn filter_mapping<'a>(
     mapping: &saphyr::AnnotatedMapping<'a, saphyr::MarkedYaml<'a>>,

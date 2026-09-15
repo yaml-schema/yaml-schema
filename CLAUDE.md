@@ -1,3 +1,9 @@
+## racli
+
+This project has `racli MCP` with tools to help search and navigate the codebase, using rust-analyzer in the backend.
+
+Use `racli` before `graphify` below for searching for symbols, finding definitions, and finding references.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

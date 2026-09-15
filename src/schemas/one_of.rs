@@ -2,7 +2,6 @@ use log::debug;
 use log::error;
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
-use saphyr::YamlData;
 
 use crate::Context;
 use crate::Error;
@@ -10,6 +9,7 @@ use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
 use crate::loader;
+use crate::try_from_mapping;
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
 use crate::validation::ArrayUnevaluatedAnnotations;
@@ -28,17 +28,7 @@ impl std::fmt::Display for OneOfSchema {
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for OneOfSchema {
-    type Error = crate::Error;
-
-    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
-        if let YamlData::Mapping(mapping) = &value.data {
-            OneOfSchema::try_from(mapping)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
+try_from_mapping!(OneOfSchema);
 
 impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for OneOfSchema {
     type Error = crate::Error;

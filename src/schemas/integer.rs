@@ -7,6 +7,7 @@ use saphyr::YamlData;
 use crate::Number;
 use crate::Result;
 use crate::schemas::NumericBounds;
+use crate::try_from_mapping;
 use crate::utils::format_marker;
 use crate::utils::humanize_yaml_data;
 use crate::validation::Context;
@@ -18,17 +19,7 @@ pub struct IntegerSchema {
     pub bounds: NumericBounds,
 }
 
-impl TryFrom<&MarkedYaml<'_>> for IntegerSchema {
-    type Error = crate::Error;
-
-    fn try_from(value: &MarkedYaml) -> Result<IntegerSchema> {
-        if let YamlData::Mapping(mapping) = &value.data {
-            Ok(IntegerSchema::try_from(mapping)?)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
+try_from_mapping!(IntegerSchema);
 
 impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for IntegerSchema {
     type Error = crate::Error;
