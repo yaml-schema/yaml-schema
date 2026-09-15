@@ -64,22 +64,11 @@ impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for NumberSchema {
         let mut schema = NumberSchema::default();
         for (key, value) in mapping.iter() {
             if let YamlData::Value(Scalar::String(key)) = &key.data {
-                match key.as_ref() {
-                    "minimum" => {
-                        schema.bounds.minimum = Some(value.try_into()?);
-                    }
-                    "maximum" => {
-                        schema.bounds.maximum = Some(value.try_into()?);
-                    }
-                    "exclusiveMinimum" => {
-                        schema.bounds.exclusive_minimum = Some(value.try_into()?);
-                    }
-                    "exclusiveMaximum" => {
-                        schema.bounds.exclusive_maximum = Some(value.try_into()?);
-                    }
-                    "multipleOf" => {
-                        schema.bounds.multiple_of = Some(value.try_into()?);
-                    }
+                let key_str = key.as_ref();
+                if schema.bounds.try_apply_key(key_str, value)? {
+                    continue;
+                }
+                match key_str {
                     "type" => {
                         if let YamlData::Value(Scalar::String(s)) = &value.data {
                             if s != "number" {
