@@ -16,6 +16,22 @@ pub struct NumericBounds {
 }
 
 impl NumericBounds {
+    /// Try to parse `key`/`value` as one of the numeric bound keys
+    /// (`minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`,
+    /// `multipleOf`), assigning into `self` if recognized.
+    /// Returns `Ok(true)` if the key was consumed, `Ok(false)` otherwise.
+    pub fn try_apply_key(&mut self, key: &str, value: &MarkedYaml) -> crate::Result<bool> {
+        match key {
+            "minimum" => self.minimum = Some(value.try_into()?),
+            "maximum" => self.maximum = Some(value.try_into()?),
+            "exclusiveMinimum" => self.exclusive_minimum = Some(value.try_into()?),
+            "exclusiveMaximum" => self.exclusive_maximum = Some(value.try_into()?),
+            "multipleOf" => self.multiple_of = Some(value.try_into()?),
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
     /// Validate `actual` against all configured bounds, reporting errors to `context`.
     pub fn validate(&self, context: &Context, value: &MarkedYaml, actual: Number) {
         if let Some(exclusive_min) = self.exclusive_minimum
