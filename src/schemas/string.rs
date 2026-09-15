@@ -9,6 +9,7 @@ use saphyr::YamlData;
 
 use crate::loader;
 use crate::schemas::StringFormat;
+use crate::try_from_mapping;
 use crate::utils::format_hash_map;
 use crate::utils::format_marker;
 
@@ -55,17 +56,7 @@ impl PartialEq for StringSchema {
     }
 }
 
-impl TryFrom<&MarkedYaml<'_>> for StringSchema {
-    type Error = crate::Error;
-
-    fn try_from(value: &MarkedYaml) -> Result<StringSchema, Self::Error> {
-        if let YamlData::Mapping(mapping) = &value.data {
-            Ok(StringSchema::try_from(mapping)?)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
+try_from_mapping!(StringSchema);
 
 impl TryFrom<&AnnotatedMapping<'_, MarkedYaml<'_>>> for StringSchema {
     type Error = crate::Error;

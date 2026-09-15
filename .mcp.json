@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "racli": {
+      "type": "stdio",
+      "command": "racli",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "RACLI_SERVER_LOG_LEVEL": "debug",
+        "RACLI_SERVER_LOG_FILE": ".racli/racli.log"
+      }
+    }
+  }
+}

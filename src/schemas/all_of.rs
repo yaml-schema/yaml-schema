@@ -2,7 +2,6 @@ use log::debug;
 
 use saphyr::AnnotatedMapping;
 use saphyr::MarkedYaml;
-use saphyr::YamlData;
 
 use crate::Context;
 use crate::Error;
@@ -10,6 +9,7 @@ use crate::Result;
 use crate::Validator;
 use crate::YamlSchema;
 use crate::loader;
+use crate::try_from_mapping;
 use crate::utils::format_vec;
 
 /// The `allOf` schema is a schema that matches if all of the schemas in the `allOf` array match.
@@ -26,17 +26,7 @@ impl std::fmt::Display for AllOfSchema {
     }
 }
 
-impl<'r> TryFrom<&MarkedYaml<'r>> for AllOfSchema {
-    type Error = crate::Error;
-
-    fn try_from(value: &MarkedYaml<'r>) -> Result<Self> {
-        if let YamlData::Mapping(mapping) = &value.data {
-            AllOfSchema::try_from(mapping)
-        } else {
-            Err(expected_mapping!(value))
-        }
-    }
-}
+try_from_mapping!(AllOfSchema);
 
 impl<'r> TryFrom<&AnnotatedMapping<'r, MarkedYaml<'r>>> for AllOfSchema {
     type Error = crate::Error;
