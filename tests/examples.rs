@@ -56,15 +56,15 @@ fn github_workflow_files_validate() {
 #[test]
 fn pod_fixtures_validate() {
     validate_all(
-        "examples/pod/schema.yaml",
-        Path::new("examples/pod/fixtures"),
+        "examples/kubernetes/pod/schema.yaml",
+        Path::new("examples/kubernetes/pod/fixtures"),
     );
 }
 
 #[test]
 fn deployment_fixtures_validate() {
     validate_all(
-        "examples/deployment/schema.yaml",
-        Path::new("examples/deployment/fixtures"),
+        "examples/kubernetes/deployment/schema.yaml",
+        Path::new("examples/kubernetes/deployment/fixtures"),
     );
 }
