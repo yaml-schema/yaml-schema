@@ -110,7 +110,6 @@ impl<'r> Context<'r> {
         }
     }
 
-    /// Create a context with root schema and pre-loaded schemas (e.g. for CLI -f multiple).
     /// Returns a context for validating into an externally `$ref`'d document, with
     /// `root_schema` switched to that document's own root schema so its internal (`#/...`)
     /// refs resolve against it rather than against the referencing document's root. Shared
@@ -134,6 +133,7 @@ impl<'r> Context<'r> {
         }
     }
 
+    /// Create a context with root schema and pre-loaded schemas (e.g. for CLI -f multiple).
     pub fn with_root_schema_and_schemas(
         root_schema: &'r RootSchema,
         fail_fast: bool,
