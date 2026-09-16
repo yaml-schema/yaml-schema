@@ -123,6 +123,54 @@ properties:
 }
 
 #[test]
+fn test_external_ref_target_resolves_its_own_internal_refs() {
+    // The externally-referenced document defines `Wrapper` in terms of its own local
+    // `$defs/Inner` via a same-document `#/...` ref. Resolving that inner ref must use
+    // `common.yaml`'s root schema, not the referencing schema's root.
+    let temp = tempfile::TempDir::new().expect("temp dir");
+    let dir = temp.path();
+
+    let common_yaml = r##"
+$defs:
+  Inner:
+    type: string
+  Wrapper:
+    type: object
+    properties:
+      value:
+        $ref: "#/$defs/Inner"
+"##;
+    let common_path = dir.join("common.yaml");
+    std::fs::write(&common_path, common_yaml).expect("write common.yaml");
+
+    let schema_yaml = r##"
+type: object
+properties:
+  wrapped:
+    $ref: "./common.yaml#/$defs/Wrapper"
+"##;
+    let schema_path = dir.join("schema.yaml");
+    std::fs::write(&schema_path, schema_yaml).expect("write schema.yaml");
+
+    let schema_str = schema_path.to_str().expect("path to str");
+    let root_schema = loader::load_file(schema_str).expect("load schema");
+
+    let context =
+        Engine::evaluate(&root_schema, "wrapped:\n  value: \"abc\"", false).expect("evaluate");
+    assert!(
+        !context.has_errors(),
+        "Expected no errors: {:?}",
+        context.errors.borrow()
+    );
+
+    let context = Engine::evaluate(&root_schema, "wrapped:\n  value: 42", false).expect("evaluate");
+    assert!(
+        context.has_errors(),
+        "Expected validation error for wrapped.value: 42"
+    );
+}
+
+#[test]
 fn test_absolute_uri_ref_caches_by_id() {
     let temp = tempfile::TempDir::new().expect("temp dir");
     let dir = temp.path();

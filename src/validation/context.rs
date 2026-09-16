@@ -111,6 +111,29 @@ impl<'r> Context<'r> {
     }
 
     /// Create a context with root schema and pre-loaded schemas (e.g. for CLI -f multiple).
+    /// Returns a context for validating into an externally `$ref`'d document, with
+    /// `root_schema` switched to that document's own root schema so its internal (`#/...`)
+    /// refs resolve against it rather than against the referencing document's root. Shared
+    /// state (errors, circular-ref detection, the loaded-schema cache) is preserved.
+    pub fn with_external_root_schema<'g>(&self, root_schema: &'g RootSchema) -> Context<'g>
+    where
+        'r: 'g,
+    {
+        Context {
+            root_schema: Some(root_schema),
+            current_schema: None,
+            current_path: self.current_path.clone(),
+            stream_started: self.stream_started,
+            stream_ended: self.stream_ended,
+            errors: self.errors.clone(),
+            fail_fast: self.fail_fast,
+            resolving_refs: self.resolving_refs.clone(),
+            schemas: self.schemas.clone(),
+            object_evaluated: self.object_evaluated.clone(),
+            array_unevaluated: self.array_unevaluated.clone(),
+        }
+    }
+
     pub fn with_root_schema_and_schemas(
         root_schema: &'r RootSchema,
         fail_fast: bool,

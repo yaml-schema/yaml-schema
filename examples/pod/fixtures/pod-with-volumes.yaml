@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-with-config
+  labels:
+    app: web
+spec:
+  containers:
+    - name: web
+      image: nginx:1.27
+      volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/conf.d
+          readOnly: true
+        - name: cache
+          mountPath: /var/cache/nginx
+  volumes:
+    - name: config
+      configMap:
+        name: web-nginx-config
+    - name: cache
+      emptyDir: {}
+  restartPolicy: Always

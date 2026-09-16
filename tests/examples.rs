@@ -52,3 +52,19 @@ fn github_workflow_files_validate() {
         Path::new(".github/workflows"),
     );
 }
+
+#[test]
+fn pod_fixtures_validate() {
+    validate_all(
+        "examples/pod/schema.yaml",
+        Path::new("examples/pod/fixtures"),
+    );
+}
+
+#[test]
+fn deployment_fixtures_validate() {
+    validate_all(
+        "examples/deployment/schema.yaml",
+        Path::new("examples/deployment/fixtures"),
+    );
+}
