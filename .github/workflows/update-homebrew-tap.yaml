@@ -1,0 +1,111 @@
+# Updates the yaml-schema/homebrew-tap Formula/yaml-schema.rb whenever a new
+# GitHub Release is published (build.yaml's release job creates it).
+#
+# Prerequisite:
+# - Repository secret HOMEBREW_TAP_TOKEN: a GitHub PAT with `contents: write`
+#   on yaml-schema/homebrew-tap.
+name: Update Homebrew tap
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to sync (e.g. v0.9.3)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag and version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${tag#v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download macOS release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p ./assets
+          gh release download "${TAG}" \
+            --repo yaml-schema/yaml-schema \
+            --pattern "*apple-darwin*.tar.gz" \
+            --dir ./assets
+
+      - name: Compute checksums
+        id: sha
+        shell: bash
+        run: |
+          set -euo pipefail
+          arm_sha="$(shasum -a 256 ./assets/ys-aarch64-apple-darwin-*.tar.gz | cut -d' ' -f1)"
+          intel_sha="$(shasum -a 256 ./assets/ys-x86_64-apple-darwin-*.tar.gz | cut -d' ' -f1)"
+          echo "arm_sha=${arm_sha}" >> "${GITHUB_OUTPUT}"
+          echo "intel_sha=${intel_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: yaml-schema/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Render formula
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ARM_SHA: ${{ steps.sha.outputs.arm_sha }}
+          INTEL_SHA: ${{ steps.sha.outputs.intel_sha }}
+        run: |
+          set -euo pipefail
+          cat > homebrew-tap/Formula/yaml-schema.rb <<EOF
+          class YamlSchema < Formula
+            desc "Validates YAML files against YAML-defined schemas"
+            homepage "https://github.com/yaml-schema/yaml-schema"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/yaml-schema/yaml-schema/releases/download/${TAG}/ys-aarch64-apple-darwin-${TAG}.tar.gz"
+                sha256 "${ARM_SHA}"
+              else
+                url "https://github.com/yaml-schema/yaml-schema/releases/download/${TAG}/ys-x86_64-apple-darwin-${TAG}.tar.gz"
+                sha256 "${INTEL_SHA}"
+              end
+            end
+
+            def install
+              bin.install "ys"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/ys --version")
+            end
+          end
+          EOF
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd homebrew-tap
+          if git diff --quiet; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/yaml-schema.rb
+          git commit -m "Update yaml-schema to v${VERSION}"
+          git push

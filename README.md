@@ -66,7 +66,13 @@ Should fail with exit code 1
 
 ## Installation
 
-Currently, **yaml-schema** requires Git, Rust and Cargo to build and
+On macOS, the easiest way to install **yaml-schema** is via [Homebrew](https://brew.sh):
+
+```
+brew install yaml-schema/tap/yaml-schema
+```
+
+Alternatively, **yaml-schema** requires Git, Rust and Cargo to build and
 install: [https://doc.rust-lang.org/cargo/](https://doc.rust-lang.org/cargo/)
 
 To install the stable release from [crates.io](https://crates.io/crates/yaml-schema):
