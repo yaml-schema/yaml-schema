@@ -801,7 +801,8 @@ impl Validator for Subschema {
                     };
                     if let Some(target) = target {
                         context.begin_resolving_ref(&ref_key, value);
-                        let result = target.validate(context, value);
+                        let external_context = context.with_external_root_schema(schema.as_ref());
+                        let result = target.validate(&external_context, value);
                         context.end_resolving_ref(&ref_key, value);
                         result?;
                     } else {

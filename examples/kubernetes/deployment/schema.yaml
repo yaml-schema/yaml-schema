@@ -1,0 +1,80 @@
+$schema: https://yaml-schema.net/yaml-schema.yaml
+title: Deployment
+description: >-
+  A hand-authored schema modeling a practical subset of the Kubernetes
+  apps/v1 Deployment manifest. Reuses ObjectMeta and PodSpec from
+  ../pod/schema.yaml via cross-file $ref, rather than redefining them.
+$ref: "#/$defs/Deployment"
+$defs:
+  Deployment:
+    description: A Kubernetes Deployment manifest
+    type: object
+    additionalProperties: false
+    required:
+      - apiVersion
+      - kind
+      - metadata
+      - spec
+    properties:
+      apiVersion:
+        const: apps/v1
+      kind:
+        const: Deployment
+      metadata:
+        $ref: "../pod/schema.yaml#/$defs/ObjectMeta"
+      spec:
+        type: object
+        additionalProperties: false
+        required:
+          - selector
+          - template
+        properties:
+          replicas:
+            type: integer
+            minimum: 0
+          selector:
+            $ref: "#/$defs/LabelSelector"
+          template:
+            $ref: "#/$defs/PodTemplateSpec"
+          strategy:
+            $ref: "#/$defs/DeploymentStrategy"
+
+  LabelSelector:
+    type: object
+    additionalProperties: false
+    required:
+      - matchLabels
+    properties:
+      matchLabels:
+        type: object
+        additionalProperties:
+          type: string
+
+  PodTemplateSpec:
+    description: The Pod template embedded in a Deployment's spec
+    type: object
+    additionalProperties: false
+    required:
+      - spec
+    properties:
+      metadata:
+        $ref: "../pod/schema.yaml#/$defs/ObjectMeta"
+      spec:
+        $ref: "../pod/schema.yaml#/$defs/PodSpec"
+
+  DeploymentStrategy:
+    type: object
+    additionalProperties: false
+    properties:
+      type:
+        enum:
+          - Recreate
+          - RollingUpdate
+      rollingUpdate:
+        type: object
+        additionalProperties: false
+        properties:
+          maxSurge:
+            type: string
+          maxUnavailable:
+            type: string

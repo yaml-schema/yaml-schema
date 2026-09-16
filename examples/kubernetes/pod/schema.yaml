@@ -1,0 +1,204 @@
+$schema: https://yaml-schema.net/yaml-schema.yaml
+title: Pod
+description: >-
+  A hand-authored schema modeling a practical subset of the Kubernetes
+  Pod manifest (core/v1 Pod), not a full conversion of the upstream
+  OpenAPI spec.
+$ref: "#/$defs/Pod"
+$defs:
+  Pod:
+    description: A Kubernetes Pod manifest
+    type: object
+    additionalProperties: false
+    required:
+      - apiVersion
+      - kind
+      - metadata
+      - spec
+    properties:
+      apiVersion:
+        const: v1
+      kind:
+        const: Pod
+      metadata:
+        $ref: "#/$defs/ObjectMeta"
+      spec:
+        $ref: "#/$defs/PodSpec"
+
+  ObjectMeta:
+    description: >-
+      Metadata common to all Kubernetes objects. `name` is not required here
+      since embedded object metadata (e.g. a Deployment's pod template) is
+      often unnamed, carrying only labels/annotations.
+    type: object
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+      namespace:
+        type: string
+      labels:
+        type: object
+        additionalProperties:
+          type: string
+      annotations:
+        type: object
+        additionalProperties:
+          type: string
+
+  PodSpec:
+    description: The desired state of a Pod
+    type: object
+    additionalProperties: false
+    required:
+      - containers
+    properties:
+      containers:
+        type: array
+        minItems: 1
+        items:
+          $ref: "#/$defs/Container"
+      initContainers:
+        type: array
+        items:
+          $ref: "#/$defs/Container"
+      restartPolicy:
+        enum:
+          - Always
+          - OnFailure
+          - Never
+      serviceAccountName:
+        type: string
+      nodeSelector:
+        type: object
+        additionalProperties:
+          type: string
+      volumes:
+        type: array
+        items:
+          $ref: "#/$defs/Volume"
+
+  Container:
+    description: A single container within a Pod
+    type: object
+    additionalProperties: false
+    required:
+      - name
+      - image
+    properties:
+      name:
+        type: string
+      image:
+        type: string
+      command:
+        type: array
+        items:
+          type: string
+      args:
+        type: array
+        items:
+          type: string
+      workingDir:
+        type: string
+      ports:
+        type: array
+        items:
+          $ref: "#/$defs/ContainerPort"
+      env:
+        type: array
+        items:
+          $ref: "#/$defs/EnvVar"
+      resources:
+        $ref: "#/$defs/ResourceRequirements"
+      volumeMounts:
+        type: array
+        items:
+          $ref: "#/$defs/VolumeMount"
+
+  ContainerPort:
+    type: object
+    additionalProperties: false
+    required:
+      - containerPort
+    properties:
+      containerPort:
+        type: integer
+      name:
+        type: string
+      protocol:
+        enum:
+          - TCP
+          - UDP
+          - SCTP
+
+  EnvVar:
+    type: object
+    additionalProperties: false
+    required:
+      - name
+    properties:
+      name:
+        type: string
+      value:
+        type: string
+
+  ResourceRequirements:
+    type: object
+    additionalProperties: false
+    properties:
+      limits:
+        type: object
+        additionalProperties:
+          type: string
+      requests:
+        type: object
+        additionalProperties:
+          type: string
+
+  VolumeMount:
+    type: object
+    additionalProperties: false
+    required:
+      - name
+      - mountPath
+    properties:
+      name:
+        type: string
+      mountPath:
+        type: string
+      readOnly:
+        type: boolean
+
+  Volume:
+    description: >-
+      A volume source. Kubernetes models this as a union of many optional
+      source fields rather than a discriminated oneOf; this schema follows
+      the same convention with a small representative subset.
+    type: object
+    additionalProperties: false
+    required:
+      - name
+    properties:
+      name:
+        type: string
+      emptyDir:
+        type: object
+        additionalProperties: false
+      configMap:
+        type: object
+        additionalProperties: false
+        properties:
+          name:
+            type: string
+      secret:
+        type: object
+        additionalProperties: false
+        properties:
+          secretName:
+            type: string
+      hostPath:
+        type: object
+        additionalProperties: false
+        properties:
+          path:
+            type: string

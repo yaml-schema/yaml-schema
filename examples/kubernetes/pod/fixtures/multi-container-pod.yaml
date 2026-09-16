@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-with-sidecar
+  namespace: default
+  labels:
+    app: myapp
+    tier: backend
+  annotations:
+    example.com/owner: platform-team
+spec:
+  containers:
+    - name: app
+      image: example.com/myapp:1.4.2
+      command: ["/bin/myapp"]
+      args: ["--config=/etc/myapp/config.yaml"]
+      workingDir: /app
+      env:
+        - name: LOG_LEVEL
+          value: info
+        - name: PORT
+          value: "8080"
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "250m"
+          memory: "128Mi"
+        limits:
+          cpu: "500m"
+          memory: "256Mi"
+    - name: log-shipper
+      image: example.com/log-shipper:2.0.0
+      env:
+        - name: LOG_LEVEL
+          value: warn
+  initContainers:
+    - name: init-permissions
+      image: busybox:1.36
+      command: ["sh", "-c", "chmod -R 755 /data"]
+  restartPolicy: Always
+  serviceAccountName: myapp
