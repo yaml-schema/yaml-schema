@@ -17,8 +17,6 @@ use crate::Result;
 use crate::Validator;
 use crate::loader::load_boolean_or_schema_marked;
 use crate::loader::load_external_schema;
-use crate::loader::marked_yaml_mapping_key_to_string;
-use crate::loader::marked_yaml_to_string;
 use crate::schemas::AllOfSchema;
 use crate::schemas::AnyOfSchema;
 use crate::schemas::ArraySchema;
@@ -37,6 +35,8 @@ use crate::utils::format_marker;
 use crate::utils::format_scalar;
 use crate::utils::format_vec;
 use crate::utils::format_yaml_data;
+use crate::utils::marked_yaml_mapping_key_to_string;
+use crate::utils::marked_yaml_to_string;
 use crate::utils::scalar_to_string;
 use crate::validation::ArrayUnevaluatedAnnotations;
 

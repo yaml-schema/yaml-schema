@@ -25,7 +25,7 @@ pub use validation::Validator;
 
 use utils::format_marker;
 
-use crate::loader::marked_yaml_mapping_key_to_string;
+use crate::utils::marked_yaml_mapping_key_to_string;
 
 // Returns the library version, which reflects the crate version
 pub fn version() -> String {

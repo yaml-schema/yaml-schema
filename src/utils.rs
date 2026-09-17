@@ -100,6 +100,30 @@ pub fn format_marker(marker: &saphyr::Marker) -> String {
     format!("[{}, {}]", marker.line(), marker.col())
 }
 
+pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) -> Result<String> {
+    if let YamlData::Value(Scalar::String(s)) = &yaml.data {
+        Ok(s.to_string())
+    } else {
+        Err(crate::Error::ExpectedScalar(msg.into()))
+    }
+}
+
+/// Property name / mapping key as a string, matching instance validation (`scalar_to_string`).
+///
+/// YAML may parse unquoted keys as integers or floats; quote the key in YAML if you need a specific
+/// string label (e.g. `"1"` vs `1`).
+pub fn marked_yaml_mapping_key_to_string(yaml: &MarkedYaml) -> Result<String> {
+    if let YamlData::Value(scalar) = &yaml.data {
+        Ok(scalar_to_string(scalar))
+    } else {
+        Err(expected_scalar!(
+            "[{}] Expected a scalar mapping key, got: {:?}",
+            format_marker(&yaml.span.start),
+            yaml
+        ))
+    }
+}
+
 /// Formats [`YamlData`] for human-readable type-mismatch messages in validation errors. Scalar
 /// kinds get a short type suffix; other shapes use [`Debug`] like the previous `{:?}` output.
 ///

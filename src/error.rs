@@ -1,6 +1,26 @@
 use thiserror::Error;
 
-use crate::loader::UrlLoadError;
+/// Error type for URL loading operations
+#[derive(thiserror::Error, Debug)]
+pub enum UrlLoadError {
+    #[error("Failed to download from URL: {0}")]
+    DownloadError(#[from] reqwest::Error),
+
+    #[error("Failed to parse URL: {0}")]
+    ParseUrlError(#[from] url::ParseError),
+
+    #[error("Failed to parse YAML: {0}")]
+    ParseError(#[from] saphyr::ScanError),
+
+    #[error("No YAML documents found in the downloaded content")]
+    NoDocuments,
+}
+
+impl From<reqwest::Error> for crate::Error {
+    fn from(value: reqwest::Error) -> Self {
+        crate::Error::UrlLoadError(UrlLoadError::DownloadError(value))
+    }
+}
 
 /// Unexpected errors that can occur during the validation of a YAML schema
 #[derive(Debug, Error)]
