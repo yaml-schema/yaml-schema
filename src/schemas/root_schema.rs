@@ -10,7 +10,7 @@ use url::Url;
 use crate::Error;
 use crate::Result;
 use crate::YamlSchema;
-use crate::loader::marked_yaml_to_string;
+use crate::utils::marked_yaml_to_string;
 use crate::validation::Context;
 use crate::validation::Validator;
 

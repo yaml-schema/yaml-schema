@@ -13,12 +13,12 @@ use crate::Error;
 use crate::Result;
 use crate::YamlSchema;
 use crate::loader::load_integer_marked;
-use crate::loader::marked_yaml_mapping_key_to_string;
 use crate::schemas::BooleanOrSchema;
 use crate::schemas::SchemaType;
 use crate::utils::format_annotated_mapping;
 use crate::utils::format_marker;
 use crate::utils::linked_hash_map;
+use crate::utils::marked_yaml_mapping_key_to_string;
 
 /// A pattern property entry: a pre-compiled regex paired with its schema.
 #[derive(Debug)]

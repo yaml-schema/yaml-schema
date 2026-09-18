@@ -15,10 +15,11 @@ use crate::Error;
 use crate::Number;
 use crate::Result;
 use crate::RootSchema;
+use crate::error::UrlLoadError;
 use crate::schemas::BooleanOrSchema;
 use crate::schemas::YamlSchema;
 use crate::utils::format_marker;
-use crate::utils::scalar_to_string;
+use crate::utils::marked_yaml_to_string;
 use crate::utils::try_unwrap_saphyr_scalar;
 
 /// Load a YAML schema from a file.
@@ -56,28 +57,6 @@ pub fn load_from_docs<'f>(docs: Vec<MarkedYaml<'f>>) -> Result<RootSchema> {
 /// Load a YAML schema from a document. Basically just a wrapper around the TryFrom<&MarkedYaml<'_>> for RootSchema.
 pub fn load_from_doc<'f>(doc: &MarkedYaml<'f>) -> Result<RootSchema> {
     RootSchema::try_from(doc)
-}
-
-/// Error type for URL loading operations
-#[derive(thiserror::Error, Debug)]
-pub enum UrlLoadError {
-    #[error("Failed to download from URL: {0}")]
-    DownloadError(#[from] reqwest::Error),
-
-    #[error("Failed to parse URL: {0}")]
-    ParseUrlError(#[from] url::ParseError),
-
-    #[error("Failed to parse YAML: {0}")]
-    ParseError(#[from] saphyr::ScanError),
-
-    #[error("No YAML documents found in the downloaded content")]
-    NoDocuments,
-}
-
-impl From<reqwest::Error> for crate::Error {
-    fn from(value: reqwest::Error) -> Self {
-        crate::Error::UrlLoadError(UrlLoadError::DownloadError(value))
-    }
 }
 
 /// Load a schema from string content with an optional base URI for resolving relative $ref values.
@@ -249,30 +228,6 @@ pub fn download_from_url(url_string: &str, timeout_seconds: Option<u64>) -> Resu
             Ok(root)
         }
         None => Err(UrlLoadError::NoDocuments.into()),
-    }
-}
-
-pub fn marked_yaml_to_string<S: Into<String> + Copy>(yaml: &MarkedYaml, msg: S) -> Result<String> {
-    if let YamlData::Value(Scalar::String(s)) = &yaml.data {
-        Ok(s.to_string())
-    } else {
-        Err(Error::ExpectedScalar(msg.into()))
-    }
-}
-
-/// Property name / mapping key as a string, matching instance validation (`scalar_to_string`).
-///
-/// YAML may parse unquoted keys as integers or floats; quote the key in YAML if you need a specific
-/// string label (e.g. `"1"` vs `1`).
-pub fn marked_yaml_mapping_key_to_string(yaml: &MarkedYaml) -> Result<String> {
-    if let YamlData::Value(scalar) = &yaml.data {
-        Ok(scalar_to_string(scalar))
-    } else {
-        Err(expected_scalar!(
-            "[{}] Expected a scalar mapping key, got: {:?}",
-            format_marker(&yaml.span.start),
-            yaml
-        ))
     }
 }
 
