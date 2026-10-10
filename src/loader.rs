@@ -1,9 +1,10 @@
 //! The loader module loads the YAML schema from a file into the in-memory model
 
 use std::path::Path;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
-use reqwest::Url;
+#[cfg(not(target_arch = "wasm32"))]
 use reqwest::blocking::Client;
 use saphyr::LoadableYamlNode;
 use saphyr::MarkedYaml;
@@ -33,11 +34,35 @@ pub fn load_file<S: AsRef<str>>(path: S) -> Result<RootSchema> {
     let s = std::fs::read_to_string(path.as_ref())?;
     let mut root = load_from_str(&s)?;
     let canonical = Path::new(path.as_ref()).canonicalize()?;
-    root.base_uri = Some(
-        ParseUrl::from_file_path(canonical)
-            .map_err(|_| Error::GenericError("Failed to convert file path to URL".to_string()))?,
-    );
+    root.base_uri = Some(file_path_to_url(&canonical)?);
     Ok(root)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn file_path_to_url(path: &Path) -> Result<ParseUrl> {
+    ParseUrl::from_file_path(path)
+        .map_err(|_| Error::GenericError("Failed to convert file path to URL".to_string()))
+}
+
+/// `url` doesn't support file paths on wasm32 (and there's no filesystem to load from anyway).
+#[cfg(target_arch = "wasm32")]
+fn file_path_to_url(_path: &Path) -> Result<ParseUrl> {
+    Err(Error::GenericError(
+        "File paths are not supported in the WebAssembly build".to_string(),
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn file_url_to_path(url: &ParseUrl) -> Result<std::path::PathBuf> {
+    url.to_file_path()
+        .map_err(|_| Error::GenericError("Invalid file URL".to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn file_url_to_path(url: &ParseUrl) -> Result<std::path::PathBuf> {
+    Err(Error::GenericError(format!(
+        "file:// URLs ({url}) are not supported in the WebAssembly build"
+    )))
 }
 
 /// Load a YAML schema from a &str.
@@ -75,9 +100,7 @@ pub fn load_external_schema(doc_url: &str) -> Result<RootSchema> {
     let parsed = ParseUrl::parse(doc_url).map_err(|e| Error::UrlLoadError(e.into()))?;
     match parsed.scheme() {
         "file" => {
-            let path = parsed
-                .to_file_path()
-                .map_err(|_| Error::GenericError("Invalid file URL".to_string()))?;
+            let path = file_url_to_path(&parsed)?;
             let path_str = path
                 .to_str()
                 .ok_or_else(|| Error::GenericError("Non-UTF-8 file path".to_string()))?;
@@ -168,7 +191,8 @@ pub fn load_root_schema_from_ref(
 ///
 /// The HTTP call runs on a dedicated OS thread so that `reqwest::blocking`
 /// does not conflict with an already-running async (tokio) runtime.
-pub fn fetch_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<(String, Url)> {
+#[cfg(not(target_arch = "wasm32"))]
+pub fn fetch_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<(String, ParseUrl)> {
     let url_owned = url_string.to_string();
     let timeout = Duration::from_secs(timeout_seconds.unwrap_or(30));
 
@@ -179,7 +203,7 @@ pub fn fetch_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<(Stri
             .use_rustls_tls()
             .build()?;
 
-        let url = Url::parse(&url_owned).map_err(|e| Error::UrlLoadError(e.into()))?;
+        let url = ParseUrl::parse(&url_owned).map_err(|e| Error::UrlLoadError(e.into()))?;
 
         let response = client.get(url.clone()).send()?;
         if !response.status().is_success() {
@@ -198,6 +222,16 @@ pub fn fetch_url(url_string: &str, timeout_seconds: Option<u64>) -> Result<(Stri
             "HTTP fetch thread panicked".to_string(),
         ))
     })
+}
+
+/// Fetching remote URLs isn't supported on `wasm32` (there is no blocking HTTP client in the
+/// browser), so remote `$ref`/`$schema` resolution always fails with an explanatory error.
+#[cfg(target_arch = "wasm32")]
+pub fn fetch_url(url_string: &str, _timeout_seconds: Option<u64>) -> Result<(String, ParseUrl)> {
+    Err(crate::generic_error!(
+        "Remote $ref/$schema ({}) is not supported in the WebAssembly build",
+        url_string
+    ))
 }
 
 /// Downloads a YAML schema from a URL and parses it into a YamlSchema

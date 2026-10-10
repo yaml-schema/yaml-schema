@@ -1,0 +1,23 @@
+[package]
+name = "yaml-schema-wasm"
+version = "0.1.0"
+edition = "2024"
+description = "WASM bindings for validating YAML documents against YAML schemas in the browser"
+license = "MIT"
+repository = "https://github.com/yaml-schema/yaml-schema"
+# Embeds ../../yaml-schema.yaml (the meta-schema) via include_str!, which lives outside this
+# crate's directory; it's distributed as a wasm-pack build rather than on crates.io.
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+yaml-schema = { path = "../.." }
+console_error_panic_hook = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+
+[lints.clippy]
+unwrap_used = "deny"

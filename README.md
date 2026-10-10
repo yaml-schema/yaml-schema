@@ -198,6 +198,34 @@ String keywords such as `pattern` and `enum` work without an explicit `type`. Wh
 
 See the [Types](https://yaml-schema.net/features/types.html) documentation for details.
 
+## Browser / WebAssembly
+
+`crates/yaml-schema-wasm` compiles the validator to `wasm32-unknown-unknown` with `wasm-bindgen`,
+so it can run in a browser (or any JS runtime) with no server-side component. It exports:
+
+| Function | Description |
+|----------|-------------|
+| `validate(schema, document, options)` | Validates a YAML `document` string against a YAML `schema` string; `options` is an optional `{ failFast }` object. |
+| `validateSchema(schema)` | Validates a YAML `schema` string against the YAML Schema [meta-schema](yaml-schema.yaml). |
+| `version()` | Returns the underlying `yaml-schema` library version. |
+
+`validate` and `validateSchema` return `{ valid, errors: [{ path, line, col, error }], fatal? }`.
+`fatal` (`{ phase, message, line?, col? }`) is set when validation can't complete, and its `phase`
+is `"schema"`, `"document"` or `"validation"`. Lines and columns are 1-based.
+
+Remote (`http`/`https`) and `file://` `$ref`s aren't supported in the WebAssembly build; internal
+`$ref`s (e.g. `#/$defs/...`) work as usual.
+
+**Build the package:**
+
+```sh
+wasm-pack build crates/yaml-schema-wasm --target web --out-dir pkg
+```
+
+**Example:** [`crates/yaml-schema-wasm/examples/smoke`](crates/yaml-schema-wasm/examples/smoke) is a
+static, no-build-step page that runs each export against fixed inputs, to smoke-test a `pkg/`
+build (see its README for serve instructions).
+
 ## Test Suite
 
 **yaml-schema** uses [Cucumber](https://cucumber-rs.github.io/cucumber/main/) to specify and test its behavior:
