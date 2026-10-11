@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `additionalProperties: false` violations are now reported at the offending key's location instead of its value's (e.g. `[3:1]` rather than `[3:13]` for `street_typ: Avenue`).
 - The library now builds for `wasm32-unknown-unknown`: `reqwest` is a native-only dependency, and on wasm32, remote (`http`/`https`) and `file://` `$ref`/`$schema` resolution returns an error instead of fetching.
 
 ## [0.9.3] - 2026-08-06
