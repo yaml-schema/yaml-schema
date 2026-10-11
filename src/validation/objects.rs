@@ -60,10 +60,14 @@ pub fn try_validate_value_against_properties(
 
 /// Try and validate the value against an object type's additional_properties
 ///
+/// `key_yaml` is the mapping key node for `key`; a disallowed additional property is reported at
+/// the key's location, since it's the key (not its value) that's at fault.
+///
 /// Returns true if the validation passed, or false if it failed (signals fail-fast)
 pub fn try_validate_value_against_additional_properties(
     context: &Context,
     key: &String,
+    key_yaml: &saphyr::MarkedYaml,
     value: &saphyr::MarkedYaml,
     additional_properties: &BooleanOrSchema,
 ) -> Result<bool> {
@@ -75,7 +79,7 @@ pub fn try_validate_value_against_additional_properties(
         // if additional_properties: false, then no additional properties are allowed
         BooleanOrSchema::Boolean(false) => {
             context.add_error(
-                value,
+                key_yaml,
                 format!("Additional property '{key}' is not allowed!"),
             );
             // returning `false` signals fail fast
@@ -158,6 +162,7 @@ impl ObjectSchema {
                 let passed = try_validate_value_against_additional_properties(
                     context,
                     &key_string,
+                    k,
                     value,
                     additional_properties,
                 )?;
@@ -346,6 +351,26 @@ mod tests {
         let first_error = errors.first().unwrap();
         assert_eq!(first_error.path, "foo");
         assert_eq!(first_error.error, "Expected a string, but got: 42 (int)");
+    }
+
+    #[test]
+    fn test_additional_property_error_is_reported_at_the_key() {
+        let root_schema = loader::load_from_str(
+            "type: object\nproperties:\n  street_type:\n    type: string\nadditionalProperties: false\n",
+        )
+        .unwrap();
+        let context =
+            engine::Engine::evaluate(&root_schema, "street_typ: Avenue\n", false).unwrap();
+        let errors = context.errors.borrow();
+        assert_eq!(errors.len(), 1);
+        let error = errors.first().unwrap();
+        assert_eq!(
+            error.error,
+            "Additional property 'street_typ' is not allowed!"
+        );
+        let marker = error.marker.unwrap();
+        // `street_typ` (the key) starts at line 1, column 0; its value `Avenue` is at column 12
+        assert_eq!((marker.line(), marker.col()), (1, 0));
     }
 
     #[test]

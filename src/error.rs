@@ -3,6 +3,7 @@ use thiserror::Error;
 /// Error type for URL loading operations
 #[derive(thiserror::Error, Debug)]
 pub enum UrlLoadError {
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("Failed to download from URL: {0}")]
     DownloadError(#[from] reqwest::Error),
 
@@ -16,6 +17,7 @@ pub enum UrlLoadError {
     NoDocuments,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<reqwest::Error> for crate::Error {
     fn from(value: reqwest::Error) -> Self {
         crate::Error::UrlLoadError(UrlLoadError::DownloadError(value))

@@ -29,7 +29,7 @@ use crate::utils::marked_yaml_mapping_key_to_string;
 
 // Returns the library version, which reflects the crate version
 pub fn version() -> String {
-    clap::crate_version!().to_string()
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 // Alias for std::result::Result<T, yaml_schema::Error>
