@@ -558,7 +558,7 @@ office_number: 201",
         let marked_yaml = doc.first().unwrap();
         let yaml_schema = YamlSchema::try_from(marked_yaml).unwrap();
         let YamlSchema::Subschema(object_schema) = &yaml_schema else {
-            panic!("Expected Subschema, but got: {:?}", &yaml_schema);
+            panic!("Expected Subschema, but got: {:?}", yaml_schema);
         };
         assert_eq!(
             object_schema.metadata_and_annotations.description,
@@ -580,12 +580,12 @@ office_number: 201",
         "#;
         let root_schema = loader::load_from_str(yaml).unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         let Some(object_schema) = &subschema.object_schema else {
             panic!(
                 "Expected ObjectSchema, but got: {:?}",
-                &subschema.object_schema
+                subschema.object_schema
             );
         };
         // Verify properties were loaded correctly

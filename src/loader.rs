@@ -401,7 +401,7 @@ mod tests {
         let docs = MarkedYaml::load_from_str("const: string value").unwrap();
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         assert_eq!(subschema.r#const, Some(ConstValue::string("string value")));
     }
@@ -411,7 +411,7 @@ mod tests {
         let docs = MarkedYaml::load_from_str("const: 42").unwrap();
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         assert_eq!(subschema.r#const, Some(ConstValue::integer(42)));
     }
@@ -421,7 +421,7 @@ mod tests {
         let docs = MarkedYaml::load_from_str("const: [1, 2]").unwrap();
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         let expected = ConstValue::Array(vec![ConstValue::integer(1), ConstValue::integer(2)]);
         assert_eq!(subschema.r#const, Some(expected));
@@ -432,7 +432,7 @@ mod tests {
         let docs = MarkedYaml::load_from_str("const:\n  a: 1").unwrap();
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         let mut expected_obj = hashlink::LinkedHashMap::new();
         expected_obj.insert("a".into(), ConstValue::integer(1));
@@ -455,7 +455,7 @@ mod tests {
         let docs = MarkedYaml::load_from_str("type: string").unwrap();
         let root_schema = load_from_doc(docs.first().unwrap()).unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         assert_eq!(subschema.r#type, SchemaType::new("string"));
     }
@@ -473,12 +473,12 @@ mod tests {
         )
         .expect("Failed to load schema");
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         let Some(object_schema) = &subschema.object_schema else {
             panic!(
                 "Expected ObjectSchema, but got: {:?}",
-                &subschema.object_schema
+                subschema.object_schema
             );
         };
         let name_property = object_schema
@@ -491,7 +491,7 @@ mod tests {
         let YamlSchema::Subschema(name_property_schema) = &name_property else {
             panic!(
                 "Expected Subschema for `name` property, but got: {:?}",
-                &name_property
+                name_property
             );
         };
         assert_eq!(name_property_schema.r#type, SchemaType::new("string"));
@@ -515,7 +515,7 @@ mod tests {
         )
         .unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         assert_eq!(subschema.r#type, SchemaType::new("string"));
         let expected = StringSchema {
@@ -530,7 +530,7 @@ mod tests {
     fn test_integer_schema() {
         let root_schema = loader::load_from_str("type: integer").unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         let integer_schema = IntegerSchema::default();
         assert_eq!(subschema.integer_schema, Some(integer_schema));
@@ -552,7 +552,7 @@ mod tests {
             .map(|s| ConstValue::string(s.to_string()))
             .collect::<Vec<ConstValue>>();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         assert_eq!(
             subschema.r#enum,
@@ -583,7 +583,7 @@ mod tests {
             ConstValue::integer(42),
         ];
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         assert_eq!(
             subschema.r#enum,
@@ -604,11 +604,11 @@ mod tests {
         )
         .unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         assert!(subschema.defs.is_some());
         let Some(defs) = &subschema.defs else {
-            panic!("Expected defs, but got: {:?}", &subschema.defs);
+            panic!("Expected defs, but got: {:?}", subschema.defs);
         };
         assert_eq!(defs.len(), 1);
         assert_eq!(defs.get("foo"), Some(&YamlSchema::typed_boolean()));
@@ -628,11 +628,11 @@ mod tests {
         )
         .unwrap();
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         assert!(subschema.one_of.is_some());
         let Some(one_of) = &subschema.one_of else {
-            panic!("Expected oneOf, but got: {:?}", &subschema.one_of);
+            panic!("Expected oneOf, but got: {:?}", subschema.one_of);
         };
         assert_eq!(one_of.one_of.len(), 2);
         assert_eq!(
@@ -767,7 +767,7 @@ required:
 
             // Verify we got a valid schema with expected properties
             let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-                panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+                panic!("Expected Subschema, but got: {:?}", root_schema.schema);
             };
             assert_eq!(subschema.r#type, SchemaType::new("object"));
             assert!(subschema.object_schema.is_some());
