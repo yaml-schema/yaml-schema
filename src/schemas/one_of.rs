@@ -72,7 +72,7 @@ pub fn validate_one_of(
     for schema in schemas {
         debug!(
             "[OneOf] Validating value: {:?} against schema: {}",
-            &value.data, schema
+            value.data, schema
         );
         let sub_context = context.get_sub_context_fresh_eval();
         let sub_result = schema.validate(&sub_context, value);
@@ -139,7 +139,7 @@ mod tests {
         "#;
         let root_schema = loader::load_from_str(yaml).expect("Failed to load schema");
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         let Some(one_of_schema) = &subschema.one_of else {
             panic!("Expected Subschema with oneOf, but got: {subschema:?}");
@@ -152,7 +152,7 @@ mod tests {
         } else {
             panic!(
                 "Expected Subschema with type: boolean, but got: {:?}",
-                &one_of_schema.one_of[0]
+                one_of_schema.one_of[0]
             );
         }
 
@@ -163,7 +163,7 @@ mod tests {
         } else {
             panic!(
                 "Expected Subschema with type: integer, but got: {:?}",
-                &one_of_schema.one_of[1]
+                one_of_schema.one_of[1]
             );
         }
 
@@ -200,7 +200,7 @@ mod tests {
         )
         .expect("Failed to load schema");
         let YamlSchema::Subschema(subschema) = &root_schema.schema else {
-            panic!("Expected Subschema, but got: {:?}", &root_schema.schema);
+            panic!("Expected Subschema, but got: {:?}", root_schema.schema);
         };
         if let Some(_one_of) = &subschema.one_of {
             // oneOf schema loaded successfully
