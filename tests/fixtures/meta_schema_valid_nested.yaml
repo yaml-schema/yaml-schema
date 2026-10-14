@@ -1,0 +1,21 @@
+type: object
+properties:
+  name:
+    type: string
+    minLength: 1
+  tags:
+    type: array
+    items:
+      type: string
+    uniqueItems: true
+  port:
+    type: integer
+    minimum: 1
+    maximum: 65535
+  parent:
+    oneOf:
+      - type: null
+      - type: object
+        additionalProperties: false
+required:
+  - name
