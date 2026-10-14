@@ -769,8 +769,10 @@ required:
             let YamlSchema::Subschema(subschema) = &root_schema.schema else {
                 panic!("Expected Subschema, but got: {:?}", root_schema.schema);
             };
-            assert_eq!(subschema.r#type, SchemaType::new("object"));
-            assert!(subschema.object_schema.is_some());
+            let reference = subschema.r#ref.as_ref().expect("Expected a root $ref");
+            assert_eq!(reference.ref_name, "#/$defs/schema");
+            let defs = subschema.defs.as_ref().expect("Expected $defs");
+            assert!(defs.contains_key("schema"));
 
             // Verify the local schema is valid against the downloaded schema
             if let Ok(local_schema) = std::fs::read_to_string("yaml-schema.yaml") {
